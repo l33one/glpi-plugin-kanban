@@ -1,0 +1,96 @@
+/**
+ * GLPI Kanban Plugin - Custom CSS
+ */
+
+.kanban-page-wrapper {
+   background-color: #f8f9fa;
+   min-height: 90vh;
+}
+
+.kanban-board-container {
+   display: flex;
+   gap: 1rem;
+   align-items: flex-start;
+   padding-bottom: 1.5rem;
+   overflow-x: auto;
+}
+
+.kanban-column {
+   background-color: #f1f3f5;
+   border: 1px solid #e9ecef;
+   border-radius: 0.5rem;
+   width: 320px;
+   flex-shrink: 0;
+   display: flex;
+   flex-direction: column;
+   max-height: calc(100vh - 180px);
+   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.kanban-column-header {
+   padding-bottom: 0.75rem;
+   margin-bottom: 0.75rem;
+   border-bottom: 1px solid #dee2e6;
+}
+
+.kanban-cards-dropzone {
+   flex-grow: 1;
+   overflow-y: auto;
+   min-height: 450px;
+   padding: 0.25rem;
+   border-radius: 0.25rem;
+   transition: background-color 0.2s ease, border 0.2s ease;
+}
+
+.kanban-cards-dropzone.dragover {
+   background-color: #e2e6ea;
+   outline: 2px dashed #0d6efd;
+   outline-offset: -2px;
+}
+
+/* Kanban Cards */
+.kanban-card {
+   transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+   cursor: grab;
+   border-left-width: 5px !important;
+}
+
+.kanban-card:hover {
+   transform: translateY(-2px);
+   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.kanban-card.dragging {
+   opacity: 0.4;
+   transform: scale(0.98);
+}
+
+.kanban-card:active {
+   cursor: grabbing;
+}
+
+/* Font sizes and custom spacing */
+.fs-7 {
+   font-size: 0.85rem;
+}
+
+.fs-8 {
+   font-size: 0.75rem;
+}
+
+.sla-progress .progress {
+   background-color: #e9ecef;
+   border-radius: 10px;
+   overflow: hidden;
+}
+
+.sla-progress .progress-bar {
+   transition: width 0.4s ease;
+}
+
+.status-indicator {
+   display: inline-block;
+   width: 8px;
+   height: 8px;
+   border-radius: 50%;
+}

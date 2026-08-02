@@ -1,0 +1,20 @@
+{# templates/kanban.html.twig #}
+<div class="kanban-board-wrapper d-flex gap-3 overflow-auto pb-3">
+   {% for status_id, status in statuses %}
+      <div class="kanban-column flex-shrink-0 bg-100 rounded-3 p-3 border" data-status-id="{{ status_id }}" style="width: 320px; min-height: 600px;">
+         <!-- Column Header -->
+         <div class="kanban-column-header d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary-subtle">
+            <div class="d-flex align-items-center gap-2">
+               <span class="status-indicator rounded-circle bg-{{ status.color }}" style="width: 10px; height: 10px; display: inline-block;"></span>
+               <h5 class="card-title m-0 fw-semibold text-truncate" style="max-width: 180px;">{{ status.name }}</h5>
+            </div>
+            <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-1 fs-7 card-count">0</span>
+         </div>
+
+         <!-- Cards Area -->
+         <div class="kanban-cards-dropzone d-flex flex-column gap-3 h-100" id="status-column-{{ status_id }}" data-status="{{ status_id }}" style="min-height: 500px;">
+            <!-- Rendered dynamically by JavaScript -->
+         </div>
+      </div>
+   {% endfor %}
+</div>
