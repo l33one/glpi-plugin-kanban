@@ -362,20 +362,40 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
     /**
-     * Get list of groups for filter dropdown
+     * Get list of groups for filter dropdown.
+     *
+     * Only the groups the current user belongs to are returned.
      *
      * @return array Array of ['id' => int, 'name' => string]
      */
     public static function getGroupsForFilter(): array {
        global $DB;
+       $user_id = (int)Session::getLoginUserID();
+       if ($user_id <= 0) {
+          return [];
+       }
        $groups = [];
-       $iterator = $DB->request([
-          'SELECT' => ['id', 'name'],
+       $criteria = [
+          'SELECT' => ['glpi_groups.id', 'glpi_groups.name'],
           'FROM'   => 'glpi_groups',
-          'WHERE'  => getEntitiesRestrictCriteria('glpi_groups', '', $_SESSION['glpiactiveentities'], true),
+          'INNER JOIN' => [
+             'glpi_groups_users AS gu' => [
+                'ON' => [
+                   'glpi_groups' => 'id',
+                   'gu'          => 'groups_id'
+                ]
+             ]
+          ],
+          'WHERE'  => ['gu.users_id' => $user_id],
+          'DISTINCT' => true,
           'ORDER'  => 'name ASC',
           'LIMIT'  => 500
-       ]);
+       ];
+       $entity_restriction = getEntitiesRestrictCriteria('glpi_groups', '', $_SESSION['glpiactiveentities'], true);
+       if (!empty($entity_restriction)) {
+          $criteria['WHERE'][] = $entity_restriction;
+       }
+       $iterator = $DB->request($criteria);
        foreach ($iterator as $group) {
           $groups[] = [
              'id'   => (int)$group['id'],

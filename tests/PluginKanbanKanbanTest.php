@@ -79,6 +79,31 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    public function testGetGroupsForFilterOnlyReturnsUserGroups(): void
+    {
+        global $DB;
+
+        $member_group = 9601;
+        $other_group = 9602;
+        $user_id = (int)Session::getLoginUserID();
+        $this->assertGreaterThan(0, $user_id);
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $member_group, 'name' => 'Kanban Member Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $other_group, 'name' => 'Kanban Other Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $member_group, 'users_id' => $user_id]);
+
+            $result = PluginKanbanKanban::getGroupsForFilter();
+            $ids = array_column($result, 'id');
+
+            $this->assertContains($member_group, $ids, 'Groups the user belongs to must be returned');
+            $this->assertNotContains($other_group, $ids, 'Groups the user does not belong to must not be returned');
+        } finally {
+            $DB->delete('glpi_groups_users', ['groups_id' => [$member_group, $other_group]]);
+            $DB->delete('glpi_groups', ['id' => [$member_group, $other_group]]);
+        }
+    }
+
     public function testTechnicianFilterReturnsOnlyAssignedTickets(): void
     {
         $result = PluginKanbanKanban::getTicketsForKanban(['technician' => 2], [], 100);
