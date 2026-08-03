@@ -16,7 +16,7 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
-const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets' };
+const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA' };
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
@@ -51,6 +51,51 @@ const statusIcons = {
    5: { icon: 'circle', filled: false, color: 'dark' },
    6: { icon: 'circle', filled: true, color: 'dark' }
 };
+
+const bootstrapColorMap = { success: '#28a745', warning: '#ffc107', danger: '#dc3545', info: '#17a2b8', dark: '#343a40', primary: '#0d6efd', secondary: '#6c757d' };
+
+// Hidden columns (per-user preference, persisted in localStorage)
+let hiddenColumns = loadHiddenColumns();
+
+// Card field visibility (per-user preference, persisted in localStorage)
+const cardFields = {
+   priority: { label: lang.fieldPriority, icon: 'ti-flag' },
+   sla: { label: lang.fieldSla, icon: 'ti-clock' },
+   assigned_techs: { label: lang.fieldTechnician, icon: 'ti-user' },
+   category: { label: lang.fieldCategory, icon: 'ti-tag' },
+   date_creation: { label: lang.fieldDateCreation, icon: 'ti-calendar' }
+};
+let hiddenCardFields = loadHiddenCardFields();
+
+function loadHiddenCardFields() {
+   try {
+      const raw = localStorage.getItem('kanban_card_fields');
+      return new Set(raw ? JSON.parse(raw) : []);
+   } catch (e) {
+      return new Set();
+   }
+}
+
+function saveHiddenCardFields() {
+   try {
+      localStorage.setItem('kanban_card_fields', JSON.stringify(Array.from(hiddenCardFields)));
+   } catch (e) { /* storage unavailable */ }
+}
+
+function loadHiddenColumns() {
+   try {
+      const raw = localStorage.getItem('kanban_hidden_columns');
+      return new Set(raw ? JSON.parse(raw) : []);
+   } catch (e) {
+      return new Set();
+   }
+}
+
+function saveHiddenColumns() {
+   try {
+      localStorage.setItem('kanban_hidden_columns', JSON.stringify(Array.from(hiddenColumns)));
+   } catch (e) { /* storage unavailable */ }
+}
 
    /**
     * Show/hide loading overlay
@@ -109,6 +154,9 @@ function renderBoardColumns() {
                    </div>
                    <div class="d-flex align-items-center gap-1">
                       <span class="badge rounded-pill fs-7 card-count card-count-badge" id="count-${id}" aria-live="polite" aria-label="${escapeHtml(status.name)} tickets count">--</span>
+                      <button type="button" class="btn btn-sm kanban-hide-btn" data-status-id="${id}" title="${escapeHtml(lang.hideColumn)}" aria-label="${escapeHtml(lang.hideColumn)}">
+                         <i class="ti ti-eye-off"></i>
+                      </button>
                       <div class="dropdown">
                          <button class="btn btn-sm kanban-sort-btn" type="button"
                                 id="sort-btn-${id}" data-bs-toggle="dropdown" aria-expanded="false"
@@ -168,6 +216,13 @@ function renderBoardColumns() {
 
        // Attach sort listeners using event delegation
        boardContainer.addEventListener('click', function(e) {
+          const hideBtn = e.target.closest('.kanban-hide-btn');
+          if (hideBtn) {
+             e.preventDefault();
+             toggleColumn(hideBtn.getAttribute('data-status-id'));
+             return;
+          }
+
           const item = e.target.closest('.kanban-sort-option');
           if (!item) return;
           e.preventDefault();
@@ -183,7 +238,8 @@ function renderBoardColumns() {
           if (btn) {
              btn.classList.add('is-sorted');
              btn.setAttribute('aria-expanded', 'false');
-             btn.innerHTML = '<i class="ti ti-arrows-up-down"></i> <span class="kanban-sort-label">' + item.textContent.trim() + '</span>';
+             btn.innerHTML = '<i class="ti ti-arrows-up-down"></i><span class="visually-hidden">' + item.textContent.trim() + '</span>';
+             btn.title = item.textContent.trim();
           }
 
           // Mark the active option with a check
@@ -205,10 +261,255 @@ function renderBoardColumns() {
         });
     }
 
-   /**
-    * Show empty placeholder in a column with no tickets
-    */
-   function showEmptyPlaceholder(zone, statusId) {
+    /**
+     * Toggle the visibility of a column (hide/show).
+     */
+    function toggleColumn(statusId) {
+       if (!statusId) return;
+       if (hiddenColumns.has(statusId)) {
+          hiddenColumns.delete(statusId);
+       } else {
+          hiddenColumns.add(statusId);
+       }
+       saveHiddenColumns();
+       applyColumnVisibility();
+    }
+
+    /**
+     * Apply the hidden-column state to the board and to the columns menu.
+     */
+    function applyColumnVisibility() {
+       document.querySelectorAll('.kanban-column').forEach(col => {
+          const id = col.getAttribute('data-status-id');
+          const hidden = hiddenColumns.has(id);
+          col.classList.toggle('kanban-column-hidden', hidden);
+
+          const hideBtn = col.querySelector('.kanban-hide-btn');
+          if (hideBtn) {
+             hideBtn.classList.toggle('is-hidden', hidden);
+             const icon = hideBtn.querySelector('i');
+             if (icon) {
+                icon.className = hidden ? 'ti ti-eye' : 'ti ti-eye-off';
+             }
+             hideBtn.title = hidden ? lang.showColumn : lang.hideColumn;
+             hideBtn.setAttribute('aria-label', hidden ? lang.showColumn : lang.hideColumn);
+          }
+       });
+
+       document.querySelectorAll('.kanban-columns-menu .kanban-column-toggle').forEach(item => {
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+             checkbox.checked = !hiddenColumns.has(item.getAttribute('data-status-id'));
+          }
+       });
+    }
+
+    /**
+     * Populate the "Columns" dropdown with a toggle per status.
+     */
+    function populateColumnsMenu() {
+       const menu = document.querySelector('.kanban-columns-menu');
+       if (!menu) return;
+
+       const statuses = window.KANBAN_STATUSES || {};
+       menu.innerHTML = '';
+
+       const header = document.createElement('li');
+       header.className = 'dropdown-header kanban-columns-header';
+       header.textContent = lang.columns || 'Columns';
+       menu.appendChild(header);
+
+       for (const [id, status] of Object.entries(statuses)) {
+          const li = document.createElement('li');
+          const label = document.createElement('label');
+          label.className = 'dropdown-item kanban-column-toggle';
+          label.setAttribute('data-status-id', id);
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = !hiddenColumns.has(id);
+
+          const dot = document.createElement('span');
+          dot.className = 'status-dot';
+          dot.style.backgroundColor = bootstrapColorMap[status.color] || '#6c757d';
+
+          const name = document.createElement('span');
+          name.textContent = status.name || id;
+
+          label.appendChild(checkbox);
+          label.appendChild(dot);
+          label.appendChild(name);
+          li.appendChild(label);
+          menu.appendChild(li);
+       }
+
+       const divider = document.createElement('li');
+       divider.className = 'dropdown-divider';
+       menu.appendChild(divider);
+
+       const liAll = document.createElement('li');
+       const aAll = document.createElement('a');
+       aAll.className = 'dropdown-item kanban-columns-show-all';
+       aAll.href = '#';
+       aAll.textContent = lang.showAllColumns || 'Show all columns';
+       liAll.appendChild(aAll);
+       menu.appendChild(liAll);
+
+       applyColumnVisibility();
+    }
+
+    /**
+     * Populate the "Card fields" dropdown with a toggle per field.
+     */
+    function populateCardFieldsMenu() {
+       const menu = document.querySelector('.kanban-fields-menu');
+       if (!menu) return;
+
+       menu.innerHTML = '';
+
+       const header = document.createElement('li');
+       header.className = 'dropdown-header kanban-fields-header';
+       header.textContent = lang.cardFields || 'Card fields';
+       menu.appendChild(header);
+
+       for (const [key, field] of Object.entries(cardFields)) {
+          const li = document.createElement('li');
+          const label = document.createElement('label');
+          label.className = 'dropdown-item kanban-field-toggle';
+          label.setAttribute('data-field', key);
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = !hiddenCardFields.has(key);
+
+          const icon = document.createElement('i');
+          icon.className = 'ti ' + (field.icon || 'ti-info-circle');
+
+          const name = document.createElement('span');
+          name.textContent = field.label;
+
+          label.appendChild(checkbox);
+          label.appendChild(icon);
+          label.appendChild(name);
+          li.appendChild(label);
+          menu.appendChild(li);
+       }
+    }
+
+    /**
+     * Toggle the visibility of a card field and re-render the board.
+     */
+    function toggleCardField(field) {
+       if (!field) return;
+       if (hiddenCardFields.has(field)) {
+          hiddenCardFields.delete(field);
+       } else {
+          hiddenCardFields.add(field);
+       }
+       saveHiddenCardFields();
+       applyCardFieldMenuState();
+       rerenderCards();
+    }
+
+    /**
+     * Sync the checkboxes in the "Card fields" menu with the current state.
+     */
+    function applyCardFieldMenuState() {
+       document.querySelectorAll('.kanban-fields-menu .kanban-field-toggle').forEach(item => {
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+             checkbox.checked = !hiddenCardFields.has(item.getAttribute('data-field'));
+          }
+       });
+    }
+
+    /**
+     * Re-render all existing cards in place (used after a field is toggled).
+     */
+    function rerenderCards() {
+       for (const [statusId, tickets] of Object.entries(ticketsByStatus)) {
+          const zone = document.getElementById('status-column-' + statusId);
+          if (!zone) continue;
+          if (tickets.length === 0) {
+             showEmptyPlaceholder(zone, statusId);
+             continue;
+          }
+          const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
+          zone.innerHTML = '';
+          sorted.forEach(ticket => {
+             zone.appendChild(createCardElement(ticket));
+          });
+       }
+    }
+
+    /**
+     * Rebuild the technician filter options, refreshing the select2 widget.
+     */
+    function populateTechnicianSelect(techs) {
+       const sel = document.getElementById('filter-technician');
+       if (!sel) return;
+
+       const current = sel.value;
+       sel.innerHTML = '';
+
+       const optAll = document.createElement('option');
+       optAll.value = '';
+       optAll.textContent = lang.allTechnicians || 'All Technicians';
+       sel.appendChild(optAll);
+
+       techs.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.name;
+          sel.appendChild(opt);
+       });
+
+       // Keep the current selection if it is still valid, otherwise clear it
+       if (techs.some(t => String(t.id) === String(current))) {
+          sel.value = current;
+       } else {
+          sel.value = '';
+       }
+
+       if (window.$ && window.$.fn && typeof window.$.fn.select2 === 'function') {
+          try {
+             window.$(sel).trigger('change');
+          } catch (e) { /* select2 refresh failed, native select still works */ }
+       }
+    }
+
+    /**
+     * Handle group filter change: restrict the technician dropdown to the
+     * members of the selected group (and its subgroups).
+     */
+    function bindGroupTechnicianFilter() {
+       const groupSel = document.getElementById('filter-group');
+       if (!groupSel) return;
+
+       groupSel.addEventListener('change', function () {
+          const groupId = groupSel.value;
+          if (!groupId) {
+             populateTechnicianSelect(window.KANBAN_TECHNICIANS || []);
+             return;
+          }
+
+          fetch(apiUrl + '?action=get_group_technicians&group=' + encodeURIComponent(groupId) + '&_t=' + Date.now())
+             .then(response => response.json())
+             .then(res => {
+                if (res && Array.isArray(res.technicians)) {
+                   populateTechnicianSelect(res.technicians);
+                }
+             })
+             .catch(err => {
+                console.error('Error loading group technicians:', err);
+             });
+       });
+    }
+
+    /**
+     * Show empty placeholder in a column with no tickets
+     */
+    function showEmptyPlaceholder(zone, statusId) {
       if (!zone) return;
       const statuses = window.KANBAN_STATUSES || {};
       const status = statuses[statusId] || { name: '' };
@@ -251,39 +552,46 @@ function loadTickets() {
              if (!response.ok) throw new Error('HTTP ' + response.status);
              return response.json();
           })
-          .then(data => {
-             ticketsByStatus = data;
+           .then(data => {
+              ticketsByStatus = data;
 
-             // Clear all dropzones
-             document.querySelectorAll('.kanban-cards-dropzone').forEach(zone => {
-                zone.innerHTML = '';
-             });
+              // Reset every column: clear cards and zero out the counts so stale
+              // numbers from a previous (e.g. group-filtered) load never linger.
+              document.querySelectorAll('.kanban-column').forEach(col => {
+                 const id = col.getAttribute('data-status-id');
+                 const zone = document.getElementById('status-column-' + id);
+                 const countBadge = document.getElementById('count-' + id);
+                 if (zone) zone.innerHTML = '';
+                 if (countBadge) countBadge.textContent = '0';
+              });
 
-             // Populate columns
-             let totalTickets = 0;
-             for (const [statusId, tickets] of Object.entries(data)) {
-                const zone = document.getElementById('status-column-' + statusId);
-                const countBadge = document.getElementById('count-' + statusId);
+              // Populate columns
+              let totalTickets = 0;
+              const statusesWithData = new Set();
+              for (const [statusId, tickets] of Object.entries(data)) {
+                 const zone = document.getElementById('status-column-' + statusId);
+                 const countBadge = document.getElementById('count-' + statusId);
 
-                if (countBadge) {
-                   countBadge.textContent = tickets.length;
-                }
+                 if (countBadge) {
+                    countBadge.textContent = tickets.length;
+                 }
 
-                if (zone && tickets.length > 0) {
-                   const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
-                   sorted.forEach(ticket => {
-                      zone.appendChild(createCardElement(ticket));
-                   });
-                   totalTickets += tickets.length;
-                } else if (zone) {
-                   showEmptyPlaceholder(zone, statusId);
-                }
-             }
+                 if (zone && tickets.length > 0) {
+                    statusesWithData.add(statusId);
+                    const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
+                    sorted.forEach(ticket => {
+                       zone.appendChild(createCardElement(ticket));
+                    });
+                    totalTickets += tickets.length;
+                 }
+              }
 
-              // Update empty columns to show "0" instead of "--"
-              document.querySelectorAll('.card-count').forEach(badge => {
-                 if (badge.textContent === '--') {
-                    badge.textContent = '0';
+              // Columns that did not appear in the response keep an empty placeholder
+              document.querySelectorAll('.kanban-column').forEach(col => {
+                 const id = col.getAttribute('data-status-id');
+                 if (!statusesWithData.has(id)) {
+                    const zone = document.getElementById('status-column-' + id);
+                    if (zone) showEmptyPlaceholder(zone, id);
                  }
               });
 
@@ -346,7 +654,7 @@ function createCardElement(ticket) {
 
        // SLA Progress Bar HTML
        let slaBarHtml = '';
-       if (ticket.sla_progress && ticket.sla_progress.status !== 'no_sla' && ticket.time_to_resolve) {
+       if (!hiddenCardFields.has('sla') && ticket.sla_progress && ticket.sla_progress.status !== 'no_sla' && ticket.time_to_resolve) {
           slaBarHtml = `
              <div class="sla-progress mb-2">
                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -377,12 +685,38 @@ function createCardElement(ticket) {
        // Construct the ticket URL
        const ticketUrl = glpiRoot + '/front/ticket.form.php?id=' + ticket.id;
 
+       // Card fields that can be toggled from the "Card fields" menu
+       const showPriority = !hiddenCardFields.has('priority');
+       const showTechs = !hiddenCardFields.has('assigned_techs');
+       const showCategory = !hiddenCardFields.has('category');
+       const showDate = !hiddenCardFields.has('date_creation');
+
+       const topActions = [];
+       if (showPriority) topActions.push(priorityBadge);
+
+       const metaItems = [];
+       if (showTechs) {
+          metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(techNames)}">
+             <i class="ti ti-user"></i><span>${escapeHtml(techNames)}</span>
+          </div>`);
+       }
+       if (showCategory) {
+          metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(ticket.category || lang.noCategory)}">
+             <i class="ti ti-tag"></i><span>${escapeHtml(ticket.category || lang.noCategory)}</span>
+          </div>`);
+       }
+       if (showDate) {
+          metaItems.push(`<div class="card-meta-item ms-auto" title="${ticket.date_creation}">
+             <i class="ti ti-calendar"></i><span>${ticket.date_creation}</span>
+          </div>`);
+       }
+
        card.innerHTML = `
           <div class="card-body">
              <div class="kanban-card-top">
                 <span class="ticket-id">#${ticket.id}</span>
                 <div class="d-flex align-items-center gap-1 flex-shrink-0">
-                   ${priorityBadge}
+                   ${topActions.join('')}
                    <a href="${ticketUrl}" target="_blank" class="card-open-link"
                       onclick="event.stopPropagation()" title="${lang.open} #${ticket.id}"
                       aria-label="${lang.open} #${ticket.id}">
@@ -397,17 +731,7 @@ function createCardElement(ticket) {
                 </a>
              </h6>
              ${slaBarHtml}
-             <div class="card-meta">
-                <div class="card-meta-item text-truncate" title="${escapeHtml(techNames)}">
-                   <i class="ti ti-user"></i><span>${escapeHtml(techNames)}</span>
-                </div>
-                <div class="card-meta-item text-truncate" title="${escapeHtml(ticket.category || lang.noCategory)}">
-                   <i class="ti ti-tag"></i><span>${escapeHtml(ticket.category || lang.noCategory)}</span>
-                </div>
-                <div class="card-meta-item ms-auto" title="${ticket.date_creation}">
-                   <i class="ti ti-calendar"></i><span>${ticket.date_creation}</span>
-                </div>
-             </div>
+             ${metaItems.length > 0 ? '<div class="card-meta">' + metaItems.join('') + '</div>' : ''}
           </div>
        `;
 
@@ -713,7 +1037,33 @@ function updateCountdowns() {
 
 document.addEventListener('DOMContentLoaded', function () {
    renderBoardColumns();
+   populateColumnsMenu();
+   populateCardFieldsMenu();
+   applyColumnVisibility();
+   bindGroupTechnicianFilter();
    loadTickets();
+
+   // Columns visibility menu (may live outside the board container)
+   document.addEventListener('click', function (e) {
+      const toggle = e.target.closest('.kanban-column-toggle');
+      if (toggle) {
+         e.preventDefault();
+         toggleColumn(toggle.getAttribute('data-status-id'));
+         return;
+      }
+      const showAll = e.target.closest('.kanban-columns-show-all');
+      if (showAll) {
+         e.preventDefault();
+         hiddenColumns.clear();
+         saveHiddenColumns();
+         applyColumnVisibility();
+      }
+      const fieldToggle = e.target.closest('.kanban-field-toggle');
+      if (fieldToggle) {
+         e.preventDefault();
+         toggleCardField(fieldToggle.getAttribute('data-field'));
+      }
+   });
 
    // Modal cleanup on close
    const modalEl = document.getElementById('kanbanTicketModal');

@@ -553,4 +553,67 @@ class PluginKanbanKanbanTest extends TestCase
             }
         }
     }
+
+    public function testGetTechniciansForGroupIncludesSubgroupMembers(): void
+    {
+        global $DB;
+
+        $parent = 9701;
+        $child = 9702;
+        $other = 9703;
+        $user_parent = 0;
+        $user_child = 0;
+        $user_other = 0;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $parent, 'name' => 'Kanban Tech Parent Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $child, 'name' => 'Kanban Tech Child Group', 'entities_id' => 0, 'groups_id' => $parent]);
+            $DB->insert('glpi_groups', ['id' => $other, 'name' => 'Kanban Tech Other Group', 'entities_id' => 0, 'groups_id' => 0]);
+
+            $user_parent = self::insertKanbanTestUser('kanban_tech_parent');
+            $user_child = self::insertKanbanTestUser('kanban_tech_child');
+            $user_other = self::insertKanbanTestUser('kanban_tech_other');
+
+            $DB->insert('glpi_groups_users', ['groups_id' => $parent, 'users_id' => $user_parent]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $child, 'users_id' => $user_child]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $other, 'users_id' => $user_other]);
+
+            $result = PluginKanbanKanban::getTechniciansForGroup($parent);
+            $ids = array_column($result, 'id');
+
+            $this->assertContains($user_parent, $ids, 'Members of the selected group must be returned');
+            $this->assertContains($user_child, $ids, 'Members of subgroups must be returned');
+            $this->assertNotContains($user_other, $ids, 'Members of unrelated groups must not be returned');
+        } finally {
+            if ($user_parent > 0) { $DB->delete('glpi_users', ['id' => $user_parent]); }
+            if ($user_child > 0) { $DB->delete('glpi_users', ['id' => $user_child]); }
+            if ($user_other > 0) { $DB->delete('glpi_users', ['id' => $user_other]); }
+            $DB->delete('glpi_groups_users', ['groups_id' => [$parent, $child, $other]]);
+            $DB->delete('glpi_groups', ['id' => [$parent, $child, $other]]);
+        }
+    }
+
+    private static function insertKanbanTestUser(string $name): int
+    {
+        global $DB;
+
+        $DB->insert('glpi_users', [
+            'name' => $name,
+            'password' => Auth::getPasswordHash('kanban-test-pass'),
+            'auths_id' => 1,
+            'entities_id' => 0,
+            'is_active' => 1,
+            'is_deleted' => 0,
+        ]);
+
+        $id = null;
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM' => 'glpi_users',
+            'WHERE' => ['name' => $name],
+        ]) as $row) {
+            $id = (int)$row['id'];
+        }
+        return $id ?? 0;
+    }
 }

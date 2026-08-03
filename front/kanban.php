@@ -62,6 +62,16 @@ switch ($action) {
           ]);
           exit;
 
+       case 'get_group_technicians':
+          $group_id = isset($_GET['group']) ? (int)$_GET['group'] : 0;
+          $technicians = $group_id > 0
+             ? PluginKanbanKanban::getTechniciansForGroup($group_id)
+             : PluginKanbanKanban::getTechniciansForFilter();
+
+          header("Content-Type: application/json; charset=UTF-8");
+          echo json_encode(['technicians' => $technicians]);
+          exit;
+
        case 'update_ticket_status':
           Session::checkCSRF($_POST);
 
@@ -134,6 +144,7 @@ $groups      = PluginKanbanKanban::getGroupsForFilter();
 // Inject JS variables
 echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses) . ";</script>";
 echo "<script>var KANBAN_GLPI_ROOT = " . json_encode($CFG_GLPI['root_doc']) . ";</script>";
+echo "<script>var KANBAN_TECHNICIANS = " . json_encode($technicians) . ";</script>";
 echo "<script>var KANBAN_TIMEZONE_OFFSET = " . json_encode(date('P')) . ";</script>";
 echo "<script>var KANBAN_SORT_OPTIONS = " . json_encode(PluginKanbanKanban::getSortOptions()) . ";</script>";
 echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
@@ -141,9 +152,20 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
    "unassigned" => __("Unassigned", "kanban"),
    "noCategory" => __("No Category", "kanban"),
    "loading" => __("Loading...", "kanban"),
-   "sortHint" => __("Sort via column dropdowns", "kanban"),
-   "sortBy" => __("Sort by", "kanban"),
-   "noTickets" => __("No tickets", "kanban"),
+    "sortHint" => __("Sort via column dropdowns", "kanban"),
+    "sortBy" => __("Sort by", "kanban"),
+    "noTickets" => __("No tickets", "kanban"),
+    "columns" => __("Columns", "kanban"),
+    "hideColumn" => __("Hide column", "kanban"),
+    "showColumn" => __("Show column", "kanban"),
+    "showAllColumns" => __("Show all columns", "kanban"),
+    "cardFields" => __("Card fields", "kanban"),
+    "allTechnicians" => __("All Technicians", "kanban"),
+    "fieldPriority" => __("Priority", "kanban"),
+    "fieldDateCreation" => __("Opening date", "kanban"),
+    "fieldCategory" => __("Category", "kanban"),
+    "fieldTechnician" => __("Technician", "kanban"),
+    "fieldSla" => __("SLA", "kanban"),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
@@ -178,6 +200,24 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
          <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" id="kanban-refresh-btn" title="<?php echo __('Refresh', 'kanban'); ?>">
             <i class="ti ti-reload"></i>
          </button>
+         <div class="dropdown">
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-columns-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Show / hide columns', 'kanban'); ?>">
+               <i class="ti ti-columns-3"></i>
+               <span class="d-none d-lg-inline"><?php echo __('Columns', 'kanban'); ?></span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end kanban-columns-menu" aria-labelledby="kanban-columns-btn">
+               <!-- Populated by JavaScript -->
+            </ul>
+         </div>
+         <div class="dropdown">
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-fields-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Card fields', 'kanban'); ?>">
+               <i class="ti ti-list-check"></i>
+               <span class="d-none d-lg-inline"><?php echo __('Fields', 'kanban'); ?></span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end kanban-fields-menu" aria-labelledby="kanban-fields-btn">
+               <!-- Populated by JavaScript -->
+            </ul>
+         </div>
       </div>
       <div class="col-md-8">
          <form id="kanban-filter-form" class="row g-2 justify-content-end">

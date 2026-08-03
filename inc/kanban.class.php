@@ -283,14 +283,56 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'     => 'u.realname ASC',
           'LIMIT'     => 500
        ]);
+        foreach ($iterator as $user) {
+           $users[] = [
+              'id'   => (int)$user['id'],
+              'name' => getUserName($user['id'])
+           ];
+        }
+        return $users;
+     }
+
+    /**
+     * Get technicians (users) who are members of a group or any of its subgroups.
+     *
+     * @param int $group_id
+     * @return array Array of ['id' => int, 'name' => string]
+     */
+    public static function getTechniciansForGroup(int $group_id): array {
+       global $DB;
+       $group_ids = getSonsOf('glpi_groups', $group_id);
+       if (empty($group_ids)) {
+          $group_ids = [$group_id => $group_id];
+       }
+       $users = [];
+       $iterator = $DB->request([
+          'SELECT'     => ['u.id', 'u.realname', 'u.firstname'],
+          'FROM'       => 'glpi_users AS u',
+          'INNER JOIN' => [
+             'glpi_groups_users AS gu' => [
+                'ON' => [
+                   'u'  => 'id',
+                   'gu' => 'users_id'
+                ]
+             ]
+          ],
+          'WHERE'      => [
+             'gu.groups_id' => array_values($group_ids),
+             'u.is_deleted' => 0,
+             'u.is_active'  => 1,
+          ],
+          'DISTINCT'   => true,
+          'ORDER'      => 'u.realname ASC',
+          'LIMIT'      => 500
+       ]);
        foreach ($iterator as $user) {
           $users[] = [
              'id'   => (int)$user['id'],
              'name' => getUserName($user['id'])
           ];
        }
-       return $users;
-    }
+        return $users;
+     }
 
     /**
      * Get list of requesters for filter dropdown
