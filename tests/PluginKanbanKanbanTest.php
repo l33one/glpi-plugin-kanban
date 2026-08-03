@@ -377,4 +377,180 @@ class PluginKanbanKanbanTest extends TestCase
             }
         }
     }
+
+    /**
+     * Insert a test ticket in entity 0 and return its real id.
+     */
+    private static function insertKanbanTestTicket(string $name): int
+    {
+        global $DB;
+
+        $now = date('Y-m-d H:i:s');
+        $DB->insert('glpi_tickets', [
+            'name' => $name,
+            'content' => 'Kanban plugin regression test ticket',
+            'status' => 1,
+            'priority' => 3,
+            'urgency' => 2,
+            'impact' => 2,
+            'type' => 1,
+            'date' => $now,
+            'date_creation' => $now,
+            'date_mod' => $now,
+            'entities_id' => 0,
+            'is_deleted' => 0,
+            'itilcategories_id' => 0,
+            'requesttypes_id' => 0,
+            'users_id_lastupdater' => 2,
+            'users_id_recipient' => 2,
+            'actiontime' => 0,
+            'time_to_resolve' => null,
+        ]);
+
+        $id = null;
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM' => 'glpi_tickets',
+            'WHERE' => ['name' => $name],
+        ]) as $row) {
+            $id = (int)$row['id'];
+        }
+        return $id ?? 0;
+    }
+
+    /**
+     * Regression test: a profile without the READALL right must only see
+     * tickets of the groups the user belongs to (mirrors Ticket::canViewItem()).
+     */
+    public function testVisibilityRestrictsNonAdminUserToTheirGroupsTickets(): void
+    {
+        global $DB;
+
+        $group1 = 9101;
+        $group2 = 9102;
+        $ticket_a = 0;
+        $ticket_b = 0;
+        $ticket_c = 0;
+
+        $saved_profile = $_SESSION['glpiactiveprofile']['ticket'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $group1, 'name' => 'Kanban Test Group 1', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $group2, 'name' => 'Kanban Test Group 2', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $group1, 'users_id' => 2]);
+
+            $ticket_a = self::insertKanbanTestTicket('Kanban vis ticket A (group1)');
+            $ticket_b = self::insertKanbanTestTicket('Kanban vis ticket B (group2)');
+            $ticket_c = self::insertKanbanTestTicket('Kanban vis ticket C (no group)');
+
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_a, 'groups_id' => $group1, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_b, 'groups_id' => $group2, 'type' => CommonITILActor::ASSIGN]);
+
+            // Simulate a non-admin profile: can only read items assigned to their groups.
+            $_SESSION['glpiactiveprofile']['ticket'] = Ticket::READASSIGN | Ticket::READGROUP;
+            $_SESSION['glpigroups'] = [$group1];
+            $_SESSION['glpiactiveentities'] = [0];
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($ticket_a, $ids, 'Ticket assigned to the user group must be visible');
+            $this->assertNotContains($ticket_b, $ids, 'Ticket assigned to another group must NOT be visible');
+            $this->assertNotContains($ticket_c, $ids, 'Ticket with no assignment must NOT be visible to a restricted profile');
+
+            // Same restriction must apply to the detail query.
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($ticket_a));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($ticket_b));
+        } finally {
+            if ($ticket_a > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_a]); }
+            if ($ticket_b > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_b]); }
+            if ($ticket_c > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_c]); }
+            $DB->delete('glpi_groups_tickets', ['groups_id' => [$group1, $group2]]);
+            $DB->delete('glpi_groups_users', ['groups_id' => $group1, 'users_id' => 2]);
+            $DB->delete('glpi_groups', ['id' => [$group1, $group2]]);
+
+            if ($saved_profile !== null) {
+                $_SESSION['glpiactiveprofile']['ticket'] = $saved_profile;
+            } else {
+                unset($_SESSION['glpiactiveprofile']['ticket']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
+            }
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+        }
+    }
+
+    /**
+     * Regression test: selecting a group in the filter must return tickets of
+     * the group AND of all of its subgroups (nested groups).
+     */
+    public function testGroupFilterIncludesSubgroups(): void
+    {
+        global $DB;
+
+        $parent = 9201;
+        $child = 9202;
+        $grandchild = 9203;
+        $other = 9204;
+        $ticket_child = 0;
+        $ticket_grandchild = 0;
+        $ticket_other = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $parent, 'name' => 'Kanban Parent Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $child, 'name' => 'Kanban Child Group', 'entities_id' => 0, 'groups_id' => $parent]);
+            $DB->insert('glpi_groups', ['id' => $grandchild, 'name' => 'Kanban Grandchild Group', 'entities_id' => 0, 'groups_id' => $child]);
+            $DB->insert('glpi_groups', ['id' => $other, 'name' => 'Kanban Other Group', 'entities_id' => 0, 'groups_id' => 0]);
+
+            $ticket_child = self::insertKanbanTestTicket('Kanban group filter ticket (child)');
+            $ticket_grandchild = self::insertKanbanTestTicket('Kanban group filter ticket (grandchild)');
+            $ticket_other = self::insertKanbanTestTicket('Kanban group filter ticket (other)');
+
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_child, 'groups_id' => $child, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_grandchild, 'groups_id' => $grandchild, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_other, 'groups_id' => $other, 'type' => CommonITILActor::ASSIGN]);
+
+            $_SESSION['glpiactiveentities'] = [0];
+
+            $result = PluginKanbanKanban::getTicketsForKanban(['group' => $parent], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($ticket_child, $ids, 'Filtering a parent group must include tickets of direct subgroups');
+            $this->assertContains($ticket_grandchild, $ids, 'Filtering a parent group must include tickets of nested subgroups');
+            $this->assertNotContains($ticket_other, $ids, 'Tickets of unrelated groups must not be returned');
+        } finally {
+            if ($ticket_child > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_child]); }
+            if ($ticket_grandchild > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_grandchild]); }
+            if ($ticket_other > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_other]); }
+            $DB->delete('glpi_groups_tickets', ['groups_id' => [$parent, $child, $grandchild, $other]]);
+            $DB->delete('glpi_groups', ['id' => [$parent, $child, $grandchild, $other]]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+        }
+    }
 }

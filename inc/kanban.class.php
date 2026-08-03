@@ -77,6 +77,12 @@ class PluginKanbanKanban extends CommonGLPI {
       $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
       $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', 'entities_id', $active_entities, false);
 
+      // Enforce item-level visibility (mirrors Ticket::canViewItem()).
+      $visibility = self::getTicketVisibilityCriteria();
+      if ($visibility !== null) {
+         $criteria['WHERE'][] = $visibility;
+      }
+
       // Apply Technician filter (joins glpi_tickets_users for ASSIGN type)
       if (!empty($filters['technician'])) {
          $criteria['INNER JOIN']['glpi_tickets_users AS tu_tech'] = [
@@ -101,15 +107,21 @@ class PluginKanbanKanban extends CommonGLPI {
          $criteria['WHERE']['tu_req.type'] = CommonITILActor::REQUESTER;
       }
 
-      // Apply Group filter (joins glpi_groups_tickets)
+      // Apply Group filter (joins glpi_groups_tickets).
+      // When a group is selected, include the group and all of its subgroups.
       if (!empty($filters['group'])) {
+         $group_id = (int)$filters['group'];
+         $group_ids = getSonsOf('glpi_groups', $group_id);
+         if (empty($group_ids)) {
+            $group_ids = [$group_id => $group_id];
+         }
          $criteria['INNER JOIN']['glpi_groups_tickets AS gt'] = [
             'ON' => [
                't'  => 'id',
                'gt' => 'tickets_id'
             ]
          ];
-         $criteria['WHERE']['gt.groups_id'] = (int)$filters['group'];
+         $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
       }
 
       // Apply Sorting
@@ -171,7 +183,79 @@ class PluginKanbanKanban extends CommonGLPI {
        return $statuses;
    }
 
-/**
+   /**
+     * Build the SQL restriction that mirrors Ticket::canViewItem().
+     *
+     * Users without the READALL right may only see tickets involving them:
+     *  - READMY: as recipient, requester or observer;
+     *  - READGROUP: through one of their groups as requester or observer;
+     *  - READASSIGN: assigned to them or to one of their groups, or incoming
+     *    tickets when they also hold the ASSIGN right;
+     *  - ticketvalidation: tickets they are allowed to validate.
+     *
+     * @return \QueryExpression|null WHERE expression (AND-ed with the rest of
+     *         the criteria) or null when no restriction applies (READALL right).
+     */
+    private static function getTicketVisibilityCriteria() {
+       $user_id = (int)Session::getLoginUserID();
+       if (!$user_id) {
+          return new \QueryExpression('FALSE');
+       }
+
+       // Full read right: no additional restriction (entity scope already applied).
+       if (Session::haveRight('ticket', Ticket::READALL)) {
+          return null;
+       }
+
+       $my_groups = $_SESSION['glpigroups'] ?? [];
+       if (!is_array($my_groups)) {
+          $my_groups = [];
+       }
+       $my_groups = array_values(array_map('intval', $my_groups));
+
+       $conditions = [];
+
+       // READMY: user is the recipient, a requester or an observer.
+       if (Session::haveRight('ticket', Ticket::READMY)) {
+          $conditions[] = "t.users_id_recipient = $user_id";
+          $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.users_id = '
+             . $user_id . ' AND tu.type IN (' . CommonITILActor::REQUESTER . ',' . CommonITILActor::OBSERVER . '))';
+       }
+
+       // READGROUP: one of the user's groups is requester or observer.
+       if (Session::haveRight('ticket', Ticket::READGROUP) && !empty($my_groups)) {
+          $conditions[] = 't.id IN (SELECT DISTINCT gt.tickets_id FROM glpi_groups_tickets AS gt WHERE gt.groups_id IN ('
+             . implode(',', $my_groups) . ') AND gt.type IN (' . CommonITILActor::REQUESTER . ',' . CommonITILActor::OBSERVER . '))';
+       }
+
+       // READASSIGN: assigned to the user, to one of their groups, or assignable incoming tickets.
+       if (Session::haveRight('ticket', Ticket::READASSIGN)) {
+          $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.users_id = '
+             . $user_id . ' AND tu.type = ' . CommonITILActor::ASSIGN . ')';
+          if (!empty($my_groups)) {
+             $conditions[] = 't.id IN (SELECT DISTINCT gt.tickets_id FROM glpi_groups_tickets AS gt WHERE gt.groups_id IN ('
+                . implode(',', $my_groups) . ') AND gt.type = ' . CommonITILActor::ASSIGN . ')';
+          }
+          if (Session::haveRight('ticket', Ticket::ASSIGN)) {
+             $conditions[] = 't.status = ' . (int)Ticket::INCOMING;
+          }
+       }
+
+       // Ticket validation: tickets where the user is the assigned validator.
+       if (Session::haveRightsOr('ticketvalidation', TicketValidation::getValidateRights())) {
+          $conditions[] = 't.id IN (SELECT DISTINCT tv.tickets_id FROM glpi_ticketvalidations AS tv WHERE tv.users_id_validate = '
+             . $user_id . ')';
+       }
+
+       if (empty($conditions)) {
+          // No item-level right: the user cannot view any ticket.
+          return new \QueryExpression('FALSE');
+       }
+
+       return new \QueryExpression('(' . implode(' OR ', $conditions) . ')');
+    }
+
+   /**
      * Get list of technicians for filter dropdown
      *
      * @return array Array of ['id' => int, 'name' => string]
@@ -377,6 +461,12 @@ class PluginKanbanKanban extends CommonGLPI {
        // Enforce active entity restrictions (non-recursive, see getTicketsForKanban)
        $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
        $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', 'entities_id', $active_entities, false);
+
+       // Enforce item-level visibility (mirrors Ticket::canViewItem()).
+       $visibility = self::getTicketVisibilityCriteria();
+       if ($visibility !== null) {
+          $criteria['WHERE'][] = $visibility;
+       }
 
        $iterator = $DB->request($criteria);
 
