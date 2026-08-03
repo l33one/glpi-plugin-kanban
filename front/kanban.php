@@ -154,9 +154,7 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
    ],
 ]) . ";</script>";
 
-// Load assets
-echo Html::script($CFG_GLPI['root_doc'] . "/plugins/kanban/public/js/kanban.js?v=" . PLUGIN_KANBAN_VERSION);
-echo Html::css($CFG_GLPI['root_doc'] . "/plugins/kanban/public/css/kanban.css?v=" . PLUGIN_KANBAN_VERSION);
+// Load assets via setup.php hooks (add_css / add_javascript)
 ?>
 
 <div class="kanban-page-wrapper container-fluid py-4">

@@ -47,13 +47,14 @@ class PluginKanbanKanban extends CommonGLPI {
           'SELECT' => [
              't.id',
              't.name AS title',
-             't.status',
-             't.priority',
-             't.date AS date',
-             't.date_mod',
-             't.time_to_resolve',
-             'cat.name AS category'
-          ],
+         't.status',
+         't.priority',
+         't.date AS date',
+         't.date_creation',
+         't.date_mod',
+         't.time_to_resolve',
+         'cat.name AS category'
+      ],
           'FROM' => 'glpi_tickets AS t',
           'LEFT JOIN' => [
              'glpi_itilcategories AS cat' => [
@@ -70,7 +71,11 @@ class PluginKanbanKanban extends CommonGLPI {
        ];
 
       // Enforce active entity restrictions
-      $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', '', $_SESSION['glpiactiveentities'], true);
+      // Do not use recursive criteria here: glpiactiveentities already contains the active entity
+      // expanded with its children, and glpi_tickets has no is_recursive column. Forcing recursive
+      // would generate `t.is_recursive` in the query and break multi-entity setups.
+      $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
+      $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', 'entities_id', $active_entities, false);
 
       // Apply Technician filter (joins glpi_tickets_users for ASSIGN type)
       if (!empty($filters['technician'])) {
@@ -369,16 +374,21 @@ class PluginKanbanKanban extends CommonGLPI {
           ]
        ];
 
-       // Enforce active entity restrictions
-       $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', '', $_SESSION['glpiactiveentities'], true);
+       // Enforce active entity restrictions (non-recursive, see getTicketsForKanban)
+       $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
+       $criteria['WHERE'][] = getEntitiesRestrictCriteria('t', 'entities_id', $active_entities, false);
 
        $iterator = $DB->request($criteria);
 
-       if (!$iterator->rowCount()) {
+       $ticket = null;
+       foreach ($iterator as $row) {
+          $ticket = $row;
+          break;
+       }
+       if ($ticket === null) {
           return null;
        }
 
-       $ticket = $iterator->fetch();
        $status = (int)$ticket['status'];
        $all_statuses = Ticket::getAllStatusArray();
 
@@ -389,7 +399,7 @@ class PluginKanbanKanban extends CommonGLPI {
        $ticket['assigned_techs'] = self::getAssignedTechnicians($ticket_id);
        $ticket['requester_name'] = self::getTicketRequesterName($ticket_id);
        $ticket['sla_progress'] = self::calculateSlaProgress($ticket);
-       $ticket['date_creation_formatted'] = Session::getCurrentDate($ticket['date_creation']);
+       $ticket['date_creation_formatted'] = Html::convDateTime($ticket['date_creation']);
 
        return $ticket;
     }

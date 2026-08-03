@@ -198,4 +198,183 @@ class PluginKanbanKanbanTest extends TestCase
         $this->assertIsArray($result);
         $this->assertNotEmpty($result);
     }
+
+    /**
+     * Regression test: tickets in a sub-entity must appear on the board.
+     *
+     * The old code used getEntitiesRestrictCriteria('t', '', $entities, true),
+     * which on GLPI 10 generates a condition on the non-existent column
+     * glpi_tickets.is_recursive when the active entity is not the root,
+     * causing a SQL error (1054) and an empty board.
+     */
+    public function testGetTicketsForKanbanReturnsTicketsFromSubEntity(): void
+    {
+        global $DB;
+
+        $sub_entity_id = 9001;
+        $sub_ticket_id = null;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_show_all = $_SESSION['glpishowallentities'] ?? null;
+
+        try {
+            $DB->insert('glpi_entities', [
+                'id' => $sub_entity_id,
+                'name' => 'Kanban Test Sub-Entity',
+                'entities_id' => 0,
+                'level' => 1,
+            ]);
+
+            $now = date('Y-m-d H:i:s');
+            $DB->insert('glpi_tickets', [
+                'name' => 'Ticket in sub-entity',
+                'content' => 'Regression test for entity restriction',
+                'status' => 1,
+                'priority' => 3,
+                'urgency' => 2,
+                'impact' => 2,
+                'type' => 1,
+                'date' => $now,
+                'date_creation' => $now,
+                'date_mod' => $now,
+                'entities_id' => $sub_entity_id,
+                'is_deleted' => 0,
+                'itilcategories_id' => 0,
+                'requesttypes_id' => 0,
+                'users_id_lastupdater' => 2,
+                'users_id_recipient' => 2,
+                'actiontime' => 0,
+                'time_to_resolve' => null,
+            ]);
+
+            foreach ($DB->request([
+                'SELECT' => ['id'],
+                'FROM' => 'glpi_tickets',
+                'WHERE' => ['name' => 'Ticket in sub-entity'],
+            ]) as $row) {
+                $sub_ticket_id = (int)$row['id'];
+            }
+            $this->assertNotNull($sub_ticket_id, 'Failed to read back the inserted ticket id');
+
+            // Active entity = the sub-entity only.
+            $_SESSION['glpiactiveentities'] = [$sub_entity_id];
+            $_SESSION['glpishowallentities'] = 0;
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'date', 'order' => 'DESC'], 100);
+
+            $found = false;
+            foreach ($result as $tickets) {
+                foreach ($tickets as $ticket) {
+                    if ((int)$ticket['id'] === $sub_ticket_id) {
+                        $found = true;
+                    }
+                }
+            }
+            $this->assertTrue($found, 'Ticket from sub-entity not returned on the board (SQL error / entity restriction broken)');
+
+            // Tickets from other entities must NOT be included when the sub-entity is active.
+            foreach ($result as $tickets) {
+                foreach ($tickets as $ticket) {
+                    $this->assertSame(
+                        $sub_ticket_id,
+                        (int)$ticket['id'],
+                        'Board returned a ticket outside the active sub-entity'
+                    );
+                }
+            }
+        } finally {
+            if ($sub_ticket_id !== null) {
+                $DB->delete('glpi_tickets', ['id' => $sub_ticket_id]);
+            }
+            $DB->delete('glpi_entities', ['id' => $sub_entity_id]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_show_all !== null) {
+                $_SESSION['glpishowallentities'] = $saved_show_all;
+            } else {
+                unset($_SESSION['glpishowallentities']);
+            }
+        }
+    }
+
+    public function testGetTicketDetailWorksInSubEntityContext(): void
+    {
+        global $DB;
+
+        $sub_entity_id = 9002;
+        $sub_ticket_id = null;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_show_all = $_SESSION['glpishowallentities'] ?? null;
+
+        try {
+            $DB->insert('glpi_entities', [
+                'id' => $sub_entity_id,
+                'name' => 'Kanban Test Sub-Entity (detail)',
+                'entities_id' => 0,
+                'level' => 1,
+            ]);
+
+            $now = date('Y-m-d H:i:s');
+            $DB->insert('glpi_tickets', [
+                'name' => 'Ticket in sub-entity detail',
+                'content' => 'Regression test for ticket detail',
+                'status' => 1,
+                'priority' => 3,
+                'urgency' => 2,
+                'impact' => 2,
+                'type' => 1,
+                'date' => $now,
+                'date_creation' => $now,
+                'date_mod' => $now,
+                'entities_id' => $sub_entity_id,
+                'is_deleted' => 0,
+                'itilcategories_id' => 0,
+                'requesttypes_id' => 0,
+                'users_id_lastupdater' => 2,
+                'users_id_recipient' => 2,
+                'actiontime' => 0,
+                'time_to_resolve' => null,
+            ]);
+
+            foreach ($DB->request([
+                'SELECT' => ['id'],
+                'FROM' => 'glpi_tickets',
+                'WHERE' => ['name' => 'Ticket in sub-entity detail'],
+            ]) as $row) {
+                $sub_ticket_id = (int)$row['id'];
+            }
+            $this->assertNotNull($sub_ticket_id, 'Failed to read back the inserted ticket id');
+
+            $_SESSION['glpiactiveentities'] = [$sub_entity_id];
+            $_SESSION['glpishowallentities'] = 0;
+
+            $detail = PluginKanbanKanban::getTicketDetail($sub_ticket_id);
+
+            $this->assertNotNull($detail, 'getTicketDetail returned null in sub-entity context');
+            $this->assertSame($sub_ticket_id, (int)$detail['id']);
+            $this->assertArrayHasKey('status_name', $detail);
+            $this->assertArrayHasKey('date_creation_formatted', $detail);
+        } finally {
+            if ($sub_ticket_id !== null) {
+                $DB->delete('glpi_tickets', ['id' => $sub_ticket_id]);
+            }
+            $DB->delete('glpi_entities', ['id' => $sub_entity_id]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_show_all !== null) {
+                $_SESSION['glpishowallentities'] = $saved_show_all;
+            } else {
+                unset($_SESSION['glpishowallentities']);
+            }
+        }
+    }
 }
