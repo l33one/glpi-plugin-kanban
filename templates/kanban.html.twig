@@ -1,4 +1,13 @@
-{# templates/kanban.html.twig #}
+{#
+ # GLPI Kanban Plugin - Twig Template
+ # Server-side rendering of Kanban board structure
+ #
+ # @package   Plugin Kanban
+ # @author    Leewan Meneses
+ # @license   GPL-2.0+
+ # @since     2026
+ #}
+
 <div class="kanban-board-wrapper d-flex gap-3 overflow-auto pb-3">
    {% for status_id, status in statuses %}
       <div class="kanban-column flex-shrink-0 bg-100 rounded-3 p-3 border" data-status-id="{{ status_id }}" style="width: 320px; min-height: 600px;">
@@ -13,7 +22,8 @@
 
          <!-- Cards Area -->
          <div class="kanban-cards-dropzone d-flex flex-column gap-3 h-100" id="status-column-{{ status_id }}" data-status="{{ status_id }}" style="min-height: 500px;">
-            <!-- Rendered dynamically by JavaScript -->
+            {# Rendered dynamically by JavaScript via AJAX #}
+            <div class="text-center text-muted py-3 fs-8">{{ __('Loading...', 'kanban') }}</div>
          </div>
       </div>
    {% endfor %}

@@ -1,6 +1,6 @@
 # 📋 GLPI Kanban Plugin
 
-Um plugin para o **GLPI 10+** que transforma o gerenciamento de chamados adicionando uma visualização em formato **Kanban** altamente interativa. 
+Um plugin para o **GLPI 10+** que transforma o gerenciamento de chamados adicionando uma visualização em formato **Kanban** altamente interativa.
 
 Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de forma visual, organizando os chamados (tickets) em colunas baseadas em seus status nativos do GLPI.
 
@@ -8,33 +8,94 @@ Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de f
 
 ## ✨ Funcionalidades
 
-* **Visualização Ágil:** Colunas dinâmicas mapeadas diretamente para os status dos chamados (Novo, Em Atendimento, Pendente, Solucionado, Fechado, etc.).
-* **Controle de Acesso Seguro:** Exibe no quadro apenas os chamados aos quais o usuário logado possui permissão para visualizar, respeitando as regras nativas de perfis e entidades do GLPI.
+* **Visualização Ágil:** Colunas dinâmicas mapeadas diretamente para os status dos chamados (Novo, Em Atendimento, Pendente, Solucionado, Fechado, etc.)
+* **Controle de Acesso Seguro:** Exibe apenas chamados que o usuário logado possui permissão de visualizar (Ticket::canView), respeitando regras de perfil e entidades do GLPI
 * **Filtros Avançados em Tempo Real:** 
-  * Filtragem por Grupo.
-  * Filtragem por Técnico Atribuído.
-  * Filtragem por Requerente.
-* **Ordenação Inteligente:** Botões em cada coluna para ordenar os cards por Prioridade, Data de Abertura ou Tempo no Status Atual.
+  * Filtragem por Grupo
+  * Filtragem por Técnico Atribuído
+  * Filtragem por Requerente
+* **Ordenação Inteligente:** Cards ordenados por Prioridade, Data de Abertura ou Tempo no Status Atual
 * **Cards Ricos em Informações:** 
-  * ID e Título do chamado em destaque.
-  * **Barra de SLA:** Indicador visual de progresso do SLA de atendimento/solução (cores de alerta para prazos próximos ou estourados).
-  * Data de abertura, Técnico atribuído (com avatar, se disponível), Prioridade e Categoria.
+  * ID e Título do chamado
+  * **Barra de SLA:** Indicador visual de progresso de SLA (verde/amarelo/vermelho) com contagem regressiva
+  * Data de abertura, Técnico atribuído, Prioridade e Categoria
+* **Drag and Drop:** Mover cards entre colunas para alterar o status, com rollback otimista em caso de falha
+* **Responsivo:** Layout adaptativo para desktop, tablet e mobile (scroll horizontal com snap)
+* **Performance:** Limite de 200 tickets por status com debounce nos filtros
 
 ---
 
 ## 🛠️ Pré-requisitos
 
-* **GLPI:** Versão 10.0.0 ou superior.
-* **PHP:** Versão 8.0 ou superior (seguindo o padrão do GLPI 10).
-* Permissões de super-admin ou configuração de plugins para realizar a instalação.
+* **GLPI:** Versão 10.0.0 ou superior
+* **PHP:** Versão 8.0 ou superior
+* Permissões de Super-Admin para instalar plugins
 
 ---
 
 ## 🚀 Instalação
 
-1. Faça o download da última versão deste plugin ou clone o repositório.
-2. Extraia ou mova a pasta do plugin para dentro do diretório `plugins/` do seu GLPI. É crucial que a pasta se chame exatamente **`kanban`**.
-   
+1. Clone o repositório na pasta `plugins/` do GLPI:
    ```bash
    cd /var/www/html/glpi/plugins
-   git clone [https://github.com/l33one/glpi-plugin-kanban.git](https://github.com/l33one/glpi-plugin-kanban.git) kanban
+   git clone https://github.com/l33one/glpi-plugin-kanban.git kanban
+   ```
+
+2. Acesse o GLPI como Super-Admin, vá em **Configurar > Plugins** e instale o plugin **Kanban**
+
+3. O menu **Assistência > Kanban** estará disponível para usuários com permissão de visualizar tickets
+
+---
+
+## 🐳 Desenvolvimento com Docker
+
+```bash
+docker-compose up -d
+```
+
+Acesse: `http://localhost:8088`
+
+### Criar tickets de teste
+```bash
+docker exec glpi-app php /var/www/html/glpi/plugins/kanban/create_test_tickets.php
+```
+
+---
+
+## 📁 Estrutura do Plugin
+
+```
+kanban/
+├── setup.php                  # Registro do plugin, hooks, versão
+├── hook.php                   # Instalação/desinstalação
+├── inc/
+│   ├── kanban.class.php       # Model principal: queries, filtros, SLA
+│   └── menu.class.php         # Registro do menu no GLPI
+├── front/
+│   └── kanban.php             # Controller: página e endpoints AJAX
+├── templates/
+│   └── kanban.html.twig       # Template Twig (server-side rendering)
+├── public/
+│   ├── js/kanban.js           # Lógica frontend: drag-drop, filtros, countdown
+│   └── css/kanban.css         # Estilos customizados + responsivo
+├── create_test_tickets.php    # Script para criar tickets de teste
+├── docker-compose.yml         # Ambiente de desenvolvimento
+└── README.md
+```
+
+---
+
+## 🔒 Segurança
+
+* CSRF token em todas as requisições POST
+* Validação de permissões via `Ticket::canView()` e `Ticket::canUpdateItem()`
+* Restrição de entidades via `$_SESSION['glpiactiveentities']`
+
+---
+
+## 📝 Licença
+
+GPL-2.0+ - Veja o arquivo LICENSE para mais detalhes.
+
+**Autor:** Leewan Meneses  
+**Repositório:** https://github.com/l33one/glpi-plugin-kanban

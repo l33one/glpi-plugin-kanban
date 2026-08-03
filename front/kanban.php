@@ -23,28 +23,21 @@ if (!Ticket::canView()) {
    Html::displayRightError();
 }
 
-$kanban = new PluginKanbanKanban();
-
 // Handle AJAX actions
 if (isset($_POST['action']) || isset($_GET['action'])) {
-   $action = $_POST['action'] ?? $_GET['action'];
+    $action = $_POST['action'] ?? $_GET['action'];
 
-   // CSRF validation for modifying actions
-   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-      Session::checkCSRF($_POST);
-   }
-
-   switch ($action) {
-      case 'get_tickets':
-         $filters = [
-            'technician' => $_GET['technician'] ?? null,
-            'requester'  => $_GET['requester'] ?? null,
-            'group'      => $_GET['group'] ?? null,
-         ];
-         $sort = [
-            'by'    => $_GET['sort_by'] ?? 'date',
-            'order' => $_GET['sort_order'] ?? 'DESC'
-         ];
+switch ($action) {
+       case 'get_tickets':
+          $filters = [
+             'technician' => isset($_GET['technician']) ? (int)$_GET['technician'] : null,
+             'requester'  => isset($_GET['requester']) ? (int)$_GET['requester'] : null,
+             'group'      => isset($_GET['group']) ? (int)$_GET['group'] : null,
+          ];
+          $sort = [
+             'by'    => $_GET['sort_by'] ?? 'date',
+             'order' => $_GET['sort_order'] ?? 'DESC'
+          ];
 
           $tickets = PluginKanbanKanban::getTicketsForKanban($filters, $sort);
 
@@ -52,14 +45,40 @@ if (isset($_POST['action']) || isset($_GET['action'])) {
           echo json_encode($tickets);
           exit;
 
+       case 'get_ticket_detail':
+          $ticket_id = isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : 0;
+          $detail = PluginKanbanKanban::getTicketDetail($ticket_id);
+
+          header("Content-Type: application/json; charset=UTF-8");
+          echo json_encode($detail);
+          exit;
+
+       case 'get_filter_data':
+          header("Content-Type: application/json; charset=UTF-8");
+          echo json_encode([
+             'technicians' => PluginKanbanKanban::getTechniciansForFilter(),
+             'requesters'  => PluginKanbanKanban::getRequestersForFilter(),
+             'groups'      => PluginKanbanKanban::getGroupsForFilter()
+          ]);
+          exit;
+
        case 'update_ticket_status':
-          $ticket_id  = (int)($_POST['ticket_id'] ?? 0);
-          $new_status = (int)($_POST['status'] ?? 0);
+          Session::checkCSRF($_POST);
+
+          $ticket_id  = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+          $new_status = isset($_POST['status']) ? (int)$_POST['status'] : 0;
 
           if ($ticket_id > 0 && $new_status > 0) {
              $ticket = new Ticket();
              if ($ticket->getFromDB($ticket_id)) {
                 if ($ticket->canUpdateItem()) {
+                   $ticket_entities = $ticket->getEntities();
+                   if (!in_array($_SESSION['glpiactive_entity'], $ticket_entities)
+                       && !in_array(0, $ticket_entities)) {
+                      http_response_code(403);
+                      echo json_encode(['success' => false, 'error' => 'Entity mismatch']);
+                      exit;
+                   }
                    $updated = $ticket->update([
                       'id'     => $ticket_id,
                       'status' => $new_status
@@ -78,14 +97,14 @@ if (isset($_POST['action']) || isset($_GET['action'])) {
           http_response_code(400);
           echo json_encode(['success' => false, 'error' => 'Bad Request']);
           exit;
-   }
+    }
 }
 
 // Render Page Header
 Html::header(
    __('Kanban', 'kanban'),
    $_SERVER['PHP_SELF'],
-   "assistance",
+   "helpdesk",
    "plugin_kanban_menu"
 );
 
@@ -106,127 +125,143 @@ foreach ($glpi_statuses as $id => $name) {
       'color' => $status_colors[$id] ?? 'secondary'
    ];
 }
+
+// Get filter data from model
+$technicians = PluginKanbanKanban::getTechniciansForFilter();
+$requesters  = PluginKanbanKanban::getRequestersForFilter();
+$groups      = PluginKanbanKanban::getGroupsForFilter();
+
+// Inject JS variables
 echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses) . ";</script>";
 echo "<script>var KANBAN_GLPI_ROOT = " . json_encode($CFG_GLPI['root_doc']) . ";</script>";
+echo "<script>var KANBAN_TIMEZONE_OFFSET = " . json_encode(date('P')) . ";</script>";
+echo "<script>var KANBAN_SORT_OPTIONS = " . json_encode(PluginKanbanKanban::getSortOptions()) . ";</script>";
+echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
+   "open" => __("Open", "kanban"),
+   "unassigned" => __("Unassigned", "kanban"),
+   "noCategory" => __("No Category", "kanban"),
+   "loading" => __("Loading...", "kanban"),
+   "sortHint" => __("Sort via column dropdowns", "kanban"),
+   "sortBy" => __("Sort by", "kanban"),
+   "noTickets" => __("No tickets", "kanban"),
+   "priorityLabels" => [
+      1 => __("Very Low", "kanban"),
+      2 => __("Low", "kanban"),
+      3 => __("Normal", "kanban"),
+      4 => __("High", "kanban"),
+      5 => __("Very High", "kanban"),
+      6 => __("Major", "kanban"),
+   ],
+]) . ";</script>";
 
-
-echo Html::script($CFG_GLPI['root_doc'] . "/plugins/kanban/public/js/kanban.js?v=" . time());
-echo Html::css($CFG_GLPI['root_doc'] . "/plugins/kanban/public/css/kanban.css?v=" . time());
-
-// Render the template container
-// In next steps, templates/kanban.html.twig will be loaded.
-// Here we output the base layout structure where JavaScript will load the data.
+// Load assets
+echo Html::script($CFG_GLPI['root_doc'] . "/plugins/kanban/public/js/kanban.js?v=" . PLUGIN_KANBAN_VERSION);
+echo Html::css($CFG_GLPI['root_doc'] . "/plugins/kanban/public/css/kanban.css?v=" . PLUGIN_KANBAN_VERSION);
 ?>
+
 <div class="kanban-page-wrapper container-fluid py-4">
    <!-- Header and Filters -->
    <div class="row mb-4 align-items-center">
       <div class="col-md-4 d-flex align-items-center gap-3">
          <h1 class="h2 text-primary m-0"><i class="ti ti-layout-kanban me-2"></i><?php echo __('Kanban Board', 'kanban'); ?></h1>
-         <!-- Button: Open native GLPI ticket list -->
+         <span id="kanban-total" class="badge text-bg-primary rounded-pill fs-6" aria-live="polite" title="<?php echo __('Total tickets', 'kanban'); ?>">0</span>
          <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.php"
             class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
             title="<?php echo __('Open in GLPI', 'kanban'); ?>">
             <i class="ti ti-external-link"></i>
             <?php echo __('Open in GLPI', 'kanban'); ?>
          </a>
-         <!-- Button: Create a new ticket -->
          <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.form.php"
             class="btn btn-sm btn-primary d-flex align-items-center gap-1"
             title="<?php echo __('New Ticket', 'kanban'); ?>">
             <i class="ti ti-plus"></i>
             <?php echo __('New Ticket', 'kanban'); ?>
          </a>
-         <!-- Button: Refresh Kanban -->
          <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" id="kanban-refresh-btn" title="<?php echo __('Refresh', 'kanban'); ?>">
             <i class="ti ti-reload"></i>
          </button>
       </div>
       <div class="col-md-8">
          <form id="kanban-filter-form" class="row g-2 justify-content-end">
-            <!-- CSRF Token -->
             <input type="hidden" name="_glpi_csrf_token" value="<?php echo Session::getNewCSRFToken(); ?>">
 
-            <!-- Technician Filter -->
             <div class="col-auto">
                <label class="visually-hidden" for="filter-technician"><?php echo __('Technician', 'kanban'); ?></label>
                <select class="form-select select2-simple" id="filter-technician" name="technician" style="min-width: 180px;">
                   <option value=""><?php echo __('All Technicians', 'kanban'); ?></option>
-                  <?php
-                     // Get active users who can be assigned to tickets
-                     global $DB;
-                     $iterator = $DB->request([
-                        'SELECT' => ['id', 'realname', 'firstname'],
-                        'FROM'   => 'glpi_users',
-                        'WHERE'  => ['is_deleted' => 0],
-                        'ORDER'  => 'realname ASC',
-                        'LIMIT'  => 100
-                     ]);
-                     $users_array = [];
-                     foreach ($iterator as $user) {
-                         $name = getUserName($user['id']);
-                         $users_array[] = ['id' => $user['id'], 'name' => $name];
-                         echo "<option value='{$user['id']}'>{$name}</option>";
-                     }
-                   ?>
-                </select>
-             </div>
+                  <?php foreach ($technicians as $user): ?>
+                     <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
+                  <?php endforeach; ?>
+               </select>
+            </div>
 
-             <!-- Requester Filter -->
-             <div class="col-auto">
+<div class="col-auto">
                 <label class="visually-hidden" for="filter-requester"><?php echo __('Requester', 'kanban'); ?></label>
                 <select class="form-select select2-simple" id="filter-requester" name="requester" style="min-width: 180px;">
                    <option value=""><?php echo __('All Requesters', 'kanban'); ?></option>
-                   <?php
-                      foreach ($users_array as $user) {
-                         echo "<option value='{$user['id']}'>{$user['name']}</option>";
-                      }
-                  ?>
-               </select>
-            </div>
-
-            <!-- Group Filter -->
-            <div class="col-auto">
-               <label class="visually-hidden" for="filter-group"><?php echo __('Group', 'kanban'); ?></label>
-               <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 180px;">
-                  <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
-                  <?php
-                     $group_iterator = $DB->request([
-                        'SELECT' => ['id', 'name'],
-                        'FROM'   => 'glpi_groups',
-                        'ORDER'  => 'name ASC',
-                        'LIMIT'  => 100
-                     ]);
-                     foreach ($group_iterator as $group) {
-                        echo "<option value='{$group['id']}'>{$group['name']}</option>";
-                     }
-                  ?>
-               </select>
-            </div>
-
-            <!-- Sorting Select -->
-            <div class="col-auto">
-               <select class="form-select" id="kanban-sort-by" name="sort_by">
-                  <option value="date" selected><?php echo __('Date Open', 'kanban'); ?></option>
-                  <option value="priority"><?php echo __('Priority', 'kanban'); ?></option>
-                  <option value="status_duration"><?php echo __('Status Duration', 'kanban'); ?></option>
-               </select>
-            </div>
+                   <?php foreach ($requesters as $user): ?>
+                      <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
+                   <?php endforeach; ?>
+                </select>
+             </div>
 
             <div class="col-auto">
-               <select class="form-select" id="kanban-sort-order" name="sort_order">
-                  <option value="DESC" selected><?php echo __('Descending', 'kanban'); ?></option>
-                  <option value="ASC"><?php echo __('Ascending', 'kanban'); ?></option>
-               </select>
+                <label class="visually-hidden" for="filter-group"><?php echo __('Group', 'kanban'); ?></label>
+                <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 180px;">
+                   <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
+                   <?php foreach ($groups as $group): ?>
+                      <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
+                   <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- Sort hint: per-column sort dropdowns are in each column header -->
+            <div class="col-auto">
+               <span class="text-muted small fst-italic"><?php echo __('Sort via column dropdowns', 'kanban'); ?></span>
             </div>
          </form>
       </div>
    </div>
 
    <!-- Kanban Board Container -->
+   <a href="#kanban-board" class="skip-link"><?php echo __("Skip to board", "kanban"); ?></a>
    <div id="kanban-board" class="kanban-board-container row flex-nowrap overflow-auto py-2">
       <!-- Dynamically filled by JavaScript -->
    </div>
-</div>
+
+    <!-- Loading overlay (hidden by default) -->
+    <div id="kanban-loading-overlay" class="kanban-loading-overlay" style="display:none;">
+       <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden"><?php echo __('Loading...', 'kanban'); ?></span>
+       </div>
+    </div>
+
+    <!-- Ticket Detail Modal -->
+    <div class="modal fade" id="kanbanTicketModal" tabindex="-1" aria-hidden="true">
+       <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+             <div class="modal-header">
+                <h5 class="modal-title" id="kanbanTicketModalLabel"><?php echo __("Ticket Details", "kanban"); ?></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="<?php echo __("Close", "kanban"); ?>"></button>
+             </div>
+             <div class="modal-body" id="kanbanTicketModalBody">
+                <div class="text-center py-3">
+                   <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                   </div>
+                </div>
+             </div>
+             <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-primary" id="kanbanTicketModalOpen" target="_blank"><?php echo __("Open in GLPI", "kanban"); ?></a>
+             </div>
+          </div>
+       </div>
+    </div>
+ </div>
 <?php
 
 Html::footer();
+
+
+

@@ -1,41 +1,39 @@
 <?php
 /*
- -------------------------------------------------------------------------
- Livechat plugin for GLPI
- Copyright (C) 2020 by the livechat Development Team.
-
- https://github.com/pluginsGLPI/livechat
- -------------------------------------------------------------------------
-
- LICENSE
-
- This file is part of Livechat.
-
- Livechat is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
-
- Livechat is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with Livechat. If not, see <http://www.gnu.org/licenses/>.
-
-------------------------------------------------------------------------
-
-   @package   Plugin kanban
-   @author    Leewan Meneses
-   @co-author
-   @copyright Copyright (c) 2009-2016 Barcode plugin Development team
-   @license   GPL-2.0+
-   @link      https://github.com/l33one/
-   @since     2026
-
-
- --------------------------------------------------------------------------
+ * -------------------------------------------------------------------------
+ *  GLPI Kanban Plugin
+ *  Copyright (C) 2026 by Leewan Meneses.
+ *
+ *  https://github.com/l33one/glpi-plugin-kanban
+ *  -------------------------------------------------------------------------
+ *
+ *  LICENSE
+ *
+ *  This file is part of GLPI Kanban Plugin.
+ *
+ *  Kanban Plugin is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Kanban Plugin is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Kanban Plugin. If not, see <http://www.gnu.org/licenses/>.
+ *
+ *  --------------------------------------------------------------------------
+ *
+ *    @package   Plugin kanban
+ *    @author    Leewan Meneses
+ *    @copyright Copyright (c) 2026 Leewan Meneses
+ *    @license   GPL-2.0+
+ *    @link      https://github.com/l33one/glpi-plugin-kanban
+ *    @since     2026
+ *
+ *  --------------------------------------------------------------------------
  */
 
 define('PLUGIN_KANBAN_VERSION', '1.0.0');
@@ -51,8 +49,18 @@ function plugin_init_kanban() {
    $PLUGIN_HOOKS['csrf_compliant']['kanban'] = true;
 
    if (Plugin::isPluginActive('kanban')) {
-      // Add to Assistance menu (internal key is 'helpdesk')
+      // Register the plugin under the Helpdesk menu
       $PLUGIN_HOOKS['menu_toadd']['kanban'] = ['helpdesk' => 'PluginKanbanMenu'];
+
+      // Load CSS and JS assets in the plugin page
+      $PLUGIN_HOOKS['add_css']['kanban']      = ['public/css/kanban.css'];
+      $PLUGIN_HOOKS['add_javascript']['kanban'] = ['public/js/kanban.js'];
+
+      // Declare that this plugin does not use custom database tables
+      $PLUGIN_HOOKS['use_tables']['kanban'] = [];
+
+      // Set the plugin version constant
+      $PLUGIN_HOOKS['plugin_version']['kanban'] = PLUGIN_KANBAN_VERSION;
    }
 }
 
@@ -67,7 +75,7 @@ function plugin_version_kanban() {
       'version'        => PLUGIN_KANBAN_VERSION,
       'author'         => 'Leewan Meneses',
       'license'        => 'GPLv2+',
-      'homepage'       => '',
+      'homepage'       => 'https://github.com/l33one/glpi-plugin-kanban',
       'requirements'   => [
          'glpi' => [
             'min' => '10.0.0',
@@ -85,6 +93,11 @@ function plugin_version_kanban() {
  * @return boolean
  */
 function plugin_kanban_check_prereq() {
+   // Check if the plugin directory is named correctly
+   if (!is_dir(GLPI_ROOT . '/plugins/kanban')) {
+      echo __('The plugin directory must be named "kanban"', 'kanban');
+      return false;
+   }
    return true;
 }
 

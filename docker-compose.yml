@@ -21,6 +21,9 @@ services:
       - "8088:80"
     depends_on:
       - mariadb
+    volumes:
+      # Mount the plugin directory for development (hot reload)
+      - ./:/var/www/html/glpi/plugins/kanban
 
 volumes:
   glpi-db-data:
