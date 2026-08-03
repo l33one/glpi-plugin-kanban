@@ -47,13 +47,14 @@ class PluginKanbanKanban extends CommonGLPI {
           'SELECT' => [
              't.id',
              't.name AS title',
-         't.status',
-         't.priority',
-         't.date AS date',
-         't.date_creation',
-         't.date_mod',
-         't.time_to_resolve',
-         'cat.name AS category'
+          't.status',
+          't.priority',
+          't.date AS date',
+          't.date_creation',
+          't.date_mod',
+          't.time_to_resolve',
+          't.content',
+          'cat.name AS category'
       ],
           'FROM' => 'glpi_tickets AS t',
           'LEFT JOIN' => [

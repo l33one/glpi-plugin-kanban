@@ -213,6 +213,7 @@ class PluginKanbanKanbanTest extends TestCase
             foreach ($tickets as $ticket) {
                 $this->assertArrayHasKey('status_name', $ticket);
                 $this->assertArrayHasKey('requester_name', $ticket);
+                $this->assertArrayHasKey('content', $ticket);
             }
         }
     }
