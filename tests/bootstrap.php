@@ -126,22 +126,24 @@ function kanban_plugin_create_test_tickets() {
         echo sprintf("Ticket %2d - [%s] '%s' (ID=%d)\n", $i + 1, getStatusName($status), $data[0], $id);
     }
 
-    // Assign ticket 2 to user 2 as technician (ASSIGN)
-    $DB->insert([
-        ' INTO' => 'glpi_tickets_users',
-        'fields' => [
-            'tickets_id' => 2,
-            'users_id'   => 2,
-            'type'       => CommonITILActor::ASSIGN,
-        ]
-    ]);
-
-    // Assign tickets 1, 4, 7 to user 2 as requester (REQUESTER)
-    foreach ([1, 4, 7] as $tid) {
+    // Assign all created tickets to user 2 as technician (ASSIGN)
+    foreach ($ticket_ids as $tid) {
         $DB->insert([
             ' INTO' => 'glpi_tickets_users',
             'fields' => [
                 'tickets_id' => $tid,
+                'users_id'   => 2,
+                'type'       => CommonITILActor::ASSIGN,
+            ]
+        ]);
+    }
+
+    // Assign tickets 1, 4, 7 (first, fourth and seventh created) to user 2 as requester (REQUESTER)
+    foreach ([0, 3, 6] as $idx) {
+        $DB->insert([
+            ' INTO' => 'glpi_tickets_users',
+            'fields' => [
+                'tickets_id' => $ticket_ids[$idx],
                 'users_id'   => 2,
                 'type'       => CommonITILActor::REQUESTER,
             ]

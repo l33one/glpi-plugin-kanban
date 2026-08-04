@@ -111,16 +111,16 @@ class PluginKanbanKanbanTest extends TestCase
         $all_ids = [];
         foreach ($result as $tickets) {
             foreach ($tickets as $ticket) {
-                $all_ids[] = $ticket['id'];
+                $all_ids[] = (int)$ticket['id'];
                 $this->assertIsArray($ticket['assigned_techs']);
                 $this->assertNotEmpty($ticket['assigned_techs']);
+                $this->assertTrue(
+                    $this->ticketHasActor((int)$ticket['id'], 2, CommonITILActor::ASSIGN),
+                    'Filtered ticket must have user 2 assigned as technician'
+                );
             }
         }
-        // Only tickets with user 2 as ASSIGN should be returned (ticket 2 in seed data).
         $this->assertNotEmpty($all_ids);
-        foreach ($all_ids as $id) {
-            $this->assertSame(2, (int)$id, 'Only ticket 2 has technician 2 assigned in seed data');
-        }
     }
 
     public function testRequesterFilterReturnsOnlyRequesterTickets(): void
@@ -130,14 +130,14 @@ class PluginKanbanKanbanTest extends TestCase
         $all_ids = [];
         foreach ($result as $tickets) {
             foreach ($tickets as $ticket) {
-                $all_ids[] = $ticket['id'];
+                $all_ids[] = (int)$ticket['id'];
+                $this->assertTrue(
+                    $this->ticketHasActor((int)$ticket['id'], 2, CommonITILActor::REQUESTER),
+                    'Filtered ticket must have user 2 as requester'
+                );
             }
         }
-        // Tickets 1, 4, 7 have user 2 as REQUESTER in seed data.
         $this->assertNotEmpty($all_ids);
-        foreach ($all_ids as $id) {
-            $this->assertContains((int)$id, [1, 4, 7]);
-        }
     }
 
     public function testSortByPriorityHonorsOrderWithinStatus(): void
@@ -282,6 +282,9 @@ class PluginKanbanKanbanTest extends TestCase
             }
             $this->assertNotNull($sub_ticket_id, 'Failed to read back the inserted ticket id');
 
+            // Assign the ticket to user 2 so it passes the visibility rule.
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $sub_ticket_id, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
             // Active entity = the sub-entity only.
             $_SESSION['glpiactiveentities'] = [$sub_entity_id];
             $_SESSION['glpishowallentities'] = 0;
@@ -310,6 +313,7 @@ class PluginKanbanKanbanTest extends TestCase
             }
         } finally {
             if ($sub_ticket_id !== null) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $sub_ticket_id]);
                 $DB->delete('glpi_tickets', ['id' => $sub_ticket_id]);
             }
             $DB->delete('glpi_entities', ['id' => $sub_entity_id]);
@@ -376,6 +380,9 @@ class PluginKanbanKanbanTest extends TestCase
             }
             $this->assertNotNull($sub_ticket_id, 'Failed to read back the inserted ticket id');
 
+            // Assign the ticket to user 2 so it passes the visibility rule.
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $sub_ticket_id, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
             $_SESSION['glpiactiveentities'] = [$sub_entity_id];
             $_SESSION['glpishowallentities'] = 0;
 
@@ -387,6 +394,7 @@ class PluginKanbanKanbanTest extends TestCase
             $this->assertArrayHasKey('date_creation_formatted', $detail);
         } finally {
             if ($sub_ticket_id !== null) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $sub_ticket_id]);
                 $DB->delete('glpi_tickets', ['id' => $sub_ticket_id]);
             }
             $DB->delete('glpi_entities', ['id' => $sub_entity_id]);
@@ -445,8 +453,9 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
-     * Regression test: a profile without the READALL right must only see
-     * tickets of the groups the user belongs to (mirrors Ticket::canViewItem()).
+     * Regression test: a user without any assignment must only see tickets of
+     * the groups they belong to. The restriction applies to every profile,
+     * regardless of profile rights (including READALL).
      */
     public function testVisibilityRestrictsNonAdminUserToTheirGroupsTickets(): void
     {
@@ -521,8 +530,266 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
+     * The board must show a regular user only the tickets assigned to them
+     * (ASSIGN). Tickets where the user is only an observer or requester, or
+     * unassigned incoming tickets, must be hidden. The same applies to the
+     * ticket detail query.
+     */
+    public function testBoardOnlyShowsTicketsAssignedToUser(): void
+    {
+        global $DB;
+
+        $group = 9301;
+        $other_user = 0;
+        $t_mine = 0;
+        $t_other = 0;
+        $t_obs = 0;
+        $t_req = 0;
+        $t_incoming = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $group, 'name' => 'Kanban Visibility Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $other_user = self::insertKanbanTestUser('kanban_vis_other');
+
+            $t_mine = self::insertKanbanTestTicket('Kanban vis assigned to user 2');
+            $t_other = self::insertKanbanTestTicket('Kanban vis assigned to other user');
+            $t_obs = self::insertKanbanTestTicket('Kanban vis user 2 observer');
+            $t_req = self::insertKanbanTestTicket('Kanban vis user 2 requester');
+            $t_incoming = self::insertKanbanTestTicket('Kanban vis incoming unassigned');
+
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_mine, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_other, 'users_id' => $other_user, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_obs, 'users_id' => 2, 'type' => CommonITILActor::OBSERVER]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_req, 'users_id' => 2, 'type' => CommonITILActor::REQUESTER]);
+
+            // No group membership, no assignment for the user.
+            $_SESSION['glpiactiveentities'] = [0];
+            $_SESSION['glpigroups'] = [];
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($t_mine, $ids, 'Ticket assigned to the user must be visible');
+            $this->assertNotContains($t_other, $ids, 'Ticket assigned to another technician must NOT be visible');
+            $this->assertNotContains($t_obs, $ids, 'Ticket where the user is only an observer must NOT be visible');
+            $this->assertNotContains($t_req, $ids, 'Ticket where the user is only a requester must NOT be visible');
+            $this->assertNotContains($t_incoming, $ids, 'Unassigned incoming ticket must NOT be visible');
+
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_mine));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_other));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_obs));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_req));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_incoming));
+        } finally {
+            foreach ([$t_mine, $t_other, $t_obs, $t_req, $t_incoming] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            if ($other_user > 0) { $DB->delete('glpi_users', ['id' => $other_user]); }
+            $DB->delete('glpi_groups', ['id' => $group]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
+            }
+        }
+    }
+
+    /**
+     * A regular member of a group must see tickets assigned to the group
+     * (even without an individual technician, so they can self-assign), but
+     * must NOT see tickets assigned to a colleague of the same group.
+     */
+    public function testBoardShowsGroupAssignedTicketsToMembers(): void
+    {
+        global $DB;
+
+        $group = 9302;
+        $member = 0;
+        $t_group = 0;
+        $t_member = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $group, 'name' => 'Kanban Member Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $member = self::insertKanbanTestUser('kanban_vis_member');
+            $DB->insert('glpi_groups_users', ['groups_id' => $group, 'users_id' => 2]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $group, 'users_id' => $member]);
+
+            $t_group = self::insertKanbanTestTicket('Kanban group assigned no tech');
+            $t_member = self::insertKanbanTestTicket('Kanban assigned to member');
+
+            // Group assigned as technician, no individual technician.
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $t_group, 'groups_id' => $group, 'type' => CommonITILActor::ASSIGN]);
+            // Assigned to a colleague of the group; the group is NOT the actor.
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_member, 'users_id' => $member, 'type' => CommonITILActor::ASSIGN]);
+
+            $_SESSION['glpiactiveentities'] = [0];
+            $_SESSION['glpigroups'] = [$group];
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($t_group, $ids, 'Ticket assigned to the user group (no individual tech) must be visible for self-assignment');
+            $this->assertNotContains($t_member, $ids, 'Ticket assigned to a colleague of the group must NOT be visible to a regular member');
+
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_group));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_member));
+        } finally {
+            foreach ([$t_group, $t_member] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_groups_tickets', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            $DB->delete('glpi_groups_users', ['groups_id' => $group]);
+            if ($member > 0) { $DB->delete('glpi_users', ['id' => $member]); }
+            $DB->delete('glpi_groups', ['id' => $group]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
+            }
+        }
+    }
+
+    /**
+     * A group manager (glpi_groups_users.is_manager) must see every ticket of
+     * the managed groups: assigned to the group, to any member, and to members
+     * of subgroups. Tickets where the group is only an observer, or assigned
+     * to members of unrelated groups, must stay hidden.
+     */
+    public function testGroupManagerSeesAllGroupTickets(): void
+    {
+        global $DB;
+
+        $group = 9303;
+        $subgroup = 9304;
+        $external = 9305;
+        $member = 0;
+        $sub_member = 0;
+        $ext_member = 0;
+        $t_group = 0;
+        $t_member = 0;
+        $t_subgroup = 0;
+        $t_obs = 0;
+        $t_ext = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $group, 'name' => 'Kanban Managed Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $subgroup, 'name' => 'Kanban Managed Subgroup', 'entities_id' => 0, 'groups_id' => $group]);
+            $DB->insert('glpi_groups', ['id' => $external, 'name' => 'Kanban External Group', 'entities_id' => 0, 'groups_id' => 0]);
+
+            $member = self::insertKanbanTestUser('kanban_vis_manager_member');
+            $sub_member = self::insertKanbanTestUser('kanban_vis_manager_submember');
+            $ext_member = self::insertKanbanTestUser('kanban_vis_manager_extmember');
+
+            // User 2 is the manager of $group (member + is_manager).
+            $DB->insert('glpi_groups_users', ['groups_id' => $group, 'users_id' => 2, 'is_manager' => 1]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $group, 'users_id' => $member]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $subgroup, 'users_id' => $sub_member]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $external, 'users_id' => $ext_member]);
+
+            $t_group = self::insertKanbanTestTicket('Kanban manager group assigned');
+            $t_member = self::insertKanbanTestTicket('Kanban manager member assigned');
+            $t_subgroup = self::insertKanbanTestTicket('Kanban manager subgroup member assigned');
+            $t_obs = self::insertKanbanTestTicket('Kanban manager group observer');
+            $t_ext = self::insertKanbanTestTicket('Kanban manager external member assigned');
+
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $t_group, 'groups_id' => $group, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $t_obs, 'groups_id' => $group, 'type' => CommonITILActor::OBSERVER]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_member, 'users_id' => $member, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_subgroup, 'users_id' => $sub_member, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_ext, 'users_id' => $ext_member, 'type' => CommonITILActor::ASSIGN]);
+
+            $_SESSION['glpiactiveentities'] = [0];
+            $_SESSION['glpigroups'] = [$group];
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($t_group, $ids, 'Ticket assigned to the managed group must be visible to the manager');
+            $this->assertContains($t_member, $ids, 'Ticket assigned to a member of the managed group must be visible to the manager');
+            $this->assertContains($t_subgroup, $ids, 'Ticket assigned to a member of a subgroup must be visible to the manager');
+            $this->assertNotContains($t_obs, $ids, 'Ticket where the managed group is only an observer must NOT be visible');
+            $this->assertNotContains($t_ext, $ids, 'Ticket assigned to a member of an unrelated group must NOT be visible');
+
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_group));
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_member));
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_subgroup));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_obs));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_ext));
+        } finally {
+            foreach ([$t_group, $t_member, $t_subgroup, $t_obs, $t_ext] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_groups_tickets', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            $DB->delete('glpi_groups_users', ['groups_id' => [$group, $subgroup, $external]]);
+            foreach ([$member, $sub_member, $ext_member] as $uid) {
+                if ($uid > 0) { $DB->delete('glpi_users', ['id' => $uid]); }
+            }
+            $DB->delete('glpi_groups', ['id' => [$group, $subgroup, $external]]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
+            }
+        }
+    }
+
+    /**
      * Regression test: selecting a group in the filter must return tickets of
      * the group AND of all of its subgroups (nested groups).
+     *
+     * User 2 is a member of the parent group so that, under the visibility rule,
+     * the tickets assigned to the child and grandchild groups are visible.
      */
     public function testGroupFilterIncludesSubgroups(): void
     {
@@ -537,6 +804,7 @@ class PluginKanbanKanbanTest extends TestCase
         $ticket_other = 0;
 
         $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
 
         try {
             $DB->insert('glpi_groups', ['id' => $parent, 'name' => 'Kanban Parent Group', 'entities_id' => 0, 'groups_id' => 0]);
@@ -552,7 +820,11 @@ class PluginKanbanKanbanTest extends TestCase
             $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_grandchild, 'groups_id' => $grandchild, 'type' => CommonITILActor::ASSIGN]);
             $DB->insert('glpi_groups_tickets', ['tickets_id' => $ticket_other, 'groups_id' => $other, 'type' => CommonITILActor::ASSIGN]);
 
+            // Make user 2 a member of the parent group so the subgroup tickets are visible.
+            $DB->insert('glpi_groups_users', ['groups_id' => $parent, 'users_id' => 2]);
+
             $_SESSION['glpiactiveentities'] = [0];
+            $_SESSION['glpigroups'] = [$parent];
 
             $result = PluginKanbanKanban::getTicketsForKanban(['group' => $parent], [], 100);
             $ids = [];
@@ -570,12 +842,18 @@ class PluginKanbanKanbanTest extends TestCase
             if ($ticket_grandchild > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_grandchild]); }
             if ($ticket_other > 0) { $DB->delete('glpi_tickets', ['id' => $ticket_other]); }
             $DB->delete('glpi_groups_tickets', ['groups_id' => [$parent, $child, $grandchild, $other]]);
+            $DB->delete('glpi_groups_users', ['groups_id' => $parent, 'users_id' => 2]);
             $DB->delete('glpi_groups', ['id' => [$parent, $child, $grandchild, $other]]);
 
             if ($saved_entities !== null) {
                 $_SESSION['glpiactiveentities'] = $saved_entities;
             } else {
                 unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
             }
         }
     }
@@ -641,5 +919,23 @@ class PluginKanbanKanbanTest extends TestCase
             $id = (int)$row['id'];
         }
         return $id ?? 0;
+    }
+
+    /**
+     * Check whether the given user participates in a ticket with the given actor type.
+     */
+    private function ticketHasActor(int $ticket_id, int $user_id, int $type): bool
+    {
+        global $DB;
+
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM' => 'glpi_tickets_users',
+            'WHERE' => ['tickets_id' => $ticket_id, 'users_id' => $user_id, 'type' => $type],
+            'LIMIT' => 1,
+        ]) as $row) {
+            return true;
+        }
+        return false;
     }
 }

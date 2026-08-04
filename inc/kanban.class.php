@@ -185,17 +185,22 @@ class PluginKanbanKanban extends CommonGLPI {
    }
 
    /**
-     * Build the SQL restriction that mirrors Ticket::canViewItem().
+     * Build the SQL restriction that shows each user only their service queue.
      *
-     * Users without the READALL right may only see tickets involving them:
-     *  - READMY: as recipient, requester or observer;
-     *  - READGROUP: through one of their groups as requester or observer;
-     *  - READASSIGN: assigned to them or to one of their groups, or incoming
-     *    tickets when they also hold the ASSIGN right;
-     *  - ticketvalidation: tickets they are allowed to validate.
+     * The restriction applies to every profile, regardless of profile rights
+     * (including READALL). A ticket is visible when any of the following holds:
+     *  - the user is assigned to it as technician (ASSIGN);
+     *  - one of the user's groups (including subgroups) is assigned to it,
+     *    even when no individual technician is assigned yet, so the user can
+     *    self-assign it;
+     *  - the user manages a group (glpi_groups_users.is_manager) and the ticket
+     *    is assigned to any member of the managed groups (including subgroups).
      *
-     * @return \QueryExpression|null WHERE expression (AND-ed with the rest of
-     *         the criteria) or null when no restriction applies (READALL right).
+     * Tickets where the user or one of their groups is only an observer are
+     * never visible.
+     *
+     * @return \QueryExpression WHERE expression (AND-ed with the rest of the
+     *         criteria). Always a restriction (never null).
      */
     private static function getTicketVisibilityCriteria() {
        $user_id = (int)Session::getLoginUserID();
@@ -203,57 +208,84 @@ class PluginKanbanKanban extends CommonGLPI {
           return new \QueryExpression('FALSE');
        }
 
-       // Full read right: no additional restriction (entity scope already applied).
-       if (Session::haveRight('ticket', Ticket::READALL)) {
-          return null;
-       }
-
-       $my_groups = $_SESSION['glpigroups'] ?? [];
-       if (!is_array($my_groups)) {
-          $my_groups = [];
-       }
-       $my_groups = array_values(array_map('intval', $my_groups));
-
        $conditions = [];
 
-       // READMY: user is the recipient, a requester or an observer.
-       if (Session::haveRight('ticket', Ticket::READMY)) {
-          $conditions[] = "t.users_id_recipient = $user_id";
-          $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.users_id = '
-             . $user_id . ' AND tu.type IN (' . CommonITILActor::REQUESTER . ',' . CommonITILActor::OBSERVER . '))';
-       }
+       // Ticket assigned to the user as technician.
+       $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.users_id = '
+          . $user_id . ' AND tu.type = ' . CommonITILActor::ASSIGN . ')';
 
-       // READGROUP: one of the user's groups is requester or observer.
-       if (Session::haveRight('ticket', Ticket::READGROUP) && !empty($my_groups)) {
+       // Tickets assigned to one of the user's groups (including subgroups).
+       $my_groups = self::expandGroupIds($_SESSION['glpigroups'] ?? []);
+       if (!empty($my_groups)) {
           $conditions[] = 't.id IN (SELECT DISTINCT gt.tickets_id FROM glpi_groups_tickets AS gt WHERE gt.groups_id IN ('
-             . implode(',', $my_groups) . ') AND gt.type IN (' . CommonITILActor::REQUESTER . ',' . CommonITILActor::OBSERVER . '))';
+             . implode(',', $my_groups) . ') AND gt.type = ' . CommonITILActor::ASSIGN . ')';
        }
 
-       // READASSIGN: assigned to the user, to one of their groups, or assignable incoming tickets.
-       if (Session::haveRight('ticket', Ticket::READASSIGN)) {
-          $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.users_id = '
-             . $user_id . ' AND tu.type = ' . CommonITILActor::ASSIGN . ')';
-          if (!empty($my_groups)) {
-             $conditions[] = 't.id IN (SELECT DISTINCT gt.tickets_id FROM glpi_groups_tickets AS gt WHERE gt.groups_id IN ('
-                . implode(',', $my_groups) . ') AND gt.type = ' . CommonITILActor::ASSIGN . ')';
-          }
-          if (Session::haveRight('ticket', Ticket::ASSIGN)) {
-             $conditions[] = 't.status = ' . (int)Ticket::INCOMING;
-          }
-       }
-
-       // Ticket validation: tickets where the user is the assigned validator.
-       if (Session::haveRightsOr('ticketvalidation', TicketValidation::getValidateRights())) {
-          $conditions[] = 't.id IN (SELECT DISTINCT tv.tickets_id FROM glpi_ticketvalidations AS tv WHERE tv.users_id_validate = '
-             . $user_id . ')';
-       }
-
-       if (empty($conditions)) {
-          // No item-level right: the user cannot view any ticket.
-          return new \QueryExpression('FALSE');
+       // Group managers: tickets assigned to any member of the managed groups (including subgroups).
+       $managed_members = self::getManagedGroupMemberIds($user_id);
+       if (!empty($managed_members)) {
+          $conditions[] = 't.id IN (SELECT DISTINCT tu.tickets_id FROM glpi_tickets_users AS tu WHERE tu.type = '
+             . CommonITILActor::ASSIGN . ' AND tu.users_id IN (' . implode(',', $managed_members) . '))';
        }
 
        return new \QueryExpression('(' . implode(' OR ', $conditions) . ')');
+    }
+
+   /**
+     * Expand a list of group ids with all of their subgroups (nested).
+     *
+     * @param array $group_ids
+     * @return int[]
+     */
+    private static function expandGroupIds(array $group_ids): array {
+       $expanded = [];
+       foreach (array_filter(array_map('intval', $group_ids)) as $gid) {
+          $sons = getSonsOf('glpi_groups', $gid);
+          if (empty($sons)) {
+             $sons = [$gid => $gid];
+          }
+          foreach ($sons as $sid) {
+             $expanded[(int)$sid] = (int)$sid;
+          }
+       }
+       return array_values($expanded);
+    }
+
+   /**
+     * Get the ids of all members of the groups the user manages (+ subgroups).
+     *
+     * @param int $user_id
+     * @return int[]
+     */
+    private static function getManagedGroupMemberIds(int $user_id): array {
+       global $DB;
+
+       $managed = [];
+       $iterator = $DB->request([
+          'SELECT' => ['groups_id'],
+          'FROM'   => 'glpi_groups_users',
+          'WHERE'  => ['users_id' => $user_id, 'is_manager' => 1],
+       ]);
+       foreach ($iterator as $row) {
+          $managed[(int)$row['groups_id']] = (int)$row['groups_id'];
+       }
+
+       $managed = self::expandGroupIds(array_keys($managed));
+       if (empty($managed)) {
+          return [];
+       }
+
+       $members = [];
+       $iterator = $DB->request([
+          'SELECT'    => ['users_id'],
+          'FROM'      => 'glpi_groups_users',
+          'WHERE'     => ['groups_id' => $managed],
+          'DISTINCT'  => true,
+       ]);
+       foreach ($iterator as $row) {
+          $members[(int)$row['users_id']] = (int)$row['users_id'];
+       }
+       return array_values($members);
     }
 
    /**
