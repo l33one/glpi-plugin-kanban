@@ -1008,9 +1008,9 @@ function updateCountdowns() {
            </div>
            <div class="mt-3">
               <strong>Description:</strong>
-              <div class="modal-description">
-                 ${escapeHtml(content)}
-              </div>
+               <div class="modal-description">
+                  ${content}
+               </div>
            </div>
         `;
     }
