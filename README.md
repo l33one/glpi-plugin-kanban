@@ -10,10 +10,12 @@ Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de f
 
 * **Visualização Ágil:** Colunas dinâmicas mapeadas diretamente para os status dos chamados (Novo, Em Atendimento, Pendente, Solucionado, Fechado, etc.)
 * **Controle de Acesso Seguro:** Exibe apenas chamados que o usuário logado possui permissão de visualizar (Ticket::canView), respeitando regras de perfil e entidades do GLPI
+* **Permissão por Perfil:** A permissão para visualizar a página do Kanban é configurável em **Administração > Perfis** (aba Kanban), permitindo liberar/negar o acesso por perfil de forma independente dos direitos de tickets
 * **Filtros Avançados em Tempo Real:** 
   * Filtragem por Grupo
   * Filtragem por Técnico Atribuído
   * Filtragem por Requerente
+  * Pesquisa por Número do Chamado (campo de busca que filtra os cards pelo número/ID do chamado)
 * **Ordenação Inteligente:** Cards ordenados por Prioridade, Data de Abertura ou Tempo no Status Atual
 * **Cards Ricos em Informações:** 
   * ID e Título do chamado
@@ -43,7 +45,7 @@ Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de f
 
 2. Acesse o GLPI como Super-Admin, vá em **Configurar > Plugins** e instale o plugin **Kanban**
 
-3. O menu **Assistência > Kanban** estará disponível para usuários com permissão de visualizar tickets
+3. O menu **Assistência > Kanban** estará disponível apenas para usuários que possuam, em seu perfil, a permissão **Kanban > Visualizar o quadro kanban** (marcada por padrão no perfil Super-Admin). Para liberar o acesso a outros perfis, acesse **Administração > Perfis**, edite o perfil desejado e marque a opção na aba **Kanban**
 
 ---
 
@@ -69,8 +71,9 @@ kanban/
 ├── setup.php                  # Registro do plugin, hooks, versão
 ├── hook.php                   # Instalação/desinstalação
 ├── inc/
-│   ├── kanban.class.php       # Model principal: queries, filtros, SLA
-│   └── menu.class.php         # Registro do menu no GLPI
+│   ├── kanban.class.php       # Model principal: queries, filtros, SLA, direitos
+│   ├── menu.class.php         # Registro do menu no GLPI
+│   └── profile.class.php      # Aba de permissões no formulário de Perfil
 ├── front/
 │   └── kanban.php             # Controller: página e endpoints AJAX
 ├── templates/
@@ -88,7 +91,8 @@ kanban/
 ## 🔒 Segurança
 
 * CSRF token em todas as requisições POST
-* Validação de permissões via `Ticket::canView()` e `Ticket::canUpdateItem()`
+* Acesso à página e ao menu controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`
+* Validação de permissões de atualização via `Ticket::canUpdateItem()`
 * Restrição de entidades via `$_SESSION['glpiactiveentities']`
 
 ---

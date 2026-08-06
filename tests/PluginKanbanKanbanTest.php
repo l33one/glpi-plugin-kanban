@@ -18,11 +18,41 @@ class PluginKanbanKanbanTest extends TestCase
             $auth->user = $user;
             Session::init($auth);
         }
+        // Ensure the plugin right is granted for the default test session.
+        $_SESSION['glpiactiveprofile']['plugin_kanban'] = READ;
+    }
+
+    public function testRightNameIsPluginKanban(): void
+    {
+        $this->assertSame('plugin_kanban', PluginKanbanKanban::$rightname);
+    }
+
+    public function testGetRightsReturnsViewRight(): void
+    {
+        $rights = PluginKanbanKanban::getRights();
+        $this->assertIsArray($rights);
+        $this->assertArrayHasKey(READ, $rights);
     }
 
     public function testMaxTicketsPerStatusConstantIsPositive(): void
     {
         $this->assertGreaterThan(0, PluginKanbanKanban::MAX_TICKETS_PER_STATUS);
+    }
+
+    public function testGetTicketsForKanbanRequiresPluginRight(): void
+    {
+        $saved = $_SESSION['glpiactiveprofile']['plugin_kanban'] ?? null;
+        $_SESSION['glpiactiveprofile']['plugin_kanban'] = 0;
+        try {
+            $this->assertSame([], PluginKanbanKanban::getTicketsForKanban());
+            $this->assertNull(PluginKanbanKanban::getTicketDetail(1));
+        } finally {
+            if ($saved !== null) {
+                $_SESSION['glpiactiveprofile']['plugin_kanban'] = $saved;
+            } else {
+                unset($_SESSION['glpiactiveprofile']['plugin_kanban']);
+            }
+        }
     }
 
     public function testGetTicketsForKanbanReturnsArray(): void
@@ -140,6 +170,57 @@ class PluginKanbanKanbanTest extends TestCase
         $this->assertNotEmpty($all_ids);
     }
 
+    /**
+     * The ticket number search must return only tickets whose id contains the
+     * typed digits, regardless of a leading "#" or other characters.
+     */
+    public function testTicketNumberFilterReturnsMatchingTickets(): void
+    {
+        global $DB;
+
+        $ticket_a = 0;
+        $ticket_b = 0;
+
+        try {
+            $ticket_a = self::insertKanbanTestTicket('Kanban search ticket A');
+            $ticket_b = self::insertKanbanTestTicket('Kanban search ticket B');
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $ticket_a, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $ticket_b, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
+            // Exact id match
+            $result = PluginKanbanKanban::getTicketsForKanban(['ticket_id' => (string)$ticket_a], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+            $this->assertContains($ticket_a, $ids, 'Matching ticket number must be returned');
+            $this->assertNotContains($ticket_b, $ids, 'Non-matching ticket must not be returned');
+
+            // A leading "#" must be ignored
+            $result = PluginKanbanKanban::getTicketsForKanban(['ticket_id' => '#' . $ticket_a], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+            $this->assertContains($ticket_a, $ids, 'Search with leading # must still match');
+
+            // A number with no matching ticket must produce an empty board
+            $result = PluginKanbanKanban::getTicketsForKanban(['ticket_id' => '999999'], [], 100);
+            $this->assertSame([], $result);
+        } finally {
+            foreach ([$ticket_a, $ticket_b] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+        }
+    }
+
     public function testSortByPriorityHonorsOrderWithinStatus(): void
     {
         $result = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'priority', 'order' => 'DESC'], 100);
@@ -163,6 +244,84 @@ class PluginKanbanKanbanTest extends TestCase
             $sorted = $priorities;
             sort($sorted);
             $this->assertSame($sorted, $priorities, 'Tickets within a status must be sorted by priority ASC');
+        }
+    }
+
+    public function testSortBySlaHonorsOrder(): void
+    {
+        global $DB;
+
+        $t_far = 0;
+        $t_near = 0;
+        $t_overdue = 0;
+        $base = strtotime('today');
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+
+        try {
+            $t_far = self::insertKanbanTestTicket('Kanban SLA far');
+            $t_near = self::insertKanbanTestTicket('Kanban SLA near');
+            $t_overdue = self::insertKanbanTestTicket('Kanban SLA overdue');
+
+            $DB->update('glpi_tickets', [
+                'date_creation' => date('Y-m-d H:i:s', strtotime('-1 day', $base)),
+                'time_to_resolve' => date('Y-m-d H:i:s', strtotime('+10 days', $base)),
+            ], ['id' => $t_far]);
+            $DB->update('glpi_tickets', [
+                'date_creation' => date('Y-m-d H:i:s', strtotime('-1 day', $base)),
+                'time_to_resolve' => date('Y-m-d H:i:s', strtotime('+1 day', $base)),
+            ], ['id' => $t_near]);
+            $DB->update('glpi_tickets', [
+                'date_creation' => date('Y-m-d H:i:s', strtotime('-2 days', $base)),
+                'time_to_resolve' => date('Y-m-d H:i:s', strtotime('-1 day', $base)),
+            ], ['id' => $t_overdue]);
+
+            // Make the tickets visible to user 2.
+            foreach ([$t_far, $t_near, $t_overdue] as $tid) {
+                $DB->insert('glpi_tickets_users', ['tickets_id' => $tid, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+            }
+
+            $_SESSION['glpiactiveentities'] = [0];
+
+            // sla_ASC = farthest from expiry first (latest deadline first).
+            $result = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'sla', 'order' => 'ASC'], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+            $this->assertSame(
+                [$t_far, $t_near, $t_overdue],
+                array_values(array_filter($ids, static fn ($id) => in_array($id, [$t_far, $t_near, $t_overdue], true))),
+                'SLA ASC must order tickets from farthest to closest to expiry'
+            );
+
+            // sla_DESC = closest to expiry / longest expired first (earliest deadline first).
+            $result = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'sla', 'order' => 'DESC'], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+            $this->assertSame(
+                [$t_overdue, $t_near, $t_far],
+                array_values(array_filter($ids, static fn ($id) => in_array($id, [$t_far, $t_near, $t_overdue], true))),
+                'SLA DESC must order tickets from closest to expiry (or expired) to farthest'
+            );
+        } finally {
+            foreach ([$t_far, $t_near, $t_overdue] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
         }
     }
 
@@ -669,6 +828,75 @@ class PluginKanbanKanbanTest extends TestCase
             $DB->delete('glpi_groups_users', ['groups_id' => $group]);
             if ($member > 0) { $DB->delete('glpi_users', ['id' => $member]); }
             $DB->delete('glpi_groups', ['id' => $group]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+            if ($saved_groups !== null) {
+                $_SESSION['glpigroups'] = $saved_groups;
+            } else {
+                unset($_SESSION['glpigroups']);
+            }
+        }
+    }
+
+    /**
+     * Regression test: group-assigned tickets must stay visible even when
+     * $_SESSION['glpigroups'] is empty (stale session created before the
+     * membership existed, or active entity not covering the group's entity).
+     */
+    public function testBoardShowsGroupTicketsWithStaleGroupSession(): void
+    {
+        global $DB;
+
+        $group = 9306;
+        $other_group = 9307;
+        $t_group = 0;
+        $t_other_group = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+        $saved_groups = $_SESSION['glpigroups'] ?? null;
+
+        try {
+            $DB->insert('glpi_groups', ['id' => $group, 'name' => 'Kanban Stale Session Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups', ['id' => $other_group, 'name' => 'Kanban Stale Other Group', 'entities_id' => 0, 'groups_id' => 0]);
+            $DB->insert('glpi_groups_users', ['groups_id' => $group, 'users_id' => 2]);
+
+            $t_group = self::insertKanbanTestTicket('Kanban stale session group ticket');
+            $t_other_group = self::insertKanbanTestTicket('Kanban stale session other group ticket');
+
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $t_group, 'groups_id' => $group, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_groups_tickets', ['tickets_id' => $t_other_group, 'groups_id' => $other_group, 'type' => CommonITILActor::ASSIGN]);
+
+            // Stale session: the board must not rely on $_SESSION['glpigroups'].
+            $_SESSION['glpiactiveentities'] = [0];
+            $_SESSION['glpigroups'] = [];
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $ids = [];
+            foreach ($result as $tickets) {
+                foreach ($tickets as $t) {
+                    $ids[] = (int)$t['id'];
+                }
+            }
+
+            $this->assertContains($t_group, $ids, 'Group-assigned ticket must be visible even with an empty glpigroups session');
+            $this->assertNotContains($t_other_group, $ids, 'Ticket assigned to a group the user does not belong to must stay hidden');
+
+            $this->assertNotNull(PluginKanbanKanban::getTicketDetail($t_group));
+            $this->assertNull(PluginKanbanKanban::getTicketDetail($t_other_group));
+        } finally {
+            foreach ([$t_group, $t_other_group] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_groups_tickets', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            $DB->delete('glpi_groups_users', ['groups_id' => [$group, $other_group]]);
+            $DB->delete('glpi_groups', ['id' => [$group, $other_group]]);
 
             if ($saved_entities !== null) {
                 $_SESSION['glpiactiveentities'] = $saved_entities;

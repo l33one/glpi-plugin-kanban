@@ -36,7 +36,7 @@
  *  --------------------------------------------------------------------------
  */
 
-define('PLUGIN_KANBAN_VERSION', '1.0.2');
+define('PLUGIN_KANBAN_VERSION', '1.1.1');
 
 /**
  * Init the hooks of the plugin
@@ -58,6 +58,9 @@ function plugin_init_kanban() {
 
       // Declare that this plugin does not use custom database tables
       $PLUGIN_HOOKS['use_tables']['kanban'] = [];
+
+      // Register the profile tab so the Kanban view right can be configured per profile
+      Plugin::registerClass('PluginKanbanProfile', ['addtabon' => ['Profile']]);
 
       // Set the plugin version constant
       $PLUGIN_HOOKS['plugin_version']['kanban'] = PLUGIN_KANBAN_VERSION;

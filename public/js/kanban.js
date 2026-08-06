@@ -16,7 +16,7 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
-const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA' };
+const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', searchByNumber: 'Search by ticket number', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA' };
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
@@ -620,25 +620,41 @@ function loadTickets() {
        const [sortBy, sortOrder] = sortValue.split('_');
        const sorted = [...tickets];
 
-       sorted.sort((a, b) => {
-          let cmp = 0;
-          switch (sortBy) {
-             case 'priority':
-                cmp = (b.priority || 0) - (a.priority || 0);
-                break;
-             case 'status_duration':
-                cmp = new Date(b.date_mod || 0) - new Date(a.date_mod || 0);
-                break;
-             case 'date':
-             default:
-                cmp = new Date(b.date || 0) - new Date(a.date || 0);
-                break;
-          }
-          return sortOrder === 'ASC' ? cmp : -cmp;
-       });
+        sorted.sort((a, b) => {
+           let cmp = 0;
+           switch (sortBy) {
+              case 'priority':
+                 cmp = (b.priority || 0) - (a.priority || 0);
+                 break;
+              case 'status_duration':
+                 cmp = new Date(b.date_mod || 0) - new Date(a.date_mod || 0);
+                 break;
+              case 'sla':
+                 // Sort by SLA progress (percent elapsed); tickets without SLA
+                 // always sink to the bottom of the column.
+                 cmp = slaSortKey(b) - slaSortKey(a);
+                 break;
+              case 'date':
+              default:
+                 cmp = new Date(b.date || 0) - new Date(a.date || 0);
+                 break;
+           }
+           return sortOrder === 'ASC' ? cmp : -cmp;
+        });
 
-       return sorted;
-    }
+        return sorted;
+     }
+
+     /**
+      * Numeric sort key for SLA progress: percent elapsed, or Infinity when the
+      * ticket has no SLA (so it is ordered last in either direction).
+      */
+     function slaSortKey(ticket) {
+        if (ticket.sla_progress && ticket.sla_progress.status !== 'no_sla') {
+           return ticket.sla_progress.percent || 0;
+        }
+        return Infinity;
+     }
 
    /**
     * Create HTML card element for a Ticket
@@ -797,6 +813,12 @@ function createCardElement(ticket) {
       filterForm.querySelectorAll('select').forEach(select => {
          select.addEventListener('change', debouncedLoadTickets);
       });
+   }
+
+   // Ticket number search field (live, debounced)
+   const ticketIdInput = document.getElementById('filter-ticket-id');
+   if (ticketIdInput) {
+      ticketIdInput.addEventListener('input', debouncedLoadTickets);
    }
 
    // Refresh button listener

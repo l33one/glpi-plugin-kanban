@@ -38,7 +38,7 @@ class PluginKanbanMenu extends CommonGLPI {
    public static function getMenuContent() {
       $menu = [];
 
-      if (Ticket::canView()) {
+      if (PluginKanbanKanban::canView() && Ticket::canView()) {
          $menu['title'] = __('Kanban', 'kanban');
          $menu['page']  = '/plugins/kanban/front/kanban.php';
          $menu['icon']  = 'ti ti-layout-kanban';

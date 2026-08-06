@@ -19,8 +19,23 @@ if (!defined('GLPI_ROOT')) {
 
 class PluginKanbanKanban extends CommonGLPI {
 
+   /** Right name that gates access to the Kanban page */
+   public static $rightname = 'plugin_kanban';
+
    /** Maximum tickets per status to prevent performance issues */
    const MAX_TICKETS_PER_STATUS = 200;
+
+   /**
+    * Define the rights displayed in the profile configuration.
+    *
+    * @param string $interface Interface ('central' or 'helpdesk')
+    * @return array
+    */
+   public static function getRights($interface = 'central') {
+      return [
+         READ => __('View the kanban board', 'kanban'),
+      ];
+   }
 
    /**
     * Retrieve tickets formatted and filtered for the Kanban board.
@@ -33,8 +48,8 @@ class PluginKanbanKanban extends CommonGLPI {
    public static function getTicketsForKanban(array $filters = [], array $sort = [], int $limit = 0) {
       global $DB;
 
-      // Basic visibility check
-      if (!Ticket::canView()) {
+      // Basic visibility check: user must have the plugin right and be able to view tickets
+      if (!self::canView() || !Ticket::canView()) {
          return [];
       }
 
@@ -122,7 +137,17 @@ class PluginKanbanKanban extends CommonGLPI {
                'gt' => 'tickets_id'
             ]
          ];
-         $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
+          $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
+       }
+
+      // Apply Ticket number search (matches the ticket id by its digits).
+      // A leading "#" or any non-digit character is ignored, so typing
+      // "12" finds tickets #12, #120, #512... as long as they are visible.
+      if (!empty($filters['ticket_id'])) {
+         $search = preg_replace('/\D/', '', (string)$filters['ticket_id']);
+         if ($search !== '') {
+            $criteria['WHERE']['t.id'] = ['LIKE', '%' . $search . '%'];
+         }
       }
 
       // Apply Sorting
@@ -137,11 +162,18 @@ class PluginKanbanKanban extends CommonGLPI {
          case 'priority':
             $criteria['ORDER'] = "t.priority $sort_order";
             break;
-         case 'status_duration':
-            // Approximate duration in status using modified date
-            $criteria['ORDER'] = "t.date_mod $sort_order";
-            break;
-         case 'date':
+          case 'status_duration':
+             // Approximate duration in status using modified date
+             $criteria['ORDER'] = "t.date_mod $sort_order";
+             break;
+          case 'sla':
+             // Approximate SLA urgency by resolution deadline. The client
+             // sorts by elapsed percent (DESC = most elapsed / closest to
+             // expiry first), so the deadline order is inverted here: DESC
+             // fetches the earliest deadlines first.
+             $criteria['ORDER'] = "t.time_to_resolve " . ($sort_order === 'ASC' ? 'DESC' : 'ASC');
+             break;
+          case 'date':
          default:
             $criteria['ORDER'] = "t.date $sort_order";
             break;
@@ -215,7 +247,7 @@ class PluginKanbanKanban extends CommonGLPI {
           . $user_id . ' AND tu.type = ' . CommonITILActor::ASSIGN . ')';
 
        // Tickets assigned to one of the user's groups (including subgroups).
-       $my_groups = self::expandGroupIds($_SESSION['glpigroups'] ?? []);
+       $my_groups = self::getUserGroupIds($user_id);
        if (!empty($my_groups)) {
           $conditions[] = 't.id IN (SELECT DISTINCT gt.tickets_id FROM glpi_groups_tickets AS gt WHERE gt.groups_id IN ('
              . implode(',', $my_groups) . ') AND gt.type = ' . CommonITILActor::ASSIGN . ')';
@@ -249,6 +281,32 @@ class PluginKanbanKanban extends CommonGLPI {
           }
        }
        return array_values($expanded);
+    }
+
+    /**
+     * Get the ids of all groups the current user belongs to (+ subgroups).
+     *
+     * Groups are read from glpi_groups_users at query time instead of from
+     * $_SESSION['glpigroups'], so newly added memberships are honored without
+     * re-login and groups outside the currently active entities are not lost.
+     *
+     * @param int $user_id
+     * @return int[]
+     */
+    private static function getUserGroupIds(int $user_id): array {
+       global $DB;
+
+       $group_ids = [];
+       $iterator = $DB->request([
+          'SELECT' => ['groups_id'],
+          'FROM'   => 'glpi_groups_users',
+          'WHERE'  => ['users_id' => $user_id],
+       ]);
+       foreach ($iterator as $row) {
+          $group_ids[(int)$row['groups_id']] = (int)$row['groups_id'];
+       }
+
+       return self::expandGroupIds(array_keys($group_ids));
     }
 
    /**
@@ -514,11 +572,11 @@ class PluginKanbanKanban extends CommonGLPI {
      * @return array|null
      */
     public static function getTicketDetail($ticket_id) {
-       global $DB;
+      global $DB;
 
-       if (!Ticket::canView()) {
-          return null;
-       }
+      if (!self::canView() || !Ticket::canView()) {
+         return null;
+      }
 
        $ticket_id = (int)$ticket_id;
 
@@ -644,8 +702,10 @@ return [
          'date_ASC'              => __('Date Open (Oldest first)', 'kanban'),
          'priority_DESC'         => __('Priority (High to Low)', 'kanban'),
          'priority_ASC'          => __('Priority (Low to High)', 'kanban'),
-         'status_duration_DESC'  => __('Time in Status (Longest first)', 'kanban'),
-         'status_duration_ASC'   => __('Time in Status (Shortest first)', 'kanban'),
-      ];
+          'status_duration_DESC'  => __('Time in Status (Longest first)', 'kanban'),
+          'status_duration_ASC'   => __('Time in Status (Shortest first)', 'kanban'),
+          'sla_DESC'              => __('SLA (Closest to expiry first)', 'kanban'),
+          'sla_ASC'               => __('SLA (Farthest from expiry first)', 'kanban'),
+       ];
    }
 }

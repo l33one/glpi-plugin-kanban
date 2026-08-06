@@ -19,8 +19,14 @@
  * @return boolean
  */
 function plugin_kanban_install() {
-    // No custom tables needed - uses native GLPI Ticket infrastructure
-    // Register the plugin config page for Super-Admin access
+    // Register the "plugin_kanban" right in glpi_profilerights.
+    // Profiles able to update the config (super-admin) get full access;
+    // every other profile gets the right row with no access so that admins
+    // can enable it later from the Profile form.
+    $migration = new Migration(PLUGIN_KANBAN_VERSION);
+    $migration->addRight(PluginKanbanKanban::$rightname, ALLSTANDARDRIGHT, ['config' => READ | UPDATE]);
+    $migration->executeMigration();
+
     return true;
 }
 
@@ -30,8 +36,9 @@ function plugin_kanban_install() {
  * @return boolean
  */
 function plugin_kanban_uninstall() {
-    // No custom tables to drop - plugin uses native GLPI Ticket tables
-    // Any plugin-specific config could be cleaned up here
+    // Remove the plugin right from glpi_profilerights
+    ProfileRight::deleteProfileRights([PluginKanbanKanban::$rightname]);
+
     return true;
 }
 

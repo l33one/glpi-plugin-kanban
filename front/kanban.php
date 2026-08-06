@@ -18,8 +18,8 @@ include ('../../../inc/includes.php');
 // Ensure user is logged in
 Session::checkLoginUser();
 
-// Check rights to view tickets
-if (!Ticket::canView()) {
+// Check rights to view the Kanban page and tickets
+if (!PluginKanbanKanban::canView() || !Ticket::canView()) {
    Html::displayRightError();
 }
 
@@ -33,6 +33,7 @@ switch ($action) {
              'technician' => isset($_GET['technician']) ? (int)$_GET['technician'] : null,
              'requester'  => isset($_GET['requester']) ? (int)$_GET['requester'] : null,
              'group'      => isset($_GET['group']) ? (int)$_GET['group'] : null,
+             'ticket_id'  => isset($_GET['ticket_id']) ? $_GET['ticket_id'] : null,
           ];
           $sort = [
              'by'    => $_GET['sort_by'] ?? 'date',
@@ -161,6 +162,7 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "showAllColumns" => __("Show all columns", "kanban"),
     "cardFields" => __("Card fields", "kanban"),
     "allTechnicians" => __("All Technicians", "kanban"),
+    "searchByNumber" => __("Search by ticket number", "kanban"),
     "fieldPriority" => __("Priority", "kanban"),
     "fieldDateCreation" => __("Opening date", "kanban"),
     "fieldCategory" => __("Category", "kanban"),
@@ -251,6 +253,14 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                       <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
                    <?php endforeach; ?>
                 </select>
+            </div>
+
+            <!-- Ticket number search -->
+            <div class="col-auto">
+               <label class="visually-hidden" for="filter-ticket-id"><?php echo __('Search by ticket number', 'kanban'); ?></label>
+               <input type="search" class="form-control" id="filter-ticket-id" name="ticket_id"
+                      placeholder="<?php echo __('Search by ticket number', 'kanban'); ?>"
+                      autocomplete="off" style="min-width: 200px;">
             </div>
 
             <!-- Sort hint: per-column sort dropdowns are in each column header -->
