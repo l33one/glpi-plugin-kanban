@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+   <name>Kanban</name>
+   <key>kanban</key>
+   <state>stable</state>
+   <description>
+      <short>
+         <en>Interactive kanban board for GLPI tickets</en>
+         <pt_BR>Quadro kanban interativo para chamados do GLPI</pt_BR>
+      </short>
+      <long>
+         <en>An interactive kanban board for GLPI 10+. Tickets are displayed as cards in columns mapped to their native GLPI statuses, with real-time filters by group, technician and requester, ticket number search, SLA progress bar, drag and drop status changes and a responsive layout for desktop, tablet and mobile.</en>
+         <pt_BR>Um quadro kanban interativo para GLPI 10+. Os chamados são exibidos como cards em colunas mapeadas para seus status nativos do GLPI, com filtros em tempo real por grupo, técnico e requerente, busca pelo número do chamado, barra de progresso de SLA, arrastar e soltar para alterar o status e layout responsivo para desktop, tablet e mobile.</pt_BR>
+      </long>
+   </description>
+   <homepage>https://github.com/l33one/glpi-plugin-kanban</homepage>
+   <download>https://github.com/l33one/glpi-plugin-kanban/releases</download>
+   <issues>https://github.com/l33one/glpi-plugin-kanban/issues</issues>
+   <readme>https://raw.githubusercontent.com/l33one/glpi-plugin-kanban/main/README.md</readme>
+   <authors>
+      <author>Leewan Meneses</author>
+   </authors>
+   <versions>
+      <version>
+         <num>1.1.1</num>
+         <compatibility>~10.0.0</compatibility>
+         <download_url>https://github.com/l33one/glpi-plugin-kanban/releases/download/1.1.1/glpi-plugin-kanban-1.1.1.tar.bz2</download_url>
+      </version>
+   </versions>
+   <langs>
+      <lang>en_GB</lang>
+      <lang>pt_BR</lang>
+   </langs>
+   <license>GPL v2+</license>
+   <tags>
+      <en>
+         <tag>kanban</tag>
+         <tag>tickets</tag>
+         <tag>helpdesk</tag>
+      </en>
+      <pt_BR>
+         <tag>kanban</tag>
+         <tag>chamados</tag>
+         <tag>helpdesk</tag>
+      </pt_BR>
+   </tags>
+</root>

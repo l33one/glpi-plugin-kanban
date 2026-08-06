@@ -197,11 +197,16 @@ class PluginKanbanKanban extends CommonGLPI {
              continue;
           }
 
-          // Add status name for display
-          $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
+           // Add status name for display
+           $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
 
-          // Add requester name
-          $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
+           // Decode GLPI-sanitized text fields before sending them to the frontend
+           $ticket['title']    = self::unsanitizeOutput($ticket['title']);
+           $ticket['content']  = self::unsanitizeOutput($ticket['content']);
+           $ticket['category'] = self::unsanitizeOutput($ticket['category']);
+
+           // Add requester name
+           $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
 
           // Fetch assigned technicians details for metadata
           $ticket['assigned_techs'] = self::getAssignedTechnicians($ticket['id']);
@@ -281,6 +286,20 @@ class PluginKanbanKanban extends CommonGLPI {
           }
        }
        return array_values($expanded);
+    }
+
+    /**
+     * Decode GLPI-sanitized data before sending it to the frontend.
+     *
+     * GLPI stores user input with HTML entities (e.g. ">" is stored as "&#62;").
+     * Fields read via raw SQL must be unsanitized on output, otherwise titles
+     * show "&#62;" and descriptions show raw HTML code.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    private static function unsanitizeOutput($value) {
+       return \Glpi\Toolbox\Sanitizer::unsanitize($value);
     }
 
     /**
@@ -374,17 +393,17 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'     => 'u.realname ASC',
           'LIMIT'     => 500
        ]);
-        foreach ($iterator as $user) {
-           $users[] = [
-              'id'   => (int)$user['id'],
-              'name' => getUserName($user['id'])
-           ];
-        }
-        return $users;
-     }
+         foreach ($iterator as $user) {
+            $users[] = [
+               'id'   => (int)$user['id'],
+               'name' => self::unsanitizeOutput(getUserName($user['id']))
+            ];
+         }
+         return $users;
+      }
 
-    /**
-     * Get technicians (users) who are members of a group or any of its subgroups.
+     /**
+      * Get technicians (users) who are members of a group or any of its subgroups.
      *
      * @param int $group_id
      * @return array Array of ['id' => int, 'name' => string]
@@ -416,17 +435,17 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'      => 'u.realname ASC',
           'LIMIT'      => 500
        ]);
-       foreach ($iterator as $user) {
-          $users[] = [
-             'id'   => (int)$user['id'],
-             'name' => getUserName($user['id'])
-          ];
-       }
-        return $users;
-     }
+        foreach ($iterator as $user) {
+           $users[] = [
+              'id'   => (int)$user['id'],
+              'name' => self::unsanitizeOutput(getUserName($user['id']))
+           ];
+        }
+         return $users;
+      }
 
-    /**
-     * Get list of requesters for filter dropdown
+     /**
+      * Get list of requesters for filter dropdown
      *
      * @return array Array of ['id' => int, 'name' => string]
      */
@@ -443,13 +462,13 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'  => 'realname ASC',
           'LIMIT'  => 500
        ]);
-       foreach ($iterator as $user) {
-          $requesters[] = [
-             'id'   => (int)$user['id'],
-             'name' => getUserName($user['id'])
-          ];
-       }
-       return $requesters;
+        foreach ($iterator as $user) {
+           $requesters[] = [
+              'id'   => (int)$user['id'],
+              'name' => self::unsanitizeOutput(getUserName($user['id']))
+           ];
+        }
+        return $requesters;
     }
 
     /**
@@ -486,15 +505,15 @@ class PluginKanbanKanban extends CommonGLPI {
        if (!empty($entity_restriction)) {
           $criteria['WHERE'][] = $entity_restriction;
        }
-       $iterator = $DB->request($criteria);
-       foreach ($iterator as $group) {
-          $groups[] = [
-             'id'   => (int)$group['id'],
-             'name' => $group['name']
-          ];
-       }
-       return $groups;
-    }
+        $iterator = $DB->request($criteria);
+        foreach ($iterator as $group) {
+           $groups[] = [
+              'id'   => (int)$group['id'],
+              'name' => self::unsanitizeOutput($group['name'])
+           ];
+        }
+        return $groups;
+     }
 
     /**
      * Fetch technicians assigned to a specific ticket
@@ -522,12 +541,12 @@ class PluginKanbanKanban extends CommonGLPI {
           ]
        ]);
 
-       foreach ($iterator as $user) {
-          if ($user['id']) {
-             $techs[] = getUserName($user['id']);
-          }
-       }
-       return $techs;
+        foreach ($iterator as $user) {
+           if ($user['id']) {
+              $techs[] = self::unsanitizeOutput(getUserName($user['id']));
+           }
+        }
+        return $techs;
     }
 
     /**
@@ -557,12 +576,12 @@ class PluginKanbanKanban extends CommonGLPI {
           'LIMIT'  => 1
        ]);
 
-       foreach ($iterator as $user) {
-          if ($user['id']) {
-             $requester = getUserName($user['id']);
-          }
-       }
-       return $requester;
+        foreach ($iterator as $user) {
+           if ($user['id']) {
+              $requester = self::unsanitizeOutput(getUserName($user['id']));
+           }
+        }
+        return $requester;
     }
 
     /**
@@ -634,6 +653,11 @@ class PluginKanbanKanban extends CommonGLPI {
 
        $status = (int)$ticket['status'];
        $all_statuses = Ticket::getAllStatusArray();
+
+       // Decode GLPI-sanitized text fields before sending them to the frontend
+       $ticket['title']    = self::unsanitizeOutput($ticket['title']);
+       $ticket['content']  = self::unsanitizeOutput($ticket['content']);
+       $ticket['category'] = self::unsanitizeOutput($ticket['category']);
 
        $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
        $ticket['priority_label'] = Ticket::getPriorityName($ticket['priority'] ?? 0);

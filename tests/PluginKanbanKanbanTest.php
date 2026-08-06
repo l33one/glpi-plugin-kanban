@@ -365,6 +365,83 @@ class PluginKanbanKanbanTest extends TestCase
         $this->assertNull($detail);
     }
 
+    /**
+     * Regression test: GLPI stores user input sanitized (numeric HTML entities
+     * such as "&#62;" for ">"). Fields read via raw SQL must be unsanitized on
+     * output, otherwise titles show "&#62;" and descriptions show raw HTML.
+     */
+    public function testTicketTitleAndContentAreUnsanitized(): void
+    {
+        global $DB;
+
+        $tid = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+
+        try {
+            $now = date('Y-m-d H:i:s');
+            $DB->insert('glpi_tickets', [
+                'name' => \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars('Falha no backup > verificar & corrigir'),
+                'content' => \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>'),
+                'status' => 1,
+                'priority' => 3,
+                'urgency' => 2,
+                'impact' => 2,
+                'type' => 1,
+                'date' => $now,
+                'date_creation' => $now,
+                'date_mod' => $now,
+                'entities_id' => 0,
+                'is_deleted' => 0,
+                'itilcategories_id' => 0,
+                'requesttypes_id' => 0,
+                'users_id_lastupdater' => 2,
+                'users_id_recipient' => 2,
+                'actiontime' => 0,
+                'time_to_resolve' => null,
+            ]);
+            foreach ($DB->request([
+                'SELECT' => ['id'],
+                'FROM' => 'glpi_tickets',
+                'WHERE' => ['name' => 'Falha no backup &#62; verificar &#38; corrigir'],
+            ]) as $row) {
+                $tid = (int)$row['id'];
+            }
+            $this->assertGreaterThan(0, $tid);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $tid, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
+            $_SESSION['glpiactiveentities'] = [0];
+
+            $detail = PluginKanbanKanban::getTicketDetail($tid);
+            $this->assertNotNull($detail);
+            $this->assertSame('Falha no backup > verificar & corrigir', $detail['title']);
+            $this->assertSame('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>', $detail['content']);
+
+            $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
+            $found = null;
+            foreach ($result as $tickets) {
+                foreach ($tickets as $ticket) {
+                    if ((int)$ticket['id'] === $tid) {
+                        $found = $ticket;
+                    }
+                }
+            }
+            $this->assertNotNull($found, 'Sanitized-title ticket must appear on the board');
+            $this->assertSame('Falha no backup > verificar & corrigir', $found['title']);
+            $this->assertSame('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>', $found['content']);
+        } finally {
+            if ($tid > 0) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                $DB->delete('glpi_tickets', ['id' => $tid]);
+            }
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+        }
+    }
+
     public function testGetTicketsForKanbanIncludesStatusNameAndRequester(): void
     {
         $result = PluginKanbanKanban::getTicketsForKanban([], [], 50);
