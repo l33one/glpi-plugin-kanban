@@ -10,6 +10,11 @@
       radial-gradient(at top right, rgba(20, 184, 166, 0.05), transparent 45%),
       #f6f8fb;
    min-height: 90vh;
+   overflow-x: hidden;
+}
+
+.kanban-page-wrapper .row > [class*="col-"] {
+   min-width: 0;
 }
 
 .kanban-page-wrapper h1 {
@@ -710,6 +715,28 @@ a:focus-visible,
    .kanban-board-container { gap: 1rem; }
    .kanban-card .card-title { font-size: 0.82rem; }
    .card-meta { font-size: 0.72rem; }
+}
+
+/* Filter toolbar: let items shrink and wrap without overflowing */
+#kanban-filter-form .kanban-filter-item {
+   min-width: 0;
+}
+
+@media (max-width: 1199.98px) {
+   #kanban-filter-form .kanban-filter-item {
+      flex: 1 1 150px;
+   }
+   #kanban-filter-form .kanban-filter-item .form-select,
+   #kanban-filter-form .kanban-filter-item .form-control {
+      min-width: 0 !important;
+      width: 100%;
+   }
+}
+
+@media (max-width: 575.98px) {
+   #kanban-filter-form .kanban-filter-item {
+      flex: 0 0 100%;
+   }
 }
 
 @media (max-width: 767px) {

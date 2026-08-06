@@ -183,51 +183,53 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
 
 <div class="kanban-page-wrapper container-fluid py-4">
    <!-- Header and Filters -->
-   <div class="row mb-4 align-items-center">
-      <div class="col-md-4 d-flex align-items-center gap-3">
+   <div class="row mb-4 g-3 align-items-center">
+      <div class="col-12 col-lg-5 col-xxl-4 d-flex flex-wrap align-items-center gap-2 gap-lg-3">
          <h1 class="h2 text-primary m-0"><i class="ti ti-layout-kanban me-2"></i><?php echo __('Kanban Board', 'kanban'); ?></h1>
          <span id="kanban-total" class="badge text-bg-primary rounded-pill fs-6" aria-live="polite" title="<?php echo __('Total tickets', 'kanban'); ?>">0</span>
-         <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.php"
-            class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
-            title="<?php echo __('Open in GLPI', 'kanban'); ?>">
-            <i class="ti ti-external-link"></i>
-            <?php echo __('Open in GLPI', 'kanban'); ?>
-         </a>
-         <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.form.php"
-            class="btn btn-sm btn-primary d-flex align-items-center gap-1"
-            title="<?php echo __('New Ticket', 'kanban'); ?>">
-            <i class="ti ti-plus"></i>
-            <?php echo __('New Ticket', 'kanban'); ?>
-         </a>
-         <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" id="kanban-refresh-btn" title="<?php echo __('Refresh', 'kanban'); ?>">
-            <i class="ti ti-reload"></i>
-         </button>
-         <div class="dropdown">
-            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-columns-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Show / hide columns', 'kanban'); ?>">
-               <i class="ti ti-columns-3"></i>
-               <span class="d-none d-lg-inline"><?php echo __('Columns', 'kanban'); ?></span>
+         <div class="d-flex flex-wrap align-items-center gap-2 ms-lg-auto">
+            <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.php"
+               class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+               title="<?php echo __('Open in GLPI', 'kanban'); ?>">
+               <i class="ti ti-external-link"></i>
+               <span class="d-none d-xl-inline"><?php echo __('Open in GLPI', 'kanban'); ?></span>
+            </a>
+            <a href="<?php echo $CFG_GLPI['root_doc']; ?>/front/ticket.form.php"
+               class="btn btn-sm btn-primary d-flex align-items-center gap-1"
+               title="<?php echo __('New Ticket', 'kanban'); ?>">
+               <i class="ti ti-plus"></i>
+               <span class="d-none d-xl-inline"><?php echo __('New Ticket', 'kanban'); ?></span>
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-info d-flex align-items-center gap-1" id="kanban-refresh-btn" title="<?php echo __('Refresh', 'kanban'); ?>">
+               <i class="ti ti-reload"></i>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end kanban-columns-menu" aria-labelledby="kanban-columns-btn">
-               <!-- Populated by JavaScript -->
-            </ul>
-         </div>
-         <div class="dropdown">
-            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-fields-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Card fields', 'kanban'); ?>">
-               <i class="ti ti-list-check"></i>
-               <span class="d-none d-lg-inline"><?php echo __('Fields', 'kanban'); ?></span>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end kanban-fields-menu" aria-labelledby="kanban-fields-btn">
-               <!-- Populated by JavaScript -->
-            </ul>
+            <div class="dropdown">
+               <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-columns-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Show / hide columns', 'kanban'); ?>">
+                  <i class="ti ti-columns-3"></i>
+                  <span class="d-none d-lg-inline"><?php echo __('Columns', 'kanban'); ?></span>
+               </button>
+               <ul class="dropdown-menu dropdown-menu-end kanban-columns-menu" aria-labelledby="kanban-columns-btn">
+                  <!-- Populated by JavaScript -->
+               </ul>
+            </div>
+            <div class="dropdown">
+               <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="kanban-fields-btn" data-bs-toggle="dropdown" aria-expanded="false" title="<?php echo __('Card fields', 'kanban'); ?>">
+                  <i class="ti ti-list-check"></i>
+                  <span class="d-none d-lg-inline"><?php echo __('Fields', 'kanban'); ?></span>
+               </button>
+               <ul class="dropdown-menu dropdown-menu-end kanban-fields-menu" aria-labelledby="kanban-fields-btn">
+                  <!-- Populated by JavaScript -->
+               </ul>
+            </div>
          </div>
       </div>
-      <div class="col-md-8">
-         <form id="kanban-filter-form" class="row g-2 justify-content-end">
+      <div class="col-12 col-lg-7 col-xxl-8">
+         <form id="kanban-filter-form" class="row g-2 justify-content-lg-end">
             <input type="hidden" name="_glpi_csrf_token" value="<?php echo Session::getNewCSRFToken(); ?>">
 
-            <div class="col-auto">
+            <div class="col-auto kanban-filter-item">
                <label class="visually-hidden" for="filter-technician"><?php echo __('Technician', 'kanban'); ?></label>
-               <select class="form-select select2-simple" id="filter-technician" name="technician" style="min-width: 180px;">
+               <select class="form-select select2-simple" id="filter-technician" name="technician" style="min-width: 150px;">
                   <option value=""><?php echo __('All Technicians', 'kanban'); ?></option>
                   <?php foreach ($technicians as $user): ?>
                      <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
@@ -235,36 +237,36 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                </select>
             </div>
 
-<div class="col-auto">
-                <label class="visually-hidden" for="filter-requester"><?php echo __('Requester', 'kanban'); ?></label>
-                <select class="form-select select2-simple" id="filter-requester" name="requester" style="min-width: 180px;">
-                   <option value=""><?php echo __('All Requesters', 'kanban'); ?></option>
-                   <?php foreach ($requesters as $user): ?>
-                      <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
-                   <?php endforeach; ?>
-                </select>
-             </div>
+            <div class="col-auto kanban-filter-item">
+               <label class="visually-hidden" for="filter-requester"><?php echo __('Requester', 'kanban'); ?></label>
+               <select class="form-select select2-simple" id="filter-requester" name="requester" style="min-width: 150px;">
+                  <option value=""><?php echo __('All Requesters', 'kanban'); ?></option>
+                  <?php foreach ($requesters as $user): ?>
+                     <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
+                  <?php endforeach; ?>
+               </select>
+            </div>
 
-            <div class="col-auto">
-                <label class="visually-hidden" for="filter-group"><?php echo __('Group', 'kanban'); ?></label>
-                <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 180px;">
-                   <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
-                   <?php foreach ($groups as $group): ?>
-                      <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
-                   <?php endforeach; ?>
-                </select>
+            <div class="col-auto kanban-filter-item">
+               <label class="visually-hidden" for="filter-group"><?php echo __('Group', 'kanban'); ?></label>
+               <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 150px;">
+                  <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
+                  <?php foreach ($groups as $group): ?>
+                     <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
+                  <?php endforeach; ?>
+               </select>
             </div>
 
             <!-- Ticket number search -->
-            <div class="col-auto">
+            <div class="col-auto kanban-filter-item">
                <label class="visually-hidden" for="filter-ticket-id"><?php echo __('Search by ticket number', 'kanban'); ?></label>
                <input type="search" class="form-control" id="filter-ticket-id" name="ticket_id"
                       placeholder="<?php echo __('Search by ticket number', 'kanban'); ?>"
-                      autocomplete="off" style="min-width: 200px;">
+                      autocomplete="off" style="min-width: 170px;">
             </div>
 
             <!-- Sort hint: per-column sort dropdowns are in each column header -->
-            <div class="col-auto">
+            <div class="col-auto d-none d-xxl-inline">
                <span class="text-muted small fst-italic"><?php echo __('Sort via column dropdowns', 'kanban'); ?></span>
             </div>
          </form>
