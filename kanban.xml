@@ -3,6 +3,7 @@
    <name>Kanban</name>
    <key>kanban</key>
    <state>stable</state>
+   <logo>https://raw.githubusercontent.com/l33one/glpi-plugin-kanban/main/kanban.png</logo>
    <description>
       <short>
          <en>Interactive kanban board for GLPI tickets</en>
