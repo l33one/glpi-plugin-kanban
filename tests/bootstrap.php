@@ -24,7 +24,9 @@ if (!$glpi_root) {
 }
 
 define('GLPI_ROOT', rtrim($glpi_root, '/\\'));
-define('GLPI_CONFIG_DIR', GLPI_ROOT . '/config');
+// GLPI_CONFIG_DIR can point elsewhere (e.g. the official glpi/glpi docker image keeps
+// config under /var/glpi/config). Falls back to the classic GLPI_ROOT/config layout.
+define('GLPI_CONFIG_DIR', getenv('GLPI_CONFIG_DIR') ?: GLPI_ROOT . '/config');
 define('GLPI_VAR_DIR', GLPI_ROOT . '/files/_tests');
 define('GLPI_CRON_DIR', GLPI_VAR_DIR . '/cron');
 define('GLPI_LOG_DIR', GLPI_VAR_DIR . '/logs');

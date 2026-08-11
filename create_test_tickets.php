@@ -2,27 +2,78 @@
 /**
  * Create test tickets for the Kanban plugin directly via MySQL
  *
- * Execute via:
+ * Execute via (official glpi/glpi compose stacks):
+ *   .\test-plugin.ps1
+ *   # or directly:
+ *   docker compose -f docker-compose.glpi10.yml exec -T `
+ *     -e KANBAN_DB_HOST=db -e KANBAN_DB_USER=glpi -e KANBAN_DB_PASS=glpi_password `
+ *     -e KANBAN_DB_NAME=glpi -e KANBAN_URL=http://localhost:8090/plugins/kanban/front/kanban.php `
+ *     glpi php /var/www/glpi/plugins/kanban/create_test_tickets.php
+ *
+ * Or legacy diouxx/glpi:
  *   docker exec glpi-app php /var/www/html/glpi/plugins/kanban/create_test_tickets.php
  *
  * Creates tickets across all GLPI statuses with varied priorities, categories, and SLA deadlines
- * to fully exercise the Kanban board's features.
+ * to fully exercise the Kanban board features, including the frozen SLA for
+ * solved (5) / closed (6) tickets (freeze at solvedate) and waiting (4) tickets
+ * (SLA frozen at begin_waiting_date).
+ *
+ * Connection settings can be overridden via environment variables:
+ *   KANBAN_DB_HOST  (comma separated fallback list)
+ *   KANBAN_DB_USER
+ *   KANBAN_DB_PASS
+ *   KANBAN_DB_NAME
+ *   KANBAN_URL
  */
 
-$host = 'mariadb';
-$user = 'glpi_user';
-$pass = 'glpi';
-$dbname = 'glpidb_10';
+$hosts = array_filter(explode(',', (string)getenv('KANBAN_DB_HOST')));
+$hosts = $hosts ?: ['db', 'mariadb', 'glpi-db'];
+$user     = getenv('KANBAN_DB_USER') ?: 'glpi';
+$pass     = getenv('KANBAN_DB_PASS') ?: 'glpi_password';
+$dbname   = getenv('KANBAN_DB_NAME') ?: 'glpi';
+$kanban_url = getenv('KANBAN_URL') ?: 'http://localhost:8090/plugins/kanban/front/kanban.php';
 
-$conn = new mysqli($host, $user, $pass, $dbname);
-if ($conn->connect_error) {
-    $conn = new mysqli('glpi-db', $user, $pass, $dbname);
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error . "\n");
+$conn = null;
+$conn_error = '';
+foreach ($hosts as $host) {
+    $c = @new mysqli($host, $user, $pass, $dbname);
+    if ($c->connect_error) {
+        $conn_error = $c->connect_error;
+    } else {
+        $conn = $c;
+        break;
     }
+}
+if (!$conn) {
+    die("Connection failed: " . $conn_error . "\n");
 }
 
 echo "Connected to MariaDB successfully.\n\n";
+
+// The Kanban board only shows tickets the current user can see (item-level visibility),
+// so all seeded tickets are assigned to the default super-admin user "glpi".
+$glpi_uid = 2; // default in a fresh GLPI install
+$res = $conn->query("SELECT id FROM glpi_users WHERE name = 'glpi' LIMIT 1");
+if ($res && $row = $res->fetch_row()) {
+    $glpi_uid = (int)$row[0];
+}
+echo "Usuario 'glpi' tem id $glpi_uid.\n";
+
+// Clean up tickets from previous runs (idempotent) so re-running the seed gives a clean board.
+$content_marker = 'Chamado de teste para o plugin Kanban';
+$res = $conn->query("SELECT id FROM glpi_tickets WHERE content LIKE '%" . $conn->real_escape_string($content_marker) . "%'");
+$old_ids = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $old_ids[] = (int)$row[0];
+    }
+}
+if (!empty($old_ids)) {
+    $ids_in = implode(',', $old_ids);
+    $conn->query("DELETE FROM glpi_tickets_users WHERE tickets_id IN ($ids_in)");
+    $conn->query("DELETE FROM glpi_tickets WHERE id IN ($ids_in)");
+    echo 'Removidos ' . count($old_ids) . " tickets de execucoes anteriores.\n\n";
+}
 
 $now = date('Y-m-d H:i:s');
 
@@ -68,17 +119,33 @@ foreach ($tickets as $i => $data) {
     $priority = (int)$data[2];
     $sla      = $conn->real_escape_string($data[3]);
 
+    // Freeze references so the Kanban board shows frozen SLA / pending duration:
+    // - solved/closed: SLA freezes at solvedate
+    // - waiting: SLA freezes at begin_waiting_date (duration keeps counting)
+    $begin_waiting_date = $status === 4 ? "'$now'" : 'NULL';
+    $solvedate          = in_array($status, [5, 6], true) ? "'$now'" : 'NULL';
+
     $sql = "INSERT INTO glpi_tickets
         (name, content, status, priority, urgency, impact, type, date, date_creation, date_mod,
          entities_id, is_deleted, itilcategories_id, requesttypes_id, users_id_lastupdater,
-         users_id_recipient, actiontime, begin_waiting_date, time_to_resolve)
+         users_id_recipient, actiontime, begin_waiting_date, solvedate, time_to_resolve)
         VALUES
         ('$name', 'Chamado de teste para o plugin Kanban - todos os status.',
          $status, $priority, 2, 2, 1, '$now', '$now', '$now',
-         0, 0, 0, 0, 2, 2, 0, NULL, '$sla')";
+         0, 0, 0, 0, $glpi_uid, $glpi_uid, 0, $begin_waiting_date, $solvedate, '$sla')";
 
     if ($conn->query($sql)) {
         $newId = $conn->insert_id;
+
+        // Assign the ticket to user glpi as technician (type 2) so it appears on the board.
+        $conn->query("INSERT INTO glpi_tickets_users (tickets_id, users_id, type)
+                      VALUES ($newId, $glpi_uid, 2)");
+        // A few tickets also have glpi as requester (type 1), to exercise the requester filter.
+        if (in_array($i, [0, 3, 6], true)) {
+            $conn->query("INSERT INTO glpi_tickets_users (tickets_id, users_id, type)
+                          VALUES ($newId, $glpi_uid, 1)");
+        }
+
         echo sprintf("Ticket %2d - [%s] '%s' (ID=%d)\n", $i + 1, getStatusName($status), $data[0], $newId);
     } else {
         echo sprintf("Ticket %2d - FALHOU: %s\n", $i + 1, $conn->error);
@@ -86,7 +153,7 @@ foreach ($tickets as $i => $data) {
 }
 
 echo "\nTotal: " . count($tickets) . " tickets criados em todos os 6 status.\n";
-echo "Acesse: http://localhost:8088/glpi/plugins/kanban/front/kanban.php\n";
+echo "Acesse: $kanban_url\n";
 $conn->close();
 
 /**

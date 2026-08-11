@@ -561,6 +561,17 @@
    font-weight: 700;
 }
 
+/* Frozen SLA (solved/closed/pending): countdown is static, clock is paused */
+.sla-progress .sla-countdown-frozen {
+   opacity: 0.75;
+   font-style: italic;
+}
+
+/* Live open-duration counter shown on pending cards */
+.kanban-duration-timer {
+   font-variant-numeric: tabular-nums;
+}
+
 /* ===== Font Sizes ===== */
 .fs-7 { font-size: 0.85rem; }
 .fs-8 { font-size: 0.75rem; }

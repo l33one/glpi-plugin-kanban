@@ -16,7 +16,7 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
-const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', searchByNumber: 'Search by ticket number', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA' };
+const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', searchByNumber: 'Search by ticket number', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused' };
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
@@ -63,7 +63,8 @@ const cardFields = {
    sla: { label: lang.fieldSla, icon: 'ti-clock' },
    assigned_techs: { label: lang.fieldTechnician, icon: 'ti-user' },
    category: { label: lang.fieldCategory, icon: 'ti-tag' },
-   date_creation: { label: lang.fieldDateCreation, icon: 'ti-calendar' }
+   date_creation: { label: lang.fieldDateCreation, icon: 'ti-calendar' },
+   duration: { label: lang.fieldDuration, icon: 'ti-hourglass' }
 };
 let hiddenCardFields = loadHiddenCardFields();
 
@@ -434,13 +435,15 @@ function renderBoardColumns() {
              showEmptyPlaceholder(zone, statusId);
              continue;
           }
-          const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
-          zone.innerHTML = '';
-          sorted.forEach(ticket => {
-             zone.appendChild(createCardElement(ticket));
-          });
-       }
-    }
+           const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
+           zone.innerHTML = '';
+           sorted.forEach(ticket => {
+              zone.appendChild(createCardElement(ticket));
+           });
+        }
+        updateCountdowns();
+        startTimerIfNeeded();
+     }
 
     /**
      * Rebuild the technician filter options, refreshing the select2 widget.
@@ -671,12 +674,25 @@ function createCardElement(ticket) {
        // SLA Progress Bar HTML
        let slaBarHtml = '';
        if (!hiddenCardFields.has('sla') && ticket.sla_progress && ticket.sla_progress.status !== 'no_sla' && ticket.time_to_resolve) {
+          const slaFrozen = !!ticket.sla_progress.frozen;
+          let timerHtml = `<span class="sla-countdown-timer fw-bold" data-deadline="${ticket.time_to_resolve}">--:--:--</span>`;
+          if (slaFrozen) {
+             // Solved/closed/pending tickets: the SLA clock is stopped. Render a
+             // static countdown computed at the freeze reference so it never ticks.
+             let staticText = '--:--:--';
+             if (ticket.sla_progress.frozen_at) {
+                staticText = formatCountdown(parseGlpiDateTime(ticket.time_to_resolve) - parseGlpiDateTime(ticket.sla_progress.frozen_at));
+             }
+             timerHtml = `<span class="sla-countdown-timer sla-countdown-frozen fw-bold" title="${escapeHtml(lang.slaFrozenHint)}">${staticText}</span>`;
+          } else {
+             hasVisibleTimers = true;
+          }
           slaBarHtml = `
              <div class="sla-progress mb-2">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                    <span class="d-flex align-items-center gap-1">
                       <i class="ti ti-clock"></i>
-                      <span class="sla-countdown-timer fw-bold" data-deadline="${ticket.time_to_resolve}">--:--:--</span>
+                      ${timerHtml}
                    </span>
                    <small class="text-muted">${ticket.sla_progress.percent}%</small>
                 </div>
@@ -687,7 +703,6 @@ function createCardElement(ticket) {
                 </div>
              </div>
           `;
-          hasVisibleTimers = true;
        }
 
        // Technicians text
@@ -706,6 +721,8 @@ function createCardElement(ticket) {
        const showTechs = !hiddenCardFields.has('assigned_techs');
        const showCategory = !hiddenCardFields.has('category');
        const showDate = !hiddenCardFields.has('date_creation');
+       const showDuration = !hiddenCardFields.has('duration');
+       const isPending = String(ticket.status) === '4';
 
        const topActions = [];
        if (showPriority) topActions.push(priorityBadge);
@@ -719,6 +736,13 @@ function createCardElement(ticket) {
        if (showCategory) {
           metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(ticket.category || lang.noCategory)}">
              <i class="ti ti-tag"></i><span>${escapeHtml(ticket.category || lang.noCategory)}</span>
+          </div>`);
+       }
+       if (isPending && showDuration) {
+          // Pending tickets: the SLA clock is paused, but the open duration
+          // keeps running, so a live elapsed-time counter is shown.
+          metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(lang.ticketDuration)}">
+             <i class="ti ti-hourglass"></i><span class="kanban-duration-timer" data-created="${ticket.date_creation}">--:--:--</span>
           </div>`);
        }
        if (showDate) {
@@ -842,9 +866,58 @@ function createCardElement(ticket) {
    // SLA Countdown Logic
    // =============================================
 
+   /**
+    * Parse a GLPI "YYYY-MM-DD HH:mm:ss" string into a JS timestamp.
+    */
+   function parseGlpiDateTime(str) {
+      if (!str) return 0;
+      const parts = String(str).split(/[- :]/);
+      return new Date(
+         parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]),
+         parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5])
+      ).getTime();
+   }
+
+   /**
+    * Format a remaining/overdue countdown (negative distance = overdue).
+    */
+   function formatCountdown(distanceMs) {
+      if (distanceMs < 0) {
+         const overdue = Math.abs(distanceMs);
+         const oDays = Math.floor(overdue / (1000 * 60 * 60 * 24));
+         const oHours = Math.floor((overdue % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+         const oMinutes = Math.floor((overdue % (1000 * 60 * 60)) / (1000 * 60));
+         const oSeconds = Math.floor((overdue % (1000 * 60)) / 1000);
+
+         let timeStr = '-';
+         if (oDays > 0) timeStr += oDays + 'd ';
+         timeStr += String(oHours).padStart(2, '0') + ':' + String(oMinutes).padStart(2, '0') + ':' + String(oSeconds).padStart(2, '0');
+         return timeStr;
+      }
+
+      const days = Math.floor(distanceMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distanceMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((distanceMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distanceMs % (1000 * 60)) / 1000);
+
+      let timeStr = '';
+      if (days > 0) timeStr += days + 'd ';
+      timeStr += String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+      return timeStr;
+   }
+
+   /**
+    * Format an elapsed (positive) duration, e.g. the open time of a ticket.
+    */
+   function formatElapsed(ms) {
+      return formatCountdown(Math.max(0, ms));
+   }
+
 function updateCountdowns() {
-       const timers = document.querySelectorAll('.sla-countdown-timer');
-       if (timers.length === 0) {
+       const timers = document.querySelectorAll('.sla-countdown-timer[data-deadline]');
+       const durations = document.querySelectorAll('.kanban-duration-timer');
+
+       if (timers.length === 0 && durations.length === 0) {
           hasVisibleTimers = false;
           return;
        }
@@ -856,48 +929,28 @@ function updateCountdowns() {
           const deadlineStr = timer.getAttribute('data-deadline');
           if (!deadlineStr) return;
 
-          // Parse YYYY-MM-DD HH:mm:ss format
-          const parts = deadlineStr.split(/[- :]/);
-          const deadline = new Date(
-             parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]),
-             parseInt(parts[3]), parseInt(parts[4]), parseInt(parts[5])
-          ).getTime();
-          const distance = deadline - now;
+          const distance = parseGlpiDateTime(deadlineStr) - now;
+          timer.textContent = formatCountdown(distance);
+          timer.classList.remove('text-muted', 'text-warning', 'text-success');
 
           if (distance < 0) {
-             const overdue = Math.abs(distance);
-             const oDays = Math.floor(overdue / (1000 * 60 * 60 * 24));
-             const oHours = Math.floor((overdue % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-             const oMinutes = Math.floor((overdue % (1000 * 60 * 60)) / (1000 * 60));
-             const oSeconds = Math.floor((overdue % (1000 * 60)) / 1000);
-
-             let timeStr = '-';
-             if (oDays > 0) timeStr += oDays + 'd ';
-             timeStr += String(oHours).padStart(2, '0') + ':' + String(oMinutes).padStart(2, '0') + ':' + String(oSeconds).padStart(2, '0');
-
-             timer.textContent = timeStr;
-             timer.classList.remove('text-muted', 'text-warning', 'text-success');
              timer.classList.add('text-danger');
              return;
           }
 
           const days = Math.floor(distance / (1000 * 60 * 60 * 24));
           const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-          let timeStr = '';
-          if (days > 0) timeStr += days + 'd ';
-          timeStr += String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
-
-          timer.textContent = timeStr;
-
-          timer.classList.remove('text-danger', 'text-warning', 'text-success');
           if (days === 0 && hours < 2) {
              timer.classList.add('text-warning');
           } else {
              timer.classList.add('text-success');
           }
+       });
+
+       durations.forEach(dur => {
+          const createdStr = dur.getAttribute('data-created');
+          if (!createdStr) return;
+          dur.textContent = formatElapsed(now - parseGlpiDateTime(createdStr));
        });
     }
 
@@ -1045,9 +1098,13 @@ function updateCountdowns() {
 
     // Fix timer interval leak - clear existing interval before starting new one
     function startTimerIfNeeded() {
-       if (hasVisibleTimers && !timerInterval) {
+       const needsTimer =
+          document.querySelectorAll('.sla-countdown-timer[data-deadline]').length > 0 ||
+          document.querySelectorAll('.kanban-duration-timer').length > 0;
+
+       if (needsTimer && !timerInterval) {
           timerInterval = setInterval(updateCountdowns, 1000);
-       } else if (!hasVisibleTimers && timerInterval) {
+       } else if (!needsTimer && timerInterval) {
           clearInterval(timerInterval);
           timerInterval = null;
        }

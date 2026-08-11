@@ -221,6 +221,120 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    public function testTypeFilterReturnsOnlyTicketsOfRequestedType(): void
+    {
+        global $DB;
+
+        $t_incident = 0;
+        $t_request = 0;
+
+        try {
+            $t_incident = self::insertKanbanTestTicket('Kanban type filter incident');
+            $t_request = self::insertKanbanTestTicket('Kanban type filter request');
+            $DB->update('glpi_tickets', ['type' => Ticket::DEMAND_TYPE], ['id' => $t_request]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_incident, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_request, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
+            $idsFor = function (array $result) {
+                $ids = [];
+                foreach ($result as $tickets) {
+                    foreach ($tickets as $t) {
+                        $ids[] = (int)$t['id'];
+                    }
+                }
+                return $ids;
+            };
+
+            $incident_ids = $idsFor(PluginKanbanKanban::getTicketsForKanban(['type' => Ticket::INCIDENT_TYPE], [], 100));
+            $this->assertContains($t_incident, $incident_ids, 'Incident tickets must be returned');
+            $this->assertNotContains($t_request, $incident_ids, 'Request tickets must be excluded');
+
+            $request_ids = $idsFor(PluginKanbanKanban::getTicketsForKanban(['type' => Ticket::DEMAND_TYPE], [], 100));
+            $this->assertContains($t_request, $request_ids, 'Request tickets must be returned');
+            $this->assertNotContains($t_incident, $request_ids, 'Incident tickets must be excluded');
+
+            // An invalid type value must be ignored (no restriction applied)
+            $all_ids = $idsFor(PluginKanbanKanban::getTicketsForKanban(['type' => 999], [], 100));
+            $this->assertContains($t_incident, $all_ids, 'Invalid type must not restrict tickets');
+            $this->assertContains($t_request, $all_ids, 'Invalid type must not restrict tickets');
+        } finally {
+            foreach ([$t_incident, $t_request] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+        }
+    }
+
+    public function testCategoryFilterReturnsOnlyTicketsOfRequestedCategory(): void
+    {
+        global $DB;
+
+        $cat_a = 9801;
+        $cat_b = 9802;
+        $t_a = 0;
+        $t_b = 0;
+
+        $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
+
+        try {
+            $DB->insert('glpi_itilcategories', [
+                'id' => $cat_a,
+                'name' => 'Kanban Category A',
+                'completename' => 'Kanban Category A',
+                'entities_id' => 0,
+            ]);
+            $DB->insert('glpi_itilcategories', [
+                'id' => $cat_b,
+                'name' => 'Kanban Category B',
+                'completename' => 'Kanban Category B',
+                'entities_id' => 0,
+            ]);
+
+            $t_a = self::insertKanbanTestTicket('Kanban category filter A');
+            $t_b = self::insertKanbanTestTicket('Kanban category filter B');
+            $DB->update('glpi_tickets', ['itilcategories_id' => $cat_a], ['id' => $t_a]);
+            $DB->update('glpi_tickets', ['itilcategories_id' => $cat_b], ['id' => $t_b]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_a, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+            $DB->insert('glpi_tickets_users', ['tickets_id' => $t_b, 'users_id' => 2, 'type' => CommonITILActor::ASSIGN]);
+
+            $_SESSION['glpiactiveentities'] = [0];
+
+            $idsFor = function (array $result) {
+                $ids = [];
+                foreach ($result as $tickets) {
+                    foreach ($tickets as $t) {
+                        $ids[] = (int)$t['id'];
+                    }
+                }
+                return $ids;
+            };
+
+            $cat_a_ids = $idsFor(PluginKanbanKanban::getTicketsForKanban(['category' => $cat_a], [], 100));
+            $this->assertContains($t_a, $cat_a_ids, 'Tickets of the selected category must be returned');
+            $this->assertNotContains($t_b, $cat_a_ids, 'Tickets of another category must be excluded');
+
+            $cat_b_ids = $idsFor(PluginKanbanKanban::getTicketsForKanban(['category' => $cat_b], [], 100));
+            $this->assertContains($t_b, $cat_b_ids, 'Tickets of the second category must be returned');
+            $this->assertNotContains($t_a, $cat_b_ids, 'Tickets of the first category must be excluded');
+        } finally {
+            foreach ([$t_a, $t_b] as $tid) {
+                if ($tid > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
+                    $DB->delete('glpi_tickets', ['id' => $tid]);
+                }
+            }
+            $DB->delete('glpi_itilcategories', ['id' => [$cat_a, $cat_b]]);
+
+            if ($saved_entities !== null) {
+                $_SESSION['glpiactiveentities'] = $saved_entities;
+            } else {
+                unset($_SESSION['glpiactiveentities']);
+            }
+        }
+    }
+
     public function testSortByPriorityHonorsOrderWithinStatus(): void
     {
         $result = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'priority', 'order' => 'DESC'], 100);

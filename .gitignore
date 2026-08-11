@@ -1,8 +1,10 @@
 .env
 tests/config.php
+.phpunit.result.cache
 .vscode/
 .idea/
 .DS_Store
 vendor/
 node_modules/
 prompt.md
+docker/bin/

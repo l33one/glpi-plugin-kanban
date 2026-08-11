@@ -29,12 +29,14 @@ if (isset($_POST['action']) || isset($_GET['action'])) {
 
 switch ($action) {
        case 'get_tickets':
-          $filters = [
-             'technician' => isset($_GET['technician']) ? (int)$_GET['technician'] : null,
-             'requester'  => isset($_GET['requester']) ? (int)$_GET['requester'] : null,
-             'group'      => isset($_GET['group']) ? (int)$_GET['group'] : null,
-             'ticket_id'  => isset($_GET['ticket_id']) ? $_GET['ticket_id'] : null,
-          ];
+           $filters = [
+              'technician' => isset($_GET['technician']) ? (int)$_GET['technician'] : null,
+              'requester'  => isset($_GET['requester']) ? (int)$_GET['requester'] : null,
+              'group'      => isset($_GET['group']) ? (int)$_GET['group'] : null,
+              'ticket_id'  => isset($_GET['ticket_id']) ? $_GET['ticket_id'] : null,
+              'type'       => isset($_GET['type']) ? (int)$_GET['type'] : null,
+              'category'   => isset($_GET['category']) ? (int)$_GET['category'] : null,
+           ];
           $sort = [
              'by'    => $_GET['sort_by'] ?? 'date',
              'order' => $_GET['sort_order'] ?? 'DESC'
@@ -54,14 +56,15 @@ switch ($action) {
           echo json_encode($detail);
           exit;
 
-       case 'get_filter_data':
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'technicians' => PluginKanbanKanban::getTechniciansForFilter(),
-             'requesters'  => PluginKanbanKanban::getRequestersForFilter(),
-             'groups'      => PluginKanbanKanban::getGroupsForFilter()
-          ]);
-          exit;
+        case 'get_filter_data':
+           header("Content-Type: application/json; charset=UTF-8");
+           echo json_encode([
+              'technicians' => PluginKanbanKanban::getTechniciansForFilter(),
+              'requesters'  => PluginKanbanKanban::getRequestersForFilter(),
+              'groups'      => PluginKanbanKanban::getGroupsForFilter(),
+              'categories'  => PluginKanbanKanban::getCategoriesForFilter()
+           ]);
+           exit;
 
        case 'get_group_technicians':
           $group_id = isset($_GET['group']) ? (int)$_GET['group'] : 0;
@@ -141,6 +144,7 @@ foreach ($glpi_statuses as $id => $name) {
 $technicians = PluginKanbanKanban::getTechniciansForFilter();
 $requesters  = PluginKanbanKanban::getRequestersForFilter();
 $groups      = PluginKanbanKanban::getGroupsForFilter();
+$categories  = PluginKanbanKanban::getCategoriesForFilter();
 
 // Inject JS variables
 echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses) . ";</script>";
@@ -162,12 +166,16 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "showAllColumns" => __("Show all columns", "kanban"),
     "cardFields" => __("Card fields", "kanban"),
     "allTechnicians" => __("All Technicians", "kanban"),
+    "allCategories" => __("All Categories", "kanban"),
     "searchByNumber" => __("Search by ticket number", "kanban"),
     "fieldPriority" => __("Priority", "kanban"),
     "fieldDateCreation" => __("Opening date", "kanban"),
     "fieldCategory" => __("Category", "kanban"),
     "fieldTechnician" => __("Technician", "kanban"),
     "fieldSla" => __("SLA", "kanban"),
+    "fieldDuration" => __("Open duration", "kanban"),
+    "ticketDuration" => __("Open duration", "kanban"),
+    "slaFrozenHint" => __("SLA paused", "kanban"),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
@@ -253,6 +261,26 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                   <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
                   <?php foreach ($groups as $group): ?>
                      <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
+                  <?php endforeach; ?>
+               </select>
+            </div>
+
+            <div class="col-auto kanban-filter-item">
+               <label class="visually-hidden" for="filter-type"><?php echo __('Ticket type', 'kanban'); ?></label>
+               <select class="form-select select2-simple" id="filter-type" name="type" style="min-width: 150px;">
+                  <option value=""><?php echo __('All types', 'kanban'); ?></option>
+                  <?php foreach (Ticket::getTypes() as $type_id => $type_name): ?>
+                     <option value="<?php echo $type_id; ?>"><?php echo $type_name; ?></option>
+                  <?php endforeach; ?>
+               </select>
+            </div>
+
+            <div class="col-auto kanban-filter-item">
+               <label class="visually-hidden" for="filter-category"><?php echo __('Category', 'kanban'); ?></label>
+               <select class="form-select select2-simple" id="filter-category" name="category" style="min-width: 150px;">
+                  <option value=""><?php echo __('All Categories', 'kanban'); ?></option>
+                  <?php foreach ($categories as $category): ?>
+                     <option value="<?php echo $category['id']; ?>"><?php echo $category['name']; ?></option>
                   <?php endforeach; ?>
                </select>
             </div>

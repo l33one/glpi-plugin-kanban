@@ -1,0 +1,48 @@
+name: kanban-glpi10
+
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root_password
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpi_password
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  glpi:
+    image: glpi/glpi:10
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GLPI_DB_HOST: db
+      GLPI_DB_PORT: "3306"
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: glpi_password
+    ports:
+      - "8090:80"
+    volumes:
+      - glpi-files:/var/glpi
+      # Mount the plugin directory for development (hot reload)
+      - ./:/var/www/glpi/plugins/kanban
+    healthcheck:
+      test: ["CMD", "test", "-f", "/var/glpi/config/config_db.php"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+volumes:
+  db-data:
+  glpi-files:

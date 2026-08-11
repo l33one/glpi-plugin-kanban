@@ -37,14 +37,14 @@ class PluginKanbanKanban extends CommonGLPI {
       ];
    }
 
-   /**
-    * Retrieve tickets formatted and filtered for the Kanban board.
-    *
-    * @param array $filters Filters (groups, technicians, requesters)
-    * @param array $sort Sorting criteria (priority, date, status_duration)
-    * @param int $limit Max tickets per status (0 = use default MAX_TICKETS_PER_STATUS)
-    * @return array Tickets grouped by status ID
-    */
+    /**
+     * Retrieve tickets formatted and filtered for the Kanban board.
+     *
+     * @param array $filters Filters (groups, technicians, requesters, category, ...)
+     * @param array $sort Sorting criteria (priority, date, status_duration)
+     * @param int $limit Max tickets per status (0 = use default MAX_TICKETS_PER_STATUS)
+     * @return array Tickets grouped by status ID
+     */
    public static function getTicketsForKanban(array $filters = [], array $sort = [], int $limit = 0) {
       global $DB;
 
@@ -64,12 +64,15 @@ class PluginKanbanKanban extends CommonGLPI {
              't.name AS title',
           't.status',
           't.priority',
+          't.type',
           't.date AS date',
           't.date_creation',
-          't.date_mod',
-          't.time_to_resolve',
-          't.content',
-          'cat.name AS category'
+           't.date_mod',
+           't.time_to_resolve',
+           't.solvedate',
+           't.begin_waiting_date',
+           't.content',
+           'cat.name AS category'
       ],
           'FROM' => 'glpi_tickets AS t',
           'LEFT JOIN' => [
@@ -148,6 +151,30 @@ class PluginKanbanKanban extends CommonGLPI {
          if ($search !== '') {
             $criteria['WHERE']['t.id'] = ['LIKE', '%' . $search . '%'];
          }
+      }
+
+      // Apply Ticket type filter (incident or request)
+      if (!empty($filters['type'])) {
+         $type = (int)$filters['type'];
+         $allowed_types = [
+            defined('Ticket::INCIDENT_TYPE') ? Ticket::INCIDENT_TYPE : Ticket::INCIDENT,
+            defined('Ticket::DEMAND_TYPE') ? Ticket::DEMAND_TYPE : Ticket::DEMAND,
+         ];
+         if (in_array($type, $allowed_types)) {
+            $criteria['WHERE']['t.type'] = $type;
+         }
+      }
+
+      // Apply Category filter (joins nothing extra: glpi_itilcategories is
+      // already LEFT JOINed for the category name). When a category is
+      // selected, include the category and all of its subcategories.
+      if (!empty($filters['category'])) {
+         $category_id = (int)$filters['category'];
+         $category_ids = getSonsOf('glpi_itilcategories', $category_id);
+         if (empty($category_ids)) {
+            $category_ids = [$category_id => $category_id];
+         }
+         $criteria['WHERE']['t.itilcategories_id'] = array_values($category_ids);
       }
 
       // Apply Sorting
@@ -516,6 +543,39 @@ class PluginKanbanKanban extends CommonGLPI {
      }
 
     /**
+     * Get list of categories for the filter dropdown.
+     *
+     * Only the categories of the active entities are returned.
+     *
+     * @return array Array of ['id' => int, 'name' => string]
+     */
+    public static function getCategoriesForFilter(): array {
+       global $DB;
+       $categories = [];
+       $criteria = [
+          'SELECT' => ['id', 'name'],
+          'FROM'   => 'glpi_itilcategories',
+          'ORDER'  => 'name ASC',
+          'LIMIT'  => 500
+       ];
+       if ($DB->fieldExists('glpi_itilcategories', 'is_deleted')) {
+          $criteria['WHERE']['is_deleted'] = 0;
+       }
+       $entity_restriction = getEntitiesRestrictCriteria('glpi_itilcategories', '', $_SESSION['glpiactiveentities'] ?? [0], true);
+       if (!empty($entity_restriction)) {
+          $criteria['WHERE'][] = $entity_restriction;
+       }
+        $iterator = $DB->request($criteria);
+        foreach ($iterator as $category) {
+           $categories[] = [
+              'id'   => (int)$category['id'],
+              'name' => self::unsanitizeOutput($category['name'])
+           ];
+        }
+        return $categories;
+     }
+
+    /**
      * Fetch technicians assigned to a specific ticket
      *
      * @param int $ticket_id
@@ -606,12 +666,15 @@ class PluginKanbanKanban extends CommonGLPI {
              't.content',
              't.status',
              't.priority',
+             't.type',
              't.urgency',
              't.impact',
              't.date AS date_creation',
-             't.date_mod',
-             't.time_to_resolve',
-             't.actiontime',
+              't.date_mod',
+              't.time_to_resolve',
+              't.solvedate',
+              't.begin_waiting_date',
+              't.actiontime',
              'cat.name AS category',
              't.entities_id'
           ],
@@ -674,12 +737,23 @@ class PluginKanbanKanban extends CommonGLPI {
    /**
     * Calculate SLA progress percentage and color class
     *
+    * The SLA clock only runs while a ticket is actually being worked on:
+    *  - solved/closed tickets stop counting at the resolution time (solvedate);
+    *  - pending (waiting) tickets stop counting while they are waiting, the
+    *    clock resumes from where it stopped when the ticket leaves pending;
+    *  - every other status keeps counting in real time.
+    *
+    * When the clock is stopped, the returned payload is flagged as "frozen"
+    * and carries the frozen reference timestamp so the frontend can display a
+    * static bar/countdown (while the ticket's open duration keeps running).
+    *
     * @param array $ticket
-    * @return array ['percent' => int, 'color' => string]
+    * @return array ['percent' => int, 'color' => string, 'status' => string,
+    *                'frozen' => bool, 'frozen_at' => string|null]
     */
    private static function calculateSlaProgress(array $ticket) {
       if (empty($ticket['time_to_resolve'])) {
-         return ['percent' => 0, 'color' => 'success', 'status' => 'no_sla'];
+         return ['percent' => 0, 'color' => 'success', 'status' => 'no_sla', 'frozen' => false, 'frozen_at' => null];
       }
 
       // Use GLPI's internal current time session to avoid timezone mismatch
@@ -687,12 +761,39 @@ class PluginKanbanKanban extends CommonGLPI {
       $created = strtotime($ticket['date_creation']);
       $deadline = strtotime($ticket['time_to_resolve']);
 
+      // Reference timestamp used to compute the elapsed time. Defaults to now.
+      $reference = $now;
+      $frozen = false;
+
+      $status = (int)($ticket['status'] ?? 0);
+      if (in_array($status, [Ticket::SOLVED, Ticket::CLOSED])) {
+         // Frozen at the resolution time (fallback to the last modification).
+         $freeze = self::getFreezeReference($ticket, ['solvedate', 'date_mod']);
+         if ($freeze !== null) {
+            $reference = $freeze;
+            $frozen = true;
+         }
+      } elseif ($status === Ticket::WAITING) {
+         // SLA is paused while the ticket is pending.
+         $freeze = self::getFreezeReference($ticket, ['begin_waiting_date']);
+         if ($freeze !== null) {
+            $reference = $freeze;
+            $frozen = true;
+         }
+      }
+
       if ($deadline <= $created) {
-         return ['percent' => 100, 'color' => 'danger', 'status' => 'overdue'];
+         return [
+            'percent' => 100,
+            'color'   => 'danger',
+            'status'  => 'overdue',
+            'frozen'  => $frozen,
+            'frozen_at' => $frozen ? date('Y-m-d H:i:s', $reference) : null,
+         ];
       }
 
       $total_sla = $deadline - $created;
-      $elapsed = $now - $created;
+      $elapsed = $reference - $created;
 
       if ($elapsed < 0) {
          $elapsed = 0;
@@ -708,11 +809,34 @@ class PluginKanbanKanban extends CommonGLPI {
          $color = 'warning';
       }
 
-return [
-          'percent' => $percent,
-          'color'   => $color,
-          'status'  => $percent >= 100 ? 'overdue' : 'active'
-       ];
+      return [
+         'percent' => $percent,
+         'color'   => $color,
+         'status'  => $percent >= 100 ? 'overdue' : 'active',
+         'frozen'  => $frozen,
+         'frozen_at' => $frozen ? date('Y-m-d H:i:s', $reference) : null,
+      ];
+   }
+
+   /**
+    * Resolve the timestamp at which the SLA clock stopped.
+    *
+    * The first non-empty, parseable datetime of the given fields wins.
+    *
+    * @param array $ticket
+    * @param string[] $fields
+    * @return int|null Unix timestamp, or null when no usable value exists
+    */
+   private static function getFreezeReference(array $ticket, array $fields): ?int {
+      foreach ($fields as $field) {
+         if (!empty($ticket[$field])) {
+            $ts = strtotime($ticket[$field]);
+            if ($ts > 0) {
+               return $ts;
+            }
+         }
+      }
+      return null;
    }
 
    /**
