@@ -1114,7 +1114,24 @@ function updateCountdowns() {
 // Initialization
 // =============================================
 
+/**
+ * Apply the kanban-theme-dark class when GLPI's native theme is dark.
+ * GLPI 11 sets <html data-glpi-theme-dark="1">, GLPI 10 exposes the --is-dark
+ * CSS variable on :root. Idempotent with the inline script in the page.
+ */
+function applyNativeTheme() {
+   const wrapper = document.querySelector('.kanban-page-wrapper');
+   if (!wrapper) return;
+
+   let dark = document.documentElement.getAttribute('data-glpi-theme-dark');
+   if (dark !== '1' && dark !== '0') {
+      dark = getComputedStyle(document.documentElement).getPropertyValue('--is-dark').trim() === 'true' ? '1' : '0';
+   }
+   wrapper.classList.toggle('kanban-theme-dark', dark === '1');
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+   applyNativeTheme();
    renderBoardColumns();
    populateColumnsMenu();
    populateCardFieldsMenu();

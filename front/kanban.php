@@ -190,6 +190,23 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
 ?>
 
 <div class="kanban-page-wrapper container-fluid py-4">
+   <script>
+      (function () {
+         // Follow GLPI's native theme: dark when GLPI is dark.
+         // GLPI 11 flags it on <html data-glpi-theme-dark="1">, GLPI 10 exposes
+         // the --is-dark CSS variable on :root.
+         var dark = document.documentElement.getAttribute('data-glpi-theme-dark');
+         if (dark !== '1' && dark !== '0') {
+            dark = getComputedStyle(document.documentElement).getPropertyValue('--is-dark').trim() === 'true' ? '1' : '0';
+         }
+         if (dark === '1') {
+            var wrapper = document.querySelector('.kanban-page-wrapper');
+            if (wrapper) {
+               wrapper.classList.add('kanban-theme-dark');
+            }
+         }
+      })();
+   </script>
    <!-- Header and Filters -->
    <div class="row mb-4 g-3 align-items-center">
       <div class="col-12 col-lg-5 col-xxl-4 d-flex flex-wrap align-items-center gap-2 gap-lg-3">
