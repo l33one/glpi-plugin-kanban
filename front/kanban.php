@@ -311,7 +311,9 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                <li><a class="dropdown-item active" href="#" data-interval="0"><?php echo __('Off', 'kanban'); ?></a></li>
                <?php
                // Get available refresh options from config (default: 1,2,3 min)
-               $refresh_opts = PluginKanbanConfig::getRefreshOptions();
+               $refresh_opts = class_exists('PluginKanbanConfig')
+                  ? PluginKanbanConfig::getRefreshOptions()
+                  : [1, 2, 3];
                foreach ($refresh_opts as $mins) {
                   $label = $mins . ' min';
                   echo '<li><a class="dropdown-item" href="#" data-interval="' . ($mins * 60) . '">' . htmlspecialchars($label) . '</a></li>';

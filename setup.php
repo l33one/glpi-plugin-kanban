@@ -64,14 +64,23 @@ function plugin_init_kanban() {
       // Declare that this plugin does not use custom database tables
       $PLUGIN_HOOKS['use_tables']['kanban'] = [];
 
+      // Set the plugin version constant (must be before registerClass to avoid
+      // breaking the plugin init if a class fails to load).
+      $PLUGIN_HOOKS['plugin_version']['kanban'] = PLUGIN_KANBAN_VERSION;
+
       // Register the profile tab so the Kanban view right can be configured per profile
-      Plugin::registerClass('PluginKanbanProfile', ['addtabon' => ['Profile']]);
+      try {
+         Plugin::registerClass('PluginKanbanProfile', ['addtabon' => ['Profile']]);
+      } catch (\Throwable $e) {
+         // Non-fatal: profile tab won't work but the board will still load
+      }
 
       // Register the config class
-      Plugin::registerClass('PluginKanbanConfig');
-
-      // Set the plugin version constant
-      $PLUGIN_HOOKS['plugin_version']['kanban'] = PLUGIN_KANBAN_VERSION;
+      try {
+         Plugin::registerClass('PluginKanbanConfig');
+      } catch (\Throwable $e) {
+         // Non-fatal: config page won't work but the board will still load
+      }
    }
 }
 
