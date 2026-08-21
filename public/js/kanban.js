@@ -4,12 +4,20 @@
 (function () {
    'use strict';
 
-   // Cache DOM references
-   const filterForm = document.getElementById('kanban-filter-form');
-   const boardContainer = document.getElementById('kanban-board');
-   const loadingOverlay = document.getElementById('kanban-loading-overlay');
-   const csrfInput = document.querySelector('input[name="_glpi_csrf_token"]');
-   let csrfToken = csrfInput ? csrfInput.value : '';
+   // Lazy DOM references – resolved on first access so the script can load
+   // from <head> (via $PLUGIN_HOOKS['add_javascript']) without needing the
+   // body elements to exist yet.
+   var _filterForm = undefined, _boardContainer = undefined, _loadingOverlay = undefined, _csrfToken = undefined;
+   function getFilterForm()      { if (_filterForm === undefined || (_filterForm === null && document.getElementById('kanban-filter-form'))) _filterForm = document.getElementById('kanban-filter-form'); return _filterForm; }
+   function getBoardContainer()  { if (_boardContainer === undefined || (_boardContainer === null && document.getElementById('kanban-board'))) _boardContainer = document.getElementById('kanban-board'); return _boardContainer; }
+   function getLoadingOverlay()  { if (_loadingOverlay === undefined || (_loadingOverlay === null && document.getElementById('kanban-loading-overlay'))) _loadingOverlay = document.getElementById('kanban-loading-overlay'); return _loadingOverlay; }
+   function getCsrfToken() {
+      if (_csrfToken === undefined || _csrfToken === '') {
+         var el = document.querySelector('input[name="_glpi_csrf_token"]');
+         if (el) _csrfToken = el.value;
+      }
+      return _csrfToken || '';
+   }
 
 // State
 let timerInterval = null;
@@ -105,15 +113,13 @@ function saveHiddenColumns() {
     * Show/hide loading overlay
     */
    function showLoading() {
-      if (loadingOverlay) {
-         loadingOverlay.style.display = 'flex';
-      }
+       var lo = getLoadingOverlay();
+       if (lo) { lo.style.display = 'flex'; }
    }
 
    function hideLoading() {
-      if (loadingOverlay) {
-         loadingOverlay.style.display = 'none';
-      }
+       var lo = getLoadingOverlay();
+       if (lo) { lo.style.display = 'none'; }
    }
 
     /**
@@ -174,7 +180,7 @@ function getStatusColorStyle(si) {
    return si.filled ? 'font-weight: 900; color: ' + color + ';' : 'font-weight: 400; border: 2px solid ' + color + '; border-radius: 50%;';
 }
 function renderBoardColumns() {
-       if (!boardContainer) return;
+       if (!getBoardContainer()) return;
 
        const statuses = window.KANBAN_STATUSES || {
           1: { name: 'New', color: 'primary' },
@@ -220,7 +226,7 @@ function renderBoardColumns() {
              </div>
           `;
        }
-       boardContainer.innerHTML = boardHtml;
+       getBoardContainer().innerHTML = boardHtml;
 
        // Populate sort dropdowns with translated labels
        const sortOptions = window.KANBAN_SORT_OPTIONS || {};
@@ -258,7 +264,7 @@ function renderBoardColumns() {
         });
 
        // Attach sort listeners using event delegation
-       boardContainer.addEventListener('click', function(e) {
+        getBoardContainer().addEventListener('click', function(e) {
           const hideBtn = e.target.closest('.kanban-hide-btn');
           if (hideBtn) {
              e.preventDefault();
@@ -605,18 +611,18 @@ const checkbox = document.createElement('input');
     /**
      * Quick action: assign the current user as technician to a ticket.
      */
-    function assignTicketToMe(ticketId) {
-       const body = new URLSearchParams();
-       body.append('action', 'assign_to_me');
-       body.append('ticket_id', ticketId);
-      if (csrfToken) body.append('_glpi_csrf_token', csrfToken);
+     function assignTicketToMe(ticketId) {
+        const body = new URLSearchParams();
+        body.append('action', 'assign_to_me');
+        body.append('ticket_id', ticketId);
+       if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
 
-       fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-          .then(r => r.json())
-          .then(res => {
-             if (res && res.csrf_token) {
-                csrfToken = res.csrf_token;
-             }
+        fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+           .then(r => r.json())
+           .then(res => {
+              if (res && res.csrf_token) {
+                 _csrfToken = res.csrf_token;
+              }
              const result = res && res.result ? res.result : res;
              if (result && result.success) {
                 showToast(lang.assigned + ' #' + ticketId, 'success');
@@ -669,19 +675,19 @@ const checkbox = document.createElement('input');
     /**
      * Quick action: change the priority of a ticket.
      */
-    function setTicketPriority(ticketId, priority) {
-       const body = new URLSearchParams();
-       body.append('action', 'change_priority');
-       body.append('ticket_id', ticketId);
-       body.append('priority', priority);
-      if (csrfToken) body.append('_glpi_csrf_token', csrfToken);
+     function setTicketPriority(ticketId, priority) {
+        const body = new URLSearchParams();
+        body.append('action', 'change_priority');
+        body.append('ticket_id', ticketId);
+        body.append('priority', priority);
+       if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
 
-       fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-          .then(r => r.json())
-          .then(res => {
-             if (res && res.csrf_token) {
-                csrfToken = res.csrf_token;
-             }
+        fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+           .then(r => r.json())
+           .then(res => {
+              if (res && res.csrf_token) {
+                 _csrfToken = res.csrf_token;
+              }
              const result = res && res.result ? res.result : res;
              if (result && result.success) {
                 showToast(lang.saved, 'success');
@@ -713,7 +719,7 @@ const checkbox = document.createElement('input');
     * Fetch and render tickets via AJAX
     */
 function loadTickets() {
-       if (!filterForm) return;
+        if (!getFilterForm()) return;
 
        // Clear existing timer to prevent leaks
        if (timerInterval) {
@@ -724,7 +730,7 @@ function loadTickets() {
 
        showLoading();
 
-       const formData = new FormData(filterForm);
+        const formData = new FormData(getFilterForm());
        const params = new URLSearchParams();
        params.append('action', 'get_tickets');
        params.append('_t', Date.now());
@@ -1131,9 +1137,9 @@ function createCardElement(ticket) {
       filterDebounceTimer = setTimeout(loadTickets, 300);
    }
 
-   if (filterForm) {
-      // Secondary selects: refresh filters and keep the active-count badge in sync
-      filterForm.querySelectorAll('select').forEach(select => {
+    if (getFilterForm()) {
+       // Secondary selects: refresh filters and keep the active-count badge in sync
+       getFilterForm().querySelectorAll('select').forEach(select => {
          select.addEventListener('change', function () {
             updateAdvancedFilterCount();
             debouncedLoadTickets();
@@ -1159,7 +1165,7 @@ function createCardElement(ticket) {
    const clearBtn = document.getElementById('kanban-clear-filters-btn');
    if (clearBtn) {
       clearBtn.addEventListener('click', function () {
-         if (filterForm) filterForm.reset();
+          if (getFilterForm()) getFilterForm().reset();
          if (searchInput) searchInput.value = '';
          updateAdvancedFilterCount();
          loadTickets();

@@ -30,9 +30,9 @@
    background:
       radial-gradient(at top left, rgba(59, 130, 246, 0.05), transparent 45%),
       radial-gradient(at top right, rgba(20, 184, 166, 0.05), transparent 45%),
-      var(--kanban-bg);
-   min-height: 90vh;
-   overflow-x: hidden;
+      var(--kanban-bg) !important;
+   min-height: 90vh !important;
+   overflow-x: hidden !important;
 }
 
 /* Dark theme override (applied when GLPI's native theme is dark).
@@ -67,17 +67,17 @@
  * Highlights the plugin name with a high-contrast band that stays legible on
  * light themes regardless of GLPI's accent (e.g. the yellow "auror" primary). */
 .kanban-titlebar {
-   display: flex;
-   align-items: center;
-   justify-content: space-between;
-   flex-wrap: wrap;
-   gap: 0.6rem 1rem;
-   padding: 0.85rem 1.15rem;
-   border-radius: 0.9rem;
-   margin-bottom: 1rem;
-   background: linear-gradient(120deg, #1e3a8a 0%, #2563eb 60%, #1d4ed8 100%);
-   color: #ffffff;
-   box-shadow: 0 1px 3px rgba(30, 41, 59, 0.18);
+   display: flex !important;
+   align-items: center !important;
+   justify-content: space-between !important;
+   flex-wrap: wrap !important;
+   gap: 0.6rem 1rem !important;
+   padding: 0.85rem 1.15rem !important;
+   border-radius: 0.9rem !important;
+   margin-bottom: 1rem !important;
+   background: linear-gradient(120deg, #1e3a8a 0%, #2563eb 60%, #1d4ed8 100%) !important;
+   color: #ffffff !important;
+   box-shadow: 0 1px 3px rgba(30, 41, 59, 0.18) !important;
 }
 
 .kanban-titlebar-left {
@@ -88,14 +88,14 @@
 }
 
 .kanban-titlebar-title {
-   display: inline-flex;
-   align-items: center;
-   gap: 0.5rem;
-   margin: 0;
-   font-size: 1.35rem;
-   font-weight: 700;
-   letter-spacing: -0.02em;
-   color: #ffffff;
+   display: inline-flex !important;
+   align-items: center !important;
+   gap: 0.5rem !important;
+   margin: 0 !important;
+   font-size: 1.35rem !important;
+   font-weight: 700 !important;
+   letter-spacing: -0.02em !important;
+   color: #ffffff !important;
 }
 
 .kanban-titlebar-title i {
@@ -127,12 +127,12 @@
 
 /* ===== Board Container ===== */
 .kanban-board-container {
-   display: flex;
-   gap: 1.25rem;
-   align-items: flex-start;
-   padding: 0.25rem 1rem 1.5rem;
-   overflow-x: auto;
-   scroll-behavior: smooth;
+   display: flex !important;
+   gap: 1.25rem !important;
+   align-items: flex-start !important;
+   padding: 0.25rem 1rem 1.5rem !important;
+   overflow-x: auto !important;
+   scroll-behavior: smooth !important;
 }
 
 #kanban-board {
@@ -166,19 +166,19 @@
    --status-color-soft: rgba(100, 116, 139, 0.12);
    --status-color-faint: rgba(100, 116, 139, 0.05);
 
-   background: var(--kanban-surface);
-   border: 1px solid var(--kanban-border);
-   border-radius: 0.875rem;
-   width: 320px;
-   flex-shrink: 0;
-   display: flex;
-   flex-direction: column;
-   min-height: 560px;
-   max-height: calc(100vh - 180px);
-   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
-   position: relative;
-   overflow: hidden;
-   transition: box-shadow 0.25s ease, transform 0.25s ease;
+   background: var(--kanban-surface) !important;
+   border: 1px solid var(--kanban-border) !important;
+   border-radius: 0.875rem !important;
+   width: 320px !important;
+   flex-shrink: 0 !important;
+   display: flex !important;
+   flex-direction: column !important;
+   min-height: 560px !important;
+   max-height: calc(100vh - 180px) !important;
+   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06) !important;
+   position: relative !important;
+   overflow: hidden !important;
+   transition: box-shadow 0.25s ease, transform 0.25s ease !important;
 }
 
 .kanban-column::before {
@@ -202,9 +202,9 @@
 .status-closed   { --status-color: #64748b; --status-color-soft: rgba(100, 116, 139, 0.12); --status-color-faint: rgba(100, 116, 139, 0.05); }
 
 .kanban-column-header {
-   padding: 0.85rem 1rem;
-   border-bottom: 1px solid var(--kanban-border-subtle);
-   background: linear-gradient(180deg, var(--status-color-faint) 0%, transparent 100%);
+   padding: 0.85rem 1rem !important;
+   border-bottom: 1px solid var(--kanban-border-subtle) !important;
+   background: linear-gradient(180deg, var(--status-color-faint) 0%, transparent 100%) !important;
 }
 
 .kanban-column-header h5 {
@@ -353,13 +353,13 @@
 
 /* ===== Dropzone ===== */
 .kanban-cards-dropzone {
-   flex-grow: 1;
-   overflow-y: auto;
-   min-height: 420px;
-   padding: 0.75rem 0.75rem 1rem;
-   background-image: radial-gradient(rgba(100, 116, 139, 0.08) 1px, transparent 1px);
-   background-size: 18px 18px;
-   transition: background-color 0.2s ease;
+   flex-grow: 1 !important;
+   overflow-y: auto !important;
+   min-height: 420px !important;
+   padding: 0.75rem 0.75rem 1rem !important;
+   background-image: radial-gradient(rgba(100, 116, 139, 0.08) 1px, transparent 1px) !important;
+   background-size: 18px 18px !important;
+   transition: background-color 0.2s ease !important;
 }
 
 /* ===== Hidden columns ===== */
@@ -516,14 +516,14 @@
 /* ===== Kanban Cards ===== */
 .kanban-card {
    --accent: var(--kanban-primary);
-   background: var(--kanban-surface);
-   border: 1px solid var(--kanban-border);
-   border-left: 4px solid var(--accent);
-   border-radius: 0.625rem;
-   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
-   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-   cursor: default;
-   animation: kanbanCardIn 0.3s ease both;
+   background: var(--kanban-surface) !important;
+   border: 1px solid var(--kanban-border) !important;
+   border-left: 4px solid var(--accent) !important;
+   border-radius: 0.625rem !important;
+   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05) !important;
+   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease !important;
+   cursor: default !important;
+   animation: kanbanCardIn 0.3s ease both !important;
 }
 
 .kanban-card:hover {
@@ -903,15 +903,15 @@ a:focus-visible,
 
 /* ===== Metrics bar (gestão à vista) ===== */
 #kanban-metrics .kanban-metric {
-   display: flex;
-   align-items: center;
-   gap: 0.75rem;
-   background: var(--kanban-surface);
-   border: 1px solid var(--kanban-border);
-   border-radius: 0.75rem;
-   padding: 0.7rem 0.9rem;
-   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
-   height: 100%;
+   display: flex !important;
+   align-items: center !important;
+   gap: 0.75rem !important;
+   background: var(--kanban-surface) !important;
+   border: 1px solid var(--kanban-border) !important;
+   border-radius: 0.75rem !important;
+   padding: 0.7rem 0.9rem !important;
+   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05) !important;
+   height: 100% !important;
 }
 
 #kanban-metrics .kanban-metric-icon {

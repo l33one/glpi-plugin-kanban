@@ -64,7 +64,14 @@ class PluginKanbanConfig extends CommonGLPI {
       $error = '';
 
       if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['kanban_config'])) {
-         if (!Session::checkCSRF($_POST)) {
+         // Validate CSRF token manually – do NOT call Session::checkCSRF()
+         // because it calls Html::showErrorAndDie() on failure (showing a
+         // generic "ação não permitida" instead of our custom message).
+         $csrfOk = isset($_POST['_glpi_csrf_token'])
+                   && isset($_SESSION['glpi_csrf_token'])
+                   && $_POST['_glpi_csrf_token'] === $_SESSION['glpi_csrf_token'];
+
+         if (!$csrfOk) {
             $error = __('Invalid CSRF token', 'kanban');
          } else {
             $refresh_raw = $_POST['refresh_options'] ?? '';
