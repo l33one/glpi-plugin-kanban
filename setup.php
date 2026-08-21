@@ -50,7 +50,12 @@ function plugin_init_kanban() {
 
    if (Plugin::isPluginActive('kanban')) {
       // Register the plugin under the Helpdesk menu
-      $PLUGIN_HOOKS['menu_toadd']['kanban'] = ['helpdesk' => 'PluginKanbanMenu'];
+      $PLUGIN_HOOKS['menu_toadd']['kanban'] = [
+         'helpdesk' => 'PluginKanbanMenu',
+      ];
+
+      // Register the plugin under the Setup menu for configuration
+      $PLUGIN_HOOKS['menu_toadd']['kanban']['config'] = 'PluginKanbanConfig';
 
       // Load CSS and JS assets in the plugin page
       $PLUGIN_HOOKS['add_css']['kanban']      = ['public/css/kanban.css'];
@@ -61,6 +66,9 @@ function plugin_init_kanban() {
 
       // Register the profile tab so the Kanban view right can be configured per profile
       Plugin::registerClass('PluginKanbanProfile', ['addtabon' => ['Profile']]);
+
+      // Register the config class
+      Plugin::registerClass('PluginKanbanConfig');
 
       // Set the plugin version constant
       $PLUGIN_HOOKS['plugin_version']['kanban'] = PLUGIN_KANBAN_VERSION;

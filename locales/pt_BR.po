@@ -1,0 +1,272 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kanban\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Advanced Filters"
+msgstr "Filtros avançados"
+
+msgid "All Categories"
+msgstr "Todas as categorias"
+
+msgid "All Groups"
+msgstr "Todos os grupos"
+
+msgid "All Requesters"
+msgstr "Todos os solicitantes"
+
+msgid "All Technicians"
+msgstr "Todos os técnicos"
+
+msgid "All types"
+msgstr "Todos os tipos"
+
+msgid "Assign to me"
+msgstr "Atribuir a mim"
+
+msgid "Assigned"
+msgstr "Atribuído"
+
+msgid "Assigned to me"
+msgstr "Atribuídos a mim"
+
+msgid "Board indicators"
+msgstr "Indicadores do quadro"
+
+msgid "Card fields"
+msgstr "Campos do cartão"
+
+msgid "Category"
+msgstr "Categoria"
+
+msgid "Change priority"
+msgstr "Alterar prioridade"
+
+msgid "Clear"
+msgstr "Limpar"
+
+msgid "Close"
+msgstr "Fechar"
+
+msgid "Columns"
+msgstr "Colunas"
+
+msgid "Could not assign ticket"
+msgstr "Não foi possível atribuir o chamado"
+
+msgid "Could not update priority"
+msgstr "Não foi possível atualizar a prioridade"
+
+msgid "Critical today"
+msgstr "Críticos hoje"
+
+msgid "Date Open (Newest first)"
+msgstr "Data de abertura (mais recente primeiro)"
+
+msgid "Date Open (Oldest first)"
+msgstr "Data de abertura (mais antigo primeiro)"
+
+msgid "Fields"
+msgstr "Campos"
+
+msgid "Group"
+msgstr "Grupo"
+
+msgid "Hide column"
+msgstr "Ocultar coluna"
+
+msgid "High"
+msgstr "Alta"
+
+msgid "in X d"
+msgstr "em X d"
+
+msgid "Invalid request"
+msgstr "Solicitação inválida"
+
+msgid "just now"
+msgstr "agora mesmo"
+
+msgid "Kanban"
+msgstr "Kanban"
+
+msgid "Kanban Board"
+msgstr "Quadro Kanban"
+
+msgid "Kanban board"
+msgstr "Quadro kanban"
+
+msgid "List follow-ups"
+msgstr "Listar acompanhamentos"
+
+msgid "Loading..."
+msgstr "Carregando..."
+
+msgid "Low"
+msgstr "Baixa"
+
+msgid "Major"
+msgstr "Crítica"
+
+msgid "New Ticket"
+msgstr "Novo chamado"
+
+msgid "No Category"
+msgstr "Sem categoria"
+
+msgid "No follow-ups for this ticket"
+msgstr "Sem acompanhamentos para este chamado"
+
+msgid "No tickets"
+msgstr "Nenhum chamado"
+
+msgid "Normal"
+msgstr "Média"
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Open duration"
+msgstr "Duração em aberto"
+
+msgid "Open in GLPI"
+msgstr "Abrir no GLPI"
+
+msgid "Opening date"
+msgstr "Data de abertura"
+
+msgid "Permission denied"
+msgstr "Permissão negada"
+
+msgid "Priority"
+msgstr "Prioridade"
+
+msgid "Priority (High to Low)"
+msgstr "Prioridade (maior para menor)"
+
+msgid "Priority (Low to High)"
+msgstr "Prioridade (menor para maior)"
+
+msgid "Quick actions"
+msgstr "Ações rápidas"
+
+msgid "Refresh"
+msgstr "Atualizar"
+
+msgid "Requester"
+msgstr "Solicitante"
+
+msgid "Saved"
+msgstr "Salvo"
+
+msgid "Search by ticket number"
+msgstr "Buscar por número do chamado"
+
+msgid "Search: number, title, category, description..."
+msgstr "Buscar: número, título, categoria, descrição..."
+
+msgid "Show / hide columns"
+msgstr "Mostrar / ocultar colunas"
+
+msgid "Show all columns"
+msgstr "Mostrar todas as colunas"
+
+msgid "Show column"
+msgstr "Mostrar coluna"
+
+msgid "Skip to board"
+msgstr "Pular para o quadro"
+
+msgid "SLA"
+msgstr "SLA"
+
+msgid "SLA (Closest to expiry first)"
+msgstr "SLA (mais próximo do vencimento primeiro)"
+
+msgid "SLA (Farthest from expiry first)"
+msgstr "SLA (mais distante do vencimento primeiro)"
+
+msgid "SLA overdue"
+msgstr "SLA em atraso"
+
+msgid "SLA paused"
+msgstr "SLA pausado"
+
+msgid "Sort by"
+msgstr "Ordenar por"
+
+msgid "Sort via column dropdowns"
+msgstr "Ordenar pelos menus das colunas"
+
+msgid "Technician"
+msgstr "Técnico"
+
+msgid "The plugin directory must be named \"kanban\""
+msgstr "O diretório do plugin deve se chamar \"kanban\""
+
+msgid "Ticket Details"
+msgstr "Detalhes do chamado"
+
+msgid "Ticket follow-ups"
+msgstr "Acompanhamentos do chamado"
+
+msgid "Ticket not found"
+msgstr "Chamado não encontrado"
+
+msgid "Ticket type"
+msgstr "Tipo de chamado"
+
+msgid "Time in Status (Longest first)"
+msgstr "Tempo no status (mais longo primeiro)"
+
+msgid "Time in Status (Shortest first)"
+msgstr "Tempo no status (mais curto primeiro)"
+
+msgid "Today"
+msgstr "Hoje"
+
+msgid "Tomorrow"
+msgstr "Amanhã"
+
+msgid "Total tickets"
+msgstr "Total de chamados"
+
+msgid "Unassigned"
+msgstr "Sem técnico"
+
+msgid "Unknown"
+msgstr "Desconhecido"
+
+msgid "Unknown status"
+msgstr "Status desconhecido"
+
+msgid "Very High"
+msgstr "Muito alta"
+
+msgid "Very Low"
+msgstr "Muito baixa"
+
+msgid "View the kanban board"
+msgstr "Visualizar o quadro kanban"
+
+msgid "Visible tickets"
+msgstr "Chamados visíveis"
+
+msgid "Within SLA"
+msgstr "Dentro do SLA"
+
+msgid "X d ago"
+msgstr "há X d"
+
+msgid "X h ago"
+msgstr "há X h"
+
+msgid "X min ago"
+msgstr "há X min"
+
+msgid "Yesterday"
+msgstr "Ontem"

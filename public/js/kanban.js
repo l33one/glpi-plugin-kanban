@@ -16,7 +16,10 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
-const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', searchByNumber: 'Search by ticket number', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused' };
+const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', searchByNumber: 'Search by ticket number', searchPlaceholder: 'Search...', advancedFilters: 'Advanced Filters', assignedToMe: 'Assigned to me', clearFilters: 'Clear', quickActions: 'Quick actions', assignToMe: 'Assign to me', listFollowups: 'List follow-ups', changePriority: 'Change priority', followupsTitle: 'Follow-ups', noFollowups: 'No follow-ups', metricTotal: 'Visible tickets', metricSlaOnTime: 'Within SLA', metricSlaOverdue: 'SLA overdue', metricAssignedToMe: 'Assigned to me', metricUnassigned: 'Unassigned', saved: 'Saved', assigned: 'Assigned', justNow: 'just now', minutesAgo: 'X min ago', hoursAgo: 'X h ago', daysAgo: 'X d ago', today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', inDays: 'in X d', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused' };
+
+// Current logged-in user (id + name), injected server-side
+const currentUser = window.KANBAN_CURRENT_USER || { id: 0, name: '' };
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
@@ -113,14 +116,53 @@ function saveHiddenColumns() {
       }
    }
 
-   /**
-    * Escape HTML entities
-    */
-   function escapeHtml(str) {
-      if (!str) return '';
-      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
-      return str.replace(/[&<>'"]/g, tag => map[tag] || tag);
-   }
+    /**
+     * Escape HTML entities
+     */
+    function escapeHtml(str) {
+       if (!str) return '';
+       const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
+       return str.replace(/[&<>'"]/g, tag => map[tag] || tag);
+    }
+
+    /**
+     * Sanitize HTML content by stripping dangerous tags and attributes.
+     * Allows safe formatting tags (p, br, b, i, u, strong, em, a, ul, ol, li, etc.)
+     * while removing script, iframe, object, embed, form, and event handler attributes.
+     */
+    function sanitizeHtml(html) {
+       if (!html) return '';
+       const tmp = document.createElement('div');
+       tmp.innerHTML = html;
+       const dangerousTags = /script|iframe|object|embed|form|input|textarea|select|button|style|link|meta|base/i;
+       const eventAttrs = /^on/i;
+       const walk = (node) => {
+          const children = Array.from(node.childNodes);
+          for (const child of children) {
+             if (child.nodeType === 1) {
+                if (dangerousTags.test(child.tagName)) {
+                   child.remove();
+                   continue;
+                }
+                const attrs = Array.from(child.attributes);
+                for (const attr of attrs) {
+                   if (eventAttrs.test(attr.name)) {
+                      child.removeAttribute(attr.name);
+                   }
+                   if (attr.name === 'href' || attr.name === 'src') {
+                      const val = (attr.value || '').trim().toLowerCase();
+                      if (val.startsWith('javascript:') || val.startsWith('data:')) {
+                         child.removeAttribute(attr.name);
+                      }
+                   }
+                }
+                walk(child);
+             }
+          }
+       };
+       walk(tmp);
+       return tmp.innerHTML;
+    }
 
    /**
     * Render the Kanban Board structure initially
@@ -326,11 +368,20 @@ function renderBoardColumns() {
           label.className = 'dropdown-item kanban-column-toggle';
           label.setAttribute('data-status-id', id);
 
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = !hiddenColumns.has(id);
+const checkbox = document.createElement('input');
+           checkbox.type = 'checkbox';
+           checkbox.checked = !hiddenColumns.has(id);
+           checkbox.addEventListener('change', function () {
+              if (this.checked) {
+                 hiddenColumns.delete(id);
+              } else {
+                 hiddenColumns.add(id);
+              }
+              saveHiddenColumns();
+              applyColumnVisibility();
+           });
 
-          const dot = document.createElement('span');
+           const dot = document.createElement('span');
           dot.className = 'status-dot';
           dot.style.backgroundColor = bootstrapColorMap[status.color] || '#6c757d';
 
@@ -379,11 +430,20 @@ function renderBoardColumns() {
           label.className = 'dropdown-item kanban-field-toggle';
           label.setAttribute('data-field', key);
 
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.checked = !hiddenCardFields.has(key);
+const checkbox = document.createElement('input');
+           checkbox.type = 'checkbox';
+           checkbox.checked = !hiddenCardFields.has(key);
+           checkbox.addEventListener('change', function () {
+              if (this.checked) {
+                 hiddenCardFields.delete(key);
+              } else {
+                 hiddenCardFields.add(key);
+              }
+              saveHiddenCardFields();
+              rerenderCards();
+           });
 
-          const icon = document.createElement('i');
+           const icon = document.createElement('i');
           icon.className = 'ti ' + (field.icon || 'ti-info-circle');
 
           const name = document.createElement('span');
@@ -395,33 +455,6 @@ function renderBoardColumns() {
           li.appendChild(label);
           menu.appendChild(li);
        }
-    }
-
-    /**
-     * Toggle the visibility of a card field and re-render the board.
-     */
-    function toggleCardField(field) {
-       if (!field) return;
-       if (hiddenCardFields.has(field)) {
-          hiddenCardFields.delete(field);
-       } else {
-          hiddenCardFields.add(field);
-       }
-       saveHiddenCardFields();
-       applyCardFieldMenuState();
-       rerenderCards();
-    }
-
-    /**
-     * Sync the checkboxes in the "Card fields" menu with the current state.
-     */
-    function applyCardFieldMenuState() {
-       document.querySelectorAll('.kanban-fields-menu .kanban-field-toggle').forEach(item => {
-          const checkbox = item.querySelector('input[type="checkbox"]');
-          if (checkbox) {
-             checkbox.checked = !hiddenCardFields.has(item.getAttribute('data-field'));
-          }
-       });
     }
 
     /**
@@ -510,6 +543,158 @@ function renderBoardColumns() {
     }
 
     /**
+     * Count the active secondary filters and show it in the "Advanced Filters" badge.
+     */
+    function updateAdvancedFilterCount() {
+       const badge = document.getElementById('kanban-adv-count');
+       if (!badge) return;
+       let count = 0;
+       ['filter-technician', 'filter-requester', 'filter-group', 'filter-type', 'filter-category'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el && el.value && el.value !== '') count++;
+       });
+       if (count > 0) {
+          badge.textContent = count;
+          badge.classList.remove('d-none');
+       } else {
+          badge.classList.add('d-none');
+       }
+    }
+
+    /**
+     * Set the technician filter to a specific user, adding the option if missing.
+     */
+    function setTechnicianFilter(userId, userName) {
+       const sel = document.getElementById('filter-technician');
+       if (!sel) return;
+       if (!userId) return;
+
+       let opt = sel.querySelector('option[value="' + String(userId) + '"]');
+       if (!opt) {
+          opt = document.createElement('option');
+          opt.value = userId;
+          opt.textContent = userName || ('#' + userId);
+          sel.appendChild(opt);
+       }
+       sel.value = String(userId);
+       if (window.$ && window.$.fn && typeof window.$.fn.select2 === 'function') {
+          try { window.$(sel).trigger('change'); } catch (e) { /* select2 refresh */ }
+       }
+       updateAdvancedFilterCount();
+       loadTickets();
+    }
+
+    /**
+     * Toggle the quick-actions dropdown of a card.
+     */
+    function toggleCardMenu(btn) {
+       if (!btn) return;
+       const menu = btn.parentElement.querySelector('.kanban-card-menu');
+       if (!menu) return;
+       const open = menu.classList.contains('show');
+       document.querySelectorAll('.kanban-card-menu.show').forEach(m => m.classList.remove('show'));
+       menu.classList.toggle('show', !open);
+       btn.setAttribute('aria-expanded', String(!open));
+    }
+
+    function closeCardMenus() {
+       document.querySelectorAll('.kanban-card-menu.show').forEach(m => m.classList.remove('show'));
+       document.querySelectorAll('.kanban-card-menu-btn[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+    }
+
+    /**
+     * Quick action: assign the current user as technician to a ticket.
+     */
+    function assignTicketToMe(ticketId) {
+       const body = new URLSearchParams();
+       body.append('action', 'assign_to_me');
+       body.append('ticket_id', ticketId);
+      if (csrfToken) body.append('_glpi_csrf_token', csrfToken);
+
+       fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+          .then(r => r.json())
+          .then(res => {
+             if (res && res.csrf_token) {
+                csrfToken = res.csrf_token;
+             }
+             const result = res && res.result ? res.result : res;
+             if (result && result.success) {
+                showToast(lang.assigned + ' #' + ticketId, 'success');
+                loadTickets();
+             } else {
+                showToast((result && result.error) || 'Error', 'danger');
+             }
+          })
+          .catch(() => showToast('Error assigning ticket', 'danger'));
+    }
+
+    /**
+     * Quick action: show the follow-ups of a ticket in a modal.
+     */
+    function showFollowups(ticketId) {
+       const modalEl = document.getElementById('kanbanFollowupsModal');
+       const body = document.getElementById('kanbanFollowupsModalBody');
+       if (!modalEl || !body) return;
+
+       const label = document.getElementById('kanbanFollowupsModalLabel');
+       if (label) label.textContent = (lang.followupsTitle || 'Follow-ups') + ' #' + ticketId;
+
+       body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+       const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+       modal.show();
+
+       fetch(apiUrl + '?action=get_followups&ticket_id=' + encodeURIComponent(ticketId) + '&_t=' + Date.now())
+          .then(r => r.json())
+          .then(res => {
+             const list = (res && Array.isArray(res.followups)) ? res.followups : [];
+             if (list.length === 0) {
+                body.innerHTML = '<div class="text-center text-muted py-4"><i class="ti ti-message-off fs-2 d-block mb-2"></i>' + escapeHtml(lang.noFollowups || 'No follow-ups') + '</div>';
+                return;
+             }
+             body.innerHTML = list.map(fu => `
+                <div class="kanban-followup">
+                   <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                      <span class="fw-semibold">${escapeHtml(fu.user)}</span>
+                      <small class="text-muted" title="${escapeHtml(fu.date)}">${escapeHtml(relativeDate(fu.date))}</small>
+                   </div>
+                   <div class="kanban-followup-content">${sanitizeHtml(fu.content || '')}</div>
+                </div>
+             `).join('');
+          })
+          .catch(() => {
+             body.innerHTML = '<div class="text-center text-danger py-4">Error loading follow-ups.</div>';
+          });
+    }
+
+    /**
+     * Quick action: change the priority of a ticket.
+     */
+    function setTicketPriority(ticketId, priority) {
+       const body = new URLSearchParams();
+       body.append('action', 'change_priority');
+       body.append('ticket_id', ticketId);
+       body.append('priority', priority);
+      if (csrfToken) body.append('_glpi_csrf_token', csrfToken);
+
+       fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+          .then(r => r.json())
+          .then(res => {
+             if (res && res.csrf_token) {
+                csrfToken = res.csrf_token;
+             }
+             const result = res && res.result ? res.result : res;
+             if (result && result.success) {
+                showToast(lang.saved, 'success');
+                closeCardMenus();
+                loadTickets();
+             } else {
+                showToast((result && result.error) || 'Error', 'danger');
+             }
+          })
+          .catch(() => showToast('Error updating priority', 'danger'));
+    }
+
+    /**
      * Show empty placeholder in a column with no tickets
      */
     function showEmptyPlaceholder(zone, statusId) {
@@ -555,11 +740,15 @@ function loadTickets() {
              if (!response.ok) throw new Error('HTTP ' + response.status);
              return response.json();
           })
-           .then(data => {
-              ticketsByStatus = data;
+.then(data => {
+               const statusData = data.statuses || data;
+               ticketsByStatus = statusData;
 
-              // Reset every column: clear cards and zero out the counts so stale
-              // numbers from a previous (e.g. group-filtered) load never linger.
+               // Refresh the "gestão à vista" indicators bar
+               updateMetrics(data.metrics || {});
+
+               // Reset every column: clear cards and zero out the counts so stale
+               // numbers from a previous (e.g. group-filtered) load never linger.
               document.querySelectorAll('.kanban-column').forEach(col => {
                  const id = col.getAttribute('data-status-id');
                  const zone = document.getElementById('status-column-' + id);
@@ -571,7 +760,7 @@ function loadTickets() {
               // Populate columns
               let totalTickets = 0;
               const statusesWithData = new Set();
-              for (const [statusId, tickets] of Object.entries(data)) {
+              for (const [statusId, tickets] of Object.entries(statusData)) {
                  const zone = document.getElementById('status-column-' + statusId);
                  const countBadge = document.getElementById('count-' + statusId);
 
@@ -648,16 +837,124 @@ function loadTickets() {
         return sorted;
      }
 
-     /**
-      * Numeric sort key for SLA progress: percent elapsed, or Infinity when the
-      * ticket has no SLA (so it is ordered last in either direction).
-      */
+/**
+     * Numeric sort key for SLA progress: percent elapsed, or Infinity when the
+     * ticket has no SLA (so it is ordered last in either direction).
+     */
      function slaSortKey(ticket) {
         if (ticket.sla_progress && ticket.sla_progress.status !== 'no_sla') {
            return ticket.sla_progress.percent || 0;
         }
         return Infinity;
      }
+
+    /**
+     * Update the "gestão à vista" indicators bar with server-side metrics.
+     */
+    function updateMetrics(metrics) {
+       const set = (id, text, colorClass) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.textContent = text;
+          if (colorClass) {
+             el.classList.remove('text-success', 'text-danger', 'text-warning');
+             el.classList.add(colorClass);
+          }
+       };
+       set('metric-total', metrics.total != null ? metrics.total : 0);
+       set('metric-sla', metrics.sla_percent != null ? metrics.sla_percent + '%' : '--');
+       set('metric-overdue', metrics.sla_overdue != null ? metrics.sla_overdue : 0,
+          (metrics.sla_overdue || 0) > 0 ? 'text-danger' : null);
+       set('metric-assigned', metrics.assigned_to_me != null ? metrics.assigned_to_me : 0);
+       set('metric-unassigned', metrics.unassigned != null ? metrics.unassigned : 0,
+          (metrics.unassigned || 0) > 0 ? 'text-warning' : null);
+    }
+
+    /**
+     * Format a GLPI datetime as a short relative label ("Today", "Yesterday",
+     * "3 d ago", "Tomorrow", "in 2 d").
+     */
+function relativeDate(dateStr) {
+       if (!dateStr) return '';
+       const DAY = 86400000;
+       const ts = parseGlpiDateTime(dateStr);
+       if (!ts) return dateStr;
+       const now = new Date();
+       const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+       const dayDiff = Math.round((startOfDay(new Date(ts)) - startOfDay(now)) / DAY);
+
+       if (dayDiff === 0) {
+          const mins = Math.round((now.getTime() - ts) / 60000);
+          if (mins <= 0) return lang.today || 'Today';
+          if (mins < 60) return (lang.minutesAgo || 'X min ago').replace('X', mins);
+          const hours = Math.floor(mins / 60);
+          return (lang.hoursAgo || 'X h ago').replace('X', hours);
+       }
+if (dayDiff === -1) return lang.yesterday || 'Yesterday';
+       if (dayDiff === 1) return lang.tomorrow || 'Tomorrow';
+       if (dayDiff < -1) return (lang.daysAgo || 'X d ago').replace('X', Math.abs(dayDiff));
+       return (lang.inDays || 'in X d').replace('X', dayDiff);
+    }
+
+    /**
+     * Compute compact initials for a technician avatar.
+     */
+    function getInitials(tech) {
+       const first = (tech.firstname || '').trim();
+       const last = (tech.realname || '').trim();
+       let initials = '';
+       if (first) initials += first.charAt(0);
+       if (last) initials += last.charAt(0);
+       return (initials || (tech.name || '?').charAt(0)).toUpperCase();
+    }
+
+    /**
+     * Deterministic avatar background color from a user id.
+     */
+    function avatarColor(id) {
+       const palette = ['#2563eb', '#0d9488', '#7c3aed', '#d97706', '#dc2626', '#0891b2', '#4f46e5', '#be185d'];
+       const n = Math.abs(parseInt(id, 10) || 0);
+       return palette[n % palette.length];
+    }
+
+    /**
+     * Compact avatar (photo or initials) for an assigned technician.
+     */
+    function techAvatarHtml(tech) {
+       const img = tech.picture
+          ? '<img src="' + escapeHtml(tech.picture) + '" alt="" loading="lazy">'
+          : '<span>' + escapeHtml(getInitials(tech)) + '</span>';
+       return '<span class="kanban-avatar" style="background-color:' + avatarColor(tech.id) + '" title="' + escapeHtml(tech.name) + '">' + img + '</span>';
+    }
+
+    /**
+     * Build the quick-actions dropdown shown on card hover.
+     */
+    function buildQuickActionsHtml(ticket) {
+       const priorityOptions = Object.keys(priorityLabels).map(p => {
+          const cls = (ticket.priority || 0) === Number(p) ? ' active' : '';
+          return '<button type="button" class="kanban-prio-opt' + cls + '" data-priority="' + p + '" style="background-color:' + (priorityColors[p] || '#6c757d') + '" title="' + escapeHtml(priorityLabels[p]) + '" aria-label="' + escapeHtml(priorityLabels[p]) + '"></button>';
+       }).join('');
+
+       return `
+          <div class="kanban-quick-actions">
+             <button type="button" class="kanban-card-menu-btn" title="${escapeHtml(lang.quickActions || 'Quick actions')}" aria-label="${escapeHtml(lang.quickActions || 'Quick actions')}" aria-haspopup="true" aria-expanded="false">
+                <i class="ti ti-dots-vertical"></i>
+             </button>
+             <div class="kanban-card-menu dropdown-menu dropdown-menu-end" role="menu">
+                <button type="button" class="dropdown-item kanban-act-assign" role="menuitem">
+                   <i class="ti ti-user-check"></i> ${escapeHtml(lang.assignToMe || 'Assign to me')}
+                </button>
+                <button type="button" class="dropdown-item kanban-act-followups" role="menuitem">
+                   <i class="ti ti-messages"></i> ${escapeHtml(lang.listFollowups || 'List follow-ups')}
+                </button>
+                <div class="dropdown-divider"></div>
+                <div class="kanban-sort-header">${escapeHtml(lang.changePriority || 'Change priority')}</div>
+                <div class="kanban-priority-picker">${priorityOptions}</div>
+             </div>
+          </div>
+       `;
+    }
 
    /**
     * Create HTML card element for a Ticket
@@ -705,10 +1002,12 @@ function createCardElement(ticket) {
           `;
        }
 
-       // Technicians text
-       const techNames = ticket.assigned_techs && ticket.assigned_techs.length > 0
-          ? ticket.assigned_techs.join(', ')
-          : lang.unassigned;
+       // Technicians: compact avatars (photo or initials) instead of truncated text
+       const techs = ticket.assigned_techs && ticket.assigned_techs.length > 0 ? ticket.assigned_techs : [];
+       const techNames = techs.length > 0 ? techs.map(t => t.name).join(', ') : lang.unassigned;
+       const techAvatars = techs.length > 0
+          ? techs.map(techAvatarHtml).join('')
+          : '<span class="kanban-avatar kanban-avatar-empty" title="' + escapeHtml(lang.unassigned) + '"><i class="ti ti-user-off"></i></span>';
 
        // Priority badge
        const priorityBadge = `<span class="badge fs-8 text-nowrap px-2" style="background-color:${priorityColors[ticket.priority] || '#0d6efd'}; color:${(ticket.priority || 0) >= 4 ? '#000' : '#fff'}; min-width: 60px; justify-content: center;">${priorityLabels[ticket.priority] || 'Normal'}</span>`;
@@ -729,9 +1028,7 @@ function createCardElement(ticket) {
 
        const metaItems = [];
        if (showTechs) {
-          metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(techNames)}">
-             <i class="ti ti-user"></i><span>${escapeHtml(techNames)}</span>
-          </div>`);
+          metaItems.push(`<div class="card-meta-item kanban-tech-avatars" title="${escapeHtml(techNames)}">${techAvatars}</div>`);
        }
        if (showCategory) {
           metaItems.push(`<div class="card-meta-item text-truncate" title="${escapeHtml(ticket.category || lang.noCategory)}">
@@ -746,8 +1043,8 @@ function createCardElement(ticket) {
           </div>`);
        }
        if (showDate) {
-          metaItems.push(`<div class="card-meta-item ms-auto" title="${ticket.date_creation}">
-             <i class="ti ti-calendar"></i><span>${ticket.date_creation}</span>
+          metaItems.push(`<div class="card-meta-item ms-auto" title="${escapeHtml(ticket.date_creation)}">
+             <i class="ti ti-calendar"></i><span>${escapeHtml(relativeDate(ticket.date_creation))}</span>
           </div>`);
        }
 
@@ -757,6 +1054,7 @@ function createCardElement(ticket) {
                 <span class="ticket-id">#${ticket.id}</span>
                 <div class="d-flex align-items-center gap-1 flex-shrink-0">
                    ${topActions.join('')}
+                   ${buildQuickActionsHtml(ticket)}
                    <a href="${ticketUrl}" target="_blank" class="card-open-link"
                       onclick="event.stopPropagation()" title="${lang.open} #${ticket.id}"
                       aria-label="${lang.open} #${ticket.id}">
@@ -834,33 +1132,128 @@ function createCardElement(ticket) {
    }
 
    if (filterForm) {
+      // Secondary selects: refresh filters and keep the active-count badge in sync
       filterForm.querySelectorAll('select').forEach(select => {
-         select.addEventListener('change', debouncedLoadTickets);
+         select.addEventListener('change', function () {
+            updateAdvancedFilterCount();
+            debouncedLoadTickets();
+         });
       });
    }
 
-   // Ticket number search field (live, debounced)
-   const ticketIdInput = document.getElementById('filter-ticket-id');
-   if (ticketIdInput) {
-      ticketIdInput.addEventListener('input', debouncedLoadTickets);
+   // Omnichannel search field (live, debounced)
+   const searchInput = document.getElementById('filter-search');
+   if (searchInput) {
+      searchInput.addEventListener('input', debouncedLoadTickets);
    }
 
-   // Refresh button listener
-   const refreshBtn = document.getElementById('kanban-refresh-btn');
-   if (refreshBtn) {
-      refreshBtn.addEventListener('click', function () {
-         const icon = this.querySelector('i');
-         if (icon) {
-            icon.style.transition = 'transform 0.5s ease';
-            icon.style.transform = 'rotate(360deg)';
-            setTimeout(() => {
-               icon.style.transition = 'none';
-               icon.style.transform = 'rotate(0deg)';
-            }, 500);
-         }
+   // "Assigned to me" quick filter
+   const assignedMeBtn = document.getElementById('kanban-assigned-me-btn');
+   if (assignedMeBtn) {
+      assignedMeBtn.addEventListener('click', function () {
+         setTechnicianFilter(currentUser.id, currentUser.name || ('#' + currentUser.id));
+      });
+   }
+
+   // "Clear" quick button: reset all filters and reload
+   const clearBtn = document.getElementById('kanban-clear-filters-btn');
+   if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+         if (filterForm) filterForm.reset();
+         if (searchInput) searchInput.value = '';
+         updateAdvancedFilterCount();
          loadTickets();
       });
    }
+
+   // Advanced filters collapse: keep the toggle aria state in sync
+   const advPanel = document.getElementById('kanban-advanced-filters');
+   if (advPanel) {
+      advPanel.addEventListener('hidden.bs.collapse', function () {
+         const btn = document.getElementById('kanban-adv-filters-btn');
+         if (btn) btn.setAttribute('aria-expanded', 'false');
+      });
+      advPanel.addEventListener('shown.bs.collapse', function () {
+         const btn = document.getElementById('kanban-adv-filters-btn');
+         if (btn) btn.setAttribute('aria-expanded', 'true');
+      });
+   }
+
+    // Refresh button listener
+    const refreshBtn = document.getElementById('kanban-refresh-btn');
+    if (refreshBtn) {
+       refreshBtn.addEventListener('click', function () {
+          const icon = this.querySelector('i');
+          if (icon) {
+             icon.style.transition = 'transform 0.5s ease';
+             icon.style.transform = 'rotate(360deg)';
+             setTimeout(() => {
+                icon.style.transition = 'none';
+                icon.style.transform = 'rotate(0deg)';
+             }, 500);
+          }
+          loadTickets();
+       });
+    }
+
+    // Auto-refresh
+    let autoRefreshTimer = null;
+    const autoRefreshMenu = document.getElementById('kanban-autorefresh-menu');
+    if (autoRefreshMenu) {
+       // Restore saved preference
+       const savedInterval = parseInt(localStorage.getItem('kanban_autorefresh') || '0', 10);
+       if (savedInterval > 0) {
+          startAutoRefresh(savedInterval);
+          updateAutoRefreshUI(savedInterval);
+       }
+
+       autoRefreshMenu.addEventListener('click', function (e) {
+          e.preventDefault();
+          const link = e.target.closest('[data-interval]');
+          if (!link) return;
+          const interval = parseInt(link.dataset.interval, 10);
+          localStorage.setItem('kanban_autorefresh', interval);
+          updateAutoRefreshUI(interval);
+          if (interval > 0) {
+             startAutoRefresh(interval);
+          } else {
+             stopAutoRefresh();
+          }
+       });
+    }
+
+    function startAutoRefresh(seconds) {
+       stopAutoRefresh();
+       autoRefreshTimer = setInterval(function () {
+          loadTickets();
+       }, seconds * 1000);
+    }
+
+    function stopAutoRefresh() {
+       if (autoRefreshTimer) {
+          clearInterval(autoRefreshTimer);
+          autoRefreshTimer = null;
+       }
+    }
+
+    function updateAutoRefreshUI(activeInterval) {
+       if (!autoRefreshMenu) return;
+       autoRefreshMenu.querySelectorAll('.dropdown-item').forEach(function (item) {
+          item.classList.remove('active');
+          if (parseInt(item.dataset.interval, 10) === activeInterval) {
+             item.classList.add('active');
+          }
+       });
+       const btn = document.getElementById('kanban-autorefresh-btn');
+       if (btn) {
+          const icon = btn.querySelector('i');
+          if (activeInterval > 0) {
+             if (icon) icon.classList.add('text-success');
+          } else {
+             if (icon) icon.classList.remove('text-success');
+          }
+       }
+    }
 
    // =============================================
    // SLA Countdown Logic
@@ -1003,7 +1396,7 @@ function updateCountdowns() {
        if (!body) return;
 
        const techNames = ticket.assigned_techs && ticket.assigned_techs.length > 0
-          ? ticket.assigned_techs.join(', ')
+          ? ticket.assigned_techs.map(t => (t && t.name) || t).join(', ')
           : lang.unassigned;
 
        const priorityBadge = `<span class="badge fs-8 text-nowrap px-2" style="background-color:${priorityColors[ticket.priority] || '#0d6efd'}; color:${(ticket.priority || 0) >= 4 ? '#000' : '#fff'}; min-width: 60px; justify-content: center;">${escapeHtml(ticket.priority_label || priorityLabels[ticket.priority] || 'Normal')}</span>`;
@@ -1023,7 +1416,7 @@ function updateCountdowns() {
           `;
        }
 
-       const content = ticket.content || 'No description available.';
+       const content = sanitizeHtml(ticket.content || 'No description available.');
 
        body.innerHTML = `
            <div class="row g-0">
@@ -1137,16 +1530,12 @@ document.addEventListener('DOMContentLoaded', function () {
    populateCardFieldsMenu();
    applyColumnVisibility();
    bindGroupTechnicianFilter();
+   updateAdvancedFilterCount();
    loadTickets();
 
-   // Columns visibility menu (may live outside the board container)
+   // Columns visibility menu (may live outside the board container).
+   // The checkboxes handle their own toggling via the "change" event.
    document.addEventListener('click', function (e) {
-      const toggle = e.target.closest('.kanban-column-toggle');
-      if (toggle) {
-         e.preventDefault();
-         toggleColumn(toggle.getAttribute('data-status-id'));
-         return;
-      }
       const showAll = e.target.closest('.kanban-columns-show-all');
       if (showAll) {
          e.preventDefault();
@@ -1154,11 +1543,44 @@ document.addEventListener('DOMContentLoaded', function () {
          saveHiddenColumns();
          applyColumnVisibility();
       }
-      const fieldToggle = e.target.closest('.kanban-field-toggle');
-      if (fieldToggle) {
+
+      // Quick actions menu on cards
+      const card = e.target.closest('.kanban-card');
+      const menuBtn = e.target.closest('.kanban-card-menu-btn');
+      if (menuBtn) {
          e.preventDefault();
-         toggleCardField(fieldToggle.getAttribute('data-field'));
+         toggleCardMenu(menuBtn);
+         return;
       }
+
+      if (card) {
+         const ticketId = card.getAttribute('data-ticket-id');
+         if (e.target.closest('.kanban-act-assign')) {
+            e.preventDefault();
+            closeCardMenus();
+            assignTicketToMe(ticketId);
+            return;
+         }
+         if (e.target.closest('.kanban-act-followups')) {
+            e.preventDefault();
+            closeCardMenus();
+            showFollowups(ticketId);
+            return;
+         }
+         const prioOpt = e.target.closest('.kanban-prio-opt');
+         if (prioOpt) {
+            e.preventDefault();
+            setTicketPriority(ticketId, prioOpt.getAttribute('data-priority'));
+            return;
+         }
+         // Click inside a quick-actions container keeps the menu open
+         if (e.target.closest('.kanban-quick-actions')) {
+            return;
+         }
+      }
+
+      // Any other click closes the open card menus
+      closeCardMenus();
    });
 
    // Modal cleanup on close

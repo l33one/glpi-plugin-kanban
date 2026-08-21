@@ -1,0 +1,272 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kanban\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Advanced Filters"
+msgstr "Advanced Filters"
+
+msgid "All Categories"
+msgstr "All Categories"
+
+msgid "All Groups"
+msgstr "All Groups"
+
+msgid "All Requesters"
+msgstr "All Requesters"
+
+msgid "All Technicians"
+msgstr "All Technicians"
+
+msgid "All types"
+msgstr "All types"
+
+msgid "Assign to me"
+msgstr "Assign to me"
+
+msgid "Assigned"
+msgstr "Assigned"
+
+msgid "Assigned to me"
+msgstr "Assigned to me"
+
+msgid "Board indicators"
+msgstr "Board indicators"
+
+msgid "Card fields"
+msgstr "Card fields"
+
+msgid "Category"
+msgstr "Category"
+
+msgid "Change priority"
+msgstr "Change priority"
+
+msgid "Clear"
+msgstr "Clear"
+
+msgid "Close"
+msgstr "Close"
+
+msgid "Columns"
+msgstr "Columns"
+
+msgid "Could not assign ticket"
+msgstr "Could not assign ticket"
+
+msgid "Could not update priority"
+msgstr "Could not update priority"
+
+msgid "Critical today"
+msgstr "Critical today"
+
+msgid "Date Open (Newest first)"
+msgstr "Date Open (Newest first)"
+
+msgid "Date Open (Oldest first)"
+msgstr "Date Open (Oldest first)"
+
+msgid "Fields"
+msgstr "Fields"
+
+msgid "Group"
+msgstr "Group"
+
+msgid "Hide column"
+msgstr "Hide column"
+
+msgid "High"
+msgstr "High"
+
+msgid "in X d"
+msgstr "in X d"
+
+msgid "Invalid request"
+msgstr "Invalid request"
+
+msgid "just now"
+msgstr "just now"
+
+msgid "Kanban"
+msgstr "Kanban"
+
+msgid "Kanban Board"
+msgstr "Kanban Board"
+
+msgid "Kanban board"
+msgstr "Kanban board"
+
+msgid "List follow-ups"
+msgstr "List follow-ups"
+
+msgid "Loading..."
+msgstr "Loading..."
+
+msgid "Low"
+msgstr "Low"
+
+msgid "Major"
+msgstr "Major"
+
+msgid "New Ticket"
+msgstr "New Ticket"
+
+msgid "No Category"
+msgstr "No Category"
+
+msgid "No follow-ups for this ticket"
+msgstr "No follow-ups for this ticket"
+
+msgid "No tickets"
+msgstr "No tickets"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Open"
+msgstr "Open"
+
+msgid "Open duration"
+msgstr "Open duration"
+
+msgid "Open in GLPI"
+msgstr "Open in GLPI"
+
+msgid "Opening date"
+msgstr "Opening date"
+
+msgid "Permission denied"
+msgstr "Permission denied"
+
+msgid "Priority"
+msgstr "Priority"
+
+msgid "Priority (High to Low)"
+msgstr "Priority (High to Low)"
+
+msgid "Priority (Low to High)"
+msgstr "Priority (Low to High)"
+
+msgid "Quick actions"
+msgstr "Quick actions"
+
+msgid "Refresh"
+msgstr "Refresh"
+
+msgid "Requester"
+msgstr "Requester"
+
+msgid "Saved"
+msgstr "Saved"
+
+msgid "Search by ticket number"
+msgstr "Search by ticket number"
+
+msgid "Search: number, title, category, description..."
+msgstr "Search: number, title, category, description..."
+
+msgid "Show / hide columns"
+msgstr "Show / hide columns"
+
+msgid "Show all columns"
+msgstr "Show all columns"
+
+msgid "Show column"
+msgstr "Show column"
+
+msgid "Skip to board"
+msgstr "Skip to board"
+
+msgid "SLA"
+msgstr "SLA"
+
+msgid "SLA (Closest to expiry first)"
+msgstr "SLA (Closest to expiry first)"
+
+msgid "SLA (Farthest from expiry first)"
+msgstr "SLA (Farthest from expiry first)"
+
+msgid "SLA overdue"
+msgstr "SLA overdue"
+
+msgid "SLA paused"
+msgstr "SLA paused"
+
+msgid "Sort by"
+msgstr "Sort by"
+
+msgid "Sort via column dropdowns"
+msgstr "Sort via column dropdowns"
+
+msgid "Technician"
+msgstr "Technician"
+
+msgid "The plugin directory must be named \"kanban\""
+msgstr "The plugin directory must be named \"kanban\""
+
+msgid "Ticket Details"
+msgstr "Ticket Details"
+
+msgid "Ticket follow-ups"
+msgstr "Ticket follow-ups"
+
+msgid "Ticket not found"
+msgstr "Ticket not found"
+
+msgid "Ticket type"
+msgstr "Ticket type"
+
+msgid "Time in Status (Longest first)"
+msgstr "Time in Status (Longest first)"
+
+msgid "Time in Status (Shortest first)"
+msgstr "Time in Status (Shortest first)"
+
+msgid "Today"
+msgstr "Today"
+
+msgid "Tomorrow"
+msgstr "Tomorrow"
+
+msgid "Total tickets"
+msgstr "Total tickets"
+
+msgid "Unassigned"
+msgstr "Unassigned"
+
+msgid "Unknown"
+msgstr "Unknown"
+
+msgid "Unknown status"
+msgstr "Unknown status"
+
+msgid "Very High"
+msgstr "Very High"
+
+msgid "Very Low"
+msgstr "Very Low"
+
+msgid "View the kanban board"
+msgstr "View the kanban board"
+
+msgid "Visible tickets"
+msgstr "Visible tickets"
+
+msgid "Within SLA"
+msgstr "Within SLA"
+
+msgid "X d ago"
+msgstr "X d ago"
+
+msgid "X h ago"
+msgstr "X h ago"
+
+msgid "X min ago"
+msgstr "X min ago"
+
+msgid "Yesterday"
+msgstr "Yesterday"

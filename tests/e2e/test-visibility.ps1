@@ -110,7 +110,8 @@ function Get-BoardTitles {
     $json = $body | ConvertFrom-Json
     $titles = @()
     if ($null -ne $json) {
-        foreach ($p in $json.PSObject.Properties) {
+        $statuses = if ($null -ne $json.statuses) { $json.statuses } else { $json }
+        foreach ($p in $statuses.PSObject.Properties) {
             foreach ($t in $p.Value) { $titles += [string]$t.title }
         }
     }

@@ -55,6 +55,7 @@ $conn->query("DELETE FROM glpi_groups_users WHERE users_id IN (
 $conn->query("DELETE FROM glpi_profiles_users WHERE users_id IN (
    SELECT id FROM glpi_users WHERE name IN ('kb_manager','kb_member','kb_child','kb_outsider','kb_noright','kb_extuser','kb_colleague'))");
 $conn->query("DELETE FROM glpi_users WHERE name IN ('kb_manager','kb_member','kb_child','kb_outsider','kb_noright','kb_extuser','kb_colleague')");
+$conn->query("DELETE FROM glpi_groups_users WHERE groups_id IN (9751, 9752, 9753)");
 $conn->query("DELETE FROM glpi_groups WHERE id IN (9751, 9752, 9753)");
 $conn->query("DELETE FROM glpi_profilerights WHERE profiles_id IN (9701, 9702)");
 $conn->query("DELETE FROM glpi_profiles WHERE id IN (9701, 9702)");
@@ -69,7 +70,9 @@ if ($cleanup_only) {
 run($conn, "INSERT INTO glpi_profiles (id, name, interface) VALUES (9701, 'KB Test Tech', 'central')", 'profile 9701');
 run($conn, "INSERT INTO glpi_profiles (id, name, interface) VALUES (9702, 'KB Test NoRight', 'central')", 'profile 9702');
 foreach ([
-    [9701, 'entity', 33], [9701, 'ticket', 1], [9701, 'plugin_kanban', 1],
+    // 9701: técnico do quadro — precisa ler e atualizar chamados para as
+    // ações rápidas (atribuir a mim / mudar prioridade) funcionarem.
+    [9701, 'entity', 33], [9701, 'ticket', 3], [9701, 'plugin_kanban', 1],
     [9702, 'entity', 33], [9702, 'ticket', 1], [9702, 'plugin_kanban', 0],
 ] as [$pid, $rname, $rval]) {
     run($conn, "INSERT INTO glpi_profilerights (profiles_id, name, rights)

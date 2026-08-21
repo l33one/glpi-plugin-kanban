@@ -143,13 +143,24 @@ class PluginKanbanKanban extends CommonGLPI {
           $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
        }
 
-      // Apply Ticket number search (matches the ticket id by its digits).
-      // A leading "#" or any non-digit character is ignored, so typing
-      // "12" finds tickets #12, #120, #512... as long as they are visible.
-      if (!empty($filters['ticket_id'])) {
-         $search = preg_replace('/\D/', '', (string)$filters['ticket_id']);
-         if ($search !== '') {
-            $criteria['WHERE']['t.id'] = ['LIKE', '%' . $search . '%'];
+      // Apply omnichannel search: matches ticket number, title, category or
+      // description. A leading "#" or any non-digit character is ignored for
+      // the numeric part, so typing "12" still finds tickets #12, #120, #512...
+      if (!empty($filters['search'])) {
+         $term = trim((string)$filters['search']);
+         if ($term !== '') {
+            $numeric = preg_replace('/\D/', '', $term);
+            $conditions = [
+               'OR' => [
+                  't.name'    => ['LIKE', '%' . $term . '%'],
+                  't.content' => ['LIKE', '%' . $term . '%'],
+                  'cat.name'  => ['LIKE', '%' . $term . '%'],
+               ]
+            ];
+            if ($numeric !== '') {
+               $conditions['OR']['t.id'] = ['LIKE', '%' . $numeric . '%'];
+            }
+            $criteria['WHERE'][] = $conditions;
          }
       }
 
@@ -296,6 +307,72 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
    /**
+     * Check whether a ticket is visible to the current user in the kanban.
+     *
+     * Mirrors the SQL restriction built by getTicketVisibilityCriteria() but
+     * for a single already-loaded ticket (see getFollowups()).
+     *
+     * @param int $ticket_id
+     * @return bool
+     */
+    private static function isTicketVisible(int $ticket_id): bool {
+       $user_id = (int)Session::getLoginUserID();
+       if (!$user_id) {
+          return false;
+       }
+
+       global $DB;
+       $ticket_id = (int)$ticket_id;
+
+       $assigned = $DB->request([
+          'FROM'   => 'glpi_tickets_users',
+          'WHERE'  => [
+             'tickets_id' => $ticket_id,
+             'users_id'   => $user_id,
+             'type'       => CommonITILActor::ASSIGN,
+          ],
+          'COUNT'  => 'c',
+       ])->current()['c'] ?? 0;
+       if ((int)$assigned > 0) {
+          return true;
+       }
+
+       $my_groups = self::getUserGroupIds($user_id);
+       if (!empty($my_groups)) {
+          $in_groups = $DB->request([
+             'FROM'   => 'glpi_groups_tickets',
+             'WHERE'  => [
+                'tickets_id' => $ticket_id,
+                'groups_id'  => $my_groups,
+                'type'       => CommonITILActor::ASSIGN,
+             ],
+             'COUNT'  => 'c',
+          ])->current()['c'] ?? 0;
+          if ((int)$in_groups > 0) {
+             return true;
+          }
+       }
+
+       $managed_members = self::getManagedGroupMemberIds($user_id);
+       if (!empty($managed_members)) {
+          $managed = $DB->request([
+             'FROM'   => 'glpi_tickets_users',
+             'WHERE'  => [
+                'tickets_id' => $ticket_id,
+                'users_id'   => $managed_members,
+                'type'       => CommonITILActor::ASSIGN,
+             ],
+             'COUNT'  => 'c',
+          ])->current()['c'] ?? 0;
+          if ((int)$managed > 0) {
+             return true;
+          }
+       }
+
+       return false;
+    }
+
+    /**
      * Expand a list of group ids with all of their subgroups (nested).
      *
      * @param array $group_ids
@@ -392,13 +469,34 @@ class PluginKanbanKanban extends CommonGLPI {
        return array_values($members);
     }
 
-   /**
-     * Get list of technicians for filter dropdown
-     *
-     * @return array Array of ['id' => int, 'name' => string]
-     */
+/**
+      * Get list of technicians for filter dropdown.
+      *
+      * Only users who belong to at least one group of the current user are
+      * returned, so a user restricted to their groups only sees the technicians
+      * of those groups. The result is sorted alphabetically by display name.
+      *
+      * @return array Array of ['id' => int, 'name' => string]
+      */
     public static function getTechniciansForFilter(): array {
        global $DB;
+       $user_id = (int)Session::getLoginUserID();
+       if ($user_id <= 0) {
+          return [];
+       }
+       $group_ids = [];
+       $group_iterator = $DB->request([
+          'SELECT'    => 'groups_id',
+          'FROM'      => 'glpi_groups_users',
+          'WHERE'     => ['users_id' => $user_id],
+          'DISTINCT'  => true
+       ]);
+       foreach ($group_iterator as $row) {
+          $group_ids[(int)$row['groups_id']] = (int)$row['groups_id'];
+       }
+       if (empty($group_ids)) {
+          return [];
+       }
        $users = [];
        $iterator = $DB->request([
           'SELECT'    => ['u.id', 'u.realname', 'u.firstname'],
@@ -409,25 +507,33 @@ class PluginKanbanKanban extends CommonGLPI {
                    'u'  => 'id',
                    'tu' => 'users_id'
                 ]
+             ],
+             'glpi_groups_users AS gu' => [
+                'ON' => [
+                   'u'  => 'id',
+                   'gu' => 'users_id'
+                ]
              ]
           ],
           'WHERE'     => [
              'u.is_deleted' => 0,
              'u.is_active'  => 1,
              'tu.type'      => CommonITILActor::ASSIGN,
+             'gu.groups_id' => array_values($group_ids),
           ],
           'DISTINCT'  => true,
-          'ORDER'     => 'u.realname ASC',
+          'ORDER'     => ['u.realname ASC', 'u.firstname ASC'],
           'LIMIT'     => 500
        ]);
-         foreach ($iterator as $user) {
-            $users[] = [
-               'id'   => (int)$user['id'],
-               'name' => self::unsanitizeOutput(getUserName($user['id']))
-            ];
-         }
-         return $users;
-      }
+       foreach ($iterator as $user) {
+          $users[] = [
+             'id'   => (int)$user['id'],
+             'name' => self::unsanitizeOutput(getUserName($user['id']))
+          ];
+       }
+       self::sortUsersByName($users);
+       return $users;
+    }
 
      /**
       * Get technicians (users) who are members of a group or any of its subgroups.
@@ -462,14 +568,27 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'      => 'u.realname ASC',
           'LIMIT'      => 500
        ]);
-        foreach ($iterator as $user) {
-           $users[] = [
-              'id'   => (int)$user['id'],
-              'name' => self::unsanitizeOutput(getUserName($user['id']))
-           ];
-        }
-         return $users;
-      }
+foreach ($iterator as $user) {
+            $users[] = [
+               'id'   => (int)$user['id'],
+               'name' => self::unsanitizeOutput(getUserName($user['id']))
+            ];
+         }
+          self::sortUsersByName($users);
+          return $users;
+       }
+
+     /**
+      * Sort a list of users alphabetically by display name.
+      *
+      * @param array $users List of ['id' => int, 'name' => string]
+      * @return void
+      */
+    private static function sortUsersByName(array &$users): void {
+       usort($users, static function ($a, $b) {
+          return strnatcasecmp($a['name'], $b['name']);
+       });
+    }
 
      /**
       * Get list of requesters for filter dropdown
@@ -579,13 +698,14 @@ class PluginKanbanKanban extends CommonGLPI {
      * Fetch technicians assigned to a specific ticket
      *
      * @param int $ticket_id
-     * @return array
+     * @return array Array of ['id' => int, 'name' => string, 'firstname' => string,
+     *                         'realname' => string, 'picture' => string|null]
      */
     private static function getAssignedTechnicians($ticket_id) {
        global $DB;
        $techs = [];
        $iterator = $DB->request([
-          'SELECT'    => ['u.id', 'u.realname', 'u.firstname'],
+          'SELECT'    => ['u.id', 'u.realname', 'u.firstname', 'u.picture'],
           'FROM'      => 'glpi_tickets_users AS tu',
           'LEFT JOIN' => [
              'glpi_users AS u' => [
@@ -601,12 +721,40 @@ class PluginKanbanKanban extends CommonGLPI {
           ]
        ]);
 
-        foreach ($iterator as $user) {
-           if ($user['id']) {
-              $techs[] = self::unsanitizeOutput(getUserName($user['id']));
-           }
-        }
-        return $techs;
+       foreach ($iterator as $user) {
+          if ($user['id']) {
+             $techs[] = [
+                'id'        => (int)$user['id'],
+                'name'      => self::unsanitizeOutput(getUserName($user['id'])),
+                'firstname' => self::unsanitizeOutput($user['firstname']),
+                'realname'  => self::unsanitizeOutput($user['realname']),
+                'picture'   => self::getPictureUrlCompat($user['picture']),
+             ];
+          }
+       }
+       return $techs;
+    }
+
+   /**
+     * Resolve the user picture URL across GLPI versions.
+     *
+     * GLPI 10 exposes the helper as the global \Toolbox class, while GLPI 11
+     * moved it to the namespaced Glpi\Toolbox\Toolbox.
+     *
+     * @param string $picture Raw picture path stored on the user (may be empty)
+     * @return string|null Full picture URL, or null when the user has no picture
+     */
+    private static function getPictureUrlCompat($picture) {
+       if (empty($picture)) {
+          return null;
+       }
+       if (class_exists('\\Glpi\\Toolbox\\Toolbox')) {
+          return \Glpi\Toolbox\Toolbox::getPictureUrl($picture, true);
+       }
+       if (class_exists('\\Toolbox')) {
+          return \Toolbox::getPictureUrl($picture, true);
+       }
+       return null;
     }
 
     /**
@@ -839,7 +987,7 @@ class PluginKanbanKanban extends CommonGLPI {
       return null;
    }
 
-   /**
+/**
      * Get translated sort option labels for the frontend
      *
      * @return array Array of sort value => translated label
@@ -855,5 +1003,172 @@ class PluginKanbanKanban extends CommonGLPI {
           'sla_DESC'              => __('SLA (Closest to expiry first)', 'kanban'),
           'sla_ASC'               => __('SLA (Farthest from expiry first)', 'kanban'),
        ];
+    }
+
+    /**
+     * Compute key indicators ("gestão à vista") from the tickets currently
+     * displayed on the board (already filtered by the active filters).
+     *
+     * @param array $statuses Tickets grouped by status (getTicketsForKanban output)
+     * @return array ['total', 'with_sla', 'sla_on_time', 'sla_overdue',
+     *                'sla_percent', 'assigned_to_me', 'unassigned']
+     */
+   public static function computeMetrics(array $statuses): array {
+      $total = 0;
+      $with_sla = 0;
+      $sla_on_time = 0;
+      $sla_overdue = 0;
+      $assigned_to_me = 0;
+      $unassigned = 0;
+      $user_id = (int)Session::getLoginUserID();
+
+      foreach ($statuses as $tickets) {
+         foreach ($tickets as $ticket) {
+            $total++;
+            $sla = $ticket['sla_progress'] ?? null;
+            if (!empty($sla) && ($sla['status'] ?? 'no_sla') !== 'no_sla') {
+               $with_sla++;
+               if (($sla['status'] ?? '') === 'overdue' || ($sla['percent'] ?? 0) >= 100) {
+                  $sla_overdue++;
+               } else {
+                  $sla_on_time++;
+               }
+            }
+
+            $techs = $ticket['assigned_techs'] ?? [];
+            if ($user_id > 0 && !empty($techs)) {
+               foreach ($techs as $tech) {
+                  if ((int)($tech['id'] ?? 0) === $user_id) {
+                     $assigned_to_me++;
+                     break;
+                  }
+               }
+            }
+
+            if (empty($techs)) {
+               $unassigned++;
+            }
+         }
+      }
+
+      $sla_percent = $with_sla > 0 ? (int)round(($sla_on_time / $with_sla) * 100) : 100;
+
+      return [
+         'total'           => $total,
+         'with_sla'        => $with_sla,
+         'sla_on_time'     => $sla_on_time,
+         'sla_overdue'     => $sla_overdue,
+         'sla_percent'     => $sla_percent,
+         'assigned_to_me'  => $assigned_to_me,
+         'unassigned'      => $unassigned,
+      ];
+   }
+
+   /**
+     * Assign the current user as technician (ASSIGN) to a ticket.
+     *
+     * @param int $ticket_id
+     * @return array ['success' => bool, 'error' => string|null]
+     */
+   public static function assignToMe(int $ticket_id): array {
+      $ticket_id = (int)$ticket_id;
+      $user_id = (int)Session::getLoginUserID();
+      if ($ticket_id <= 0 || $user_id <= 0) {
+         return ['success' => false, 'error' => __('Invalid request', 'kanban')];
+      }
+
+      $ticket = new Ticket();
+      if (!$ticket->getFromDB($ticket_id)) {
+         return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
+      }
+      if (!$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+
+      global $DB;
+      $already = $DB->request([
+         'FROM'   => 'glpi_tickets_users',
+         'WHERE'  => [
+            'tickets_id' => $ticket_id,
+            'users_id'   => $user_id,
+            'type'       => CommonITILActor::ASSIGN,
+         ],
+         'COUNT'  => 'c',
+      ])->current()['c'] ?? 0;
+
+      if ((int)$already === 0) {
+         $result = $ticket->addTeamMember('User', $user_id, ['role' => CommonITILActor::ASSIGN]);
+         if (!$result) {
+            return ['success' => false, 'error' => __('Could not assign ticket', 'kanban')];
+         }
+      }
+      return ['success' => true];
+   }
+
+   /**
+     * Get the followups (acompanhamentos) of a ticket.
+     *
+     * Private followups written by other users are never returned.
+     *
+     * @param int $ticket_id
+     * @return array List of ['id', 'content', 'date', 'user', 'private']
+     */
+   public static function getFollowups(int $ticket_id): array {
+      $ticket_id = (int)$ticket_id;
+      if ($ticket_id <= 0 || !self::canView() || !Ticket::canView()) {
+         return [];
+      }
+
+      $ticket = new Ticket();
+      if (!$ticket->getFromDB($ticket_id) || !self::isTicketVisible($ticket_id)) {
+         return [];
+      }
+
+      $current_user = (int)Session::getLoginUserID();
+      $followups = [];
+      $fu = new ITILFollowup();
+      $rows = $fu->find(
+         ['items_id' => $ticket_id, 'itemtype' => 'Ticket'],
+         'date DESC'
+      );
+      foreach ($rows as $row) {
+         if (!empty($row['is_private']) && (int)$row['users_id'] !== $current_user) {
+            continue;
+         }
+         $followups[] = [
+            'id'      => (int)$row['id'],
+            'content' => self::unsanitizeOutput($row['content']),
+            'date'    => $row['date'],
+            'user'    => $row['users_id'] ? self::unsanitizeOutput(getUserName((int)$row['users_id'])) : __('Unknown', 'kanban'),
+            'private' => (bool)$row['is_private'],
+         ];
+      }
+      return $followups;
+   }
+
+   /**
+     * Change the priority of a ticket.
+     *
+     * @param int $ticket_id
+     * @param int $priority
+     * @return array ['success' => bool, 'error' => string|null]
+     */
+   public static function changePriority(int $ticket_id, int $priority): array {
+      $ticket_id = (int)$ticket_id;
+      $priority = (int)$priority;
+      if ($ticket_id <= 0 || !in_array($priority, [1, 2, 3, 4, 5, 6], true)) {
+         return ['success' => false, 'error' => __('Invalid request', 'kanban')];
+      }
+
+      $ticket = new Ticket();
+      if (!$ticket->getFromDB($ticket_id)) {
+         return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
+      }
+      if (!$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+
+      $ok = $ticket->update(['id' => $ticket_id, 'priority' => $priority]);
+      return ['success' => (bool)$ok, 'error' => $ok ? null : __('Could not update priority', 'kanban')];
    }
 }
