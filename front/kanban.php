@@ -31,17 +31,24 @@ if (!PluginKanbanKanban::canView() || !Ticket::canView()) {
 if (isset($_POST['action']) || isset($_GET['action'])) {
     $action = $_POST['action'] ?? $_GET['action'];
 
+// CSRF protection for POSTs is enforced by GLPI itself before this script runs:
+//   - GLPI 10:  inc/includes.php runs Session::checkCSRF($_POST) on every POST.
+//   - GLPI 11:  the HTTP kernel's CheckCsrfListener validates every body request.
+// Those checks consume the single-use CSRF token (GLPI >= 10.0.8), so calling
+// Session::checkCSRF() again here would always fail with "action not allowed".
+// The ticket visibility / rights gates inside each action below are the
+// authorization layer on top of GLPI's own CSRF validation.
 switch ($action) {
        case 'get_tickets':
-           $filters = [
-              'search'     => isset($_GET['search']) ? trim($_GET['search']) : null,
-              'technician' => isset($_GET['technician']) ? (int)$_GET['technician'] : null,
-              'requester'  => isset($_GET['requester']) ? (int)$_GET['requester'] : null,
-              'group'      => isset($_GET['group']) ? (int)$_GET['group'] : null,
-               'ticket_id'  => isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : null,
-              'type'       => isset($_GET['type']) ? (int)$_GET['type'] : null,
-              'category'   => isset($_GET['category']) ? (int)$_GET['category'] : null,
-           ];
+            $filters = [
+               'search'     => isset($_GET['search']) ? trim($_GET['search']) : null,
+               'technician' => isset($_GET['technician']) && $_GET['technician'] !== '' ? (int)$_GET['technician'] : null,
+               'requester'  => isset($_GET['requester']) && $_GET['requester'] !== '' ? (int)$_GET['requester'] : null,
+               'group'      => isset($_GET['group']) && $_GET['group'] !== '' ? (int)$_GET['group'] : null,
+                'ticket_id'  => isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : null,
+               'type'       => isset($_GET['type']) && $_GET['type'] !== '' ? (int)$_GET['type'] : null,
+               'category'   => isset($_GET['category']) && $_GET['category'] !== '' ? (int)$_GET['category'] : null,
+            ];
           $sort = [
              'by'    => $_GET['sort_by'] ?? 'date',
              'order' => $_GET['sort_order'] ?? 'DESC'
@@ -82,6 +89,17 @@ switch ($action) {
 
        case 'get_group_technicians':
           $group_id = isset($_GET['group']) ? (int)$_GET['group'] : 0;
+          if ($group_id > 0) {
+             // Only allow enumerating groups the caller can see on the board
+             // (their own groups expanded with subgroups), so the membership
+             // of unrelated groups is never disclosed.
+             $allowed = PluginKanbanKanban::expandGroupIds(
+                array_column(PluginKanbanKanban::getGroupsForFilter(), 'id')
+             );
+             if (!in_array($group_id, $allowed, true)) {
+                $group_id = 0;
+             }
+          }
           $technicians = $group_id > 0
              ? PluginKanbanKanban::getTechniciansForGroup($group_id)
              : PluginKanbanKanban::getTechniciansForFilter();
@@ -91,8 +109,7 @@ switch ($action) {
           exit;
 
        case 'assign_to_me':
-          Session::checkCSRF($_POST);
-          $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+           $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
           header("Content-Type: application/json; charset=UTF-8");
           echo json_encode([
              'result'     => PluginKanbanKanban::assignToMe($ticket_id),
@@ -109,8 +126,7 @@ switch ($action) {
           exit;
 
        case 'change_priority':
-          Session::checkCSRF($_POST);
-          $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+           $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
           $priority  = isset($_POST['priority']) ? (int)$_POST['priority'] : 0;
           header("Content-Type: application/json; charset=UTF-8");
           echo json_encode([
@@ -119,39 +135,28 @@ switch ($action) {
           ]);
           exit;
 
-       case 'update_ticket_status':
-          Session::checkCSRF($_POST);
-          $ticket_id  = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
+case 'update_ticket_status':
+           $ticket_id  = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
           $new_status = isset($_POST['status']) ? (int)$_POST['status'] : 0;
+$extra = [
+            'pending_reason'              => isset($_POST['pending_reason']) ? trim((string)$_POST['pending_reason']) : '',
+            'pending'                     => isset($_POST['pending']) ? trim((string)$_POST['pending']) : '',
+            'pendingreasons_id'           => isset($_POST['pendingreasons_id']) ? (int)$_POST['pendingreasons_id'] : 0,
+            'followup_frequency'          => isset($_POST['followup_frequency']) ? (int)$_POST['followup_frequency'] : 0,
+            'followups_before_resolution' => isset($_POST['followups_before_resolution']) ? (int)$_POST['followups_before_resolution'] : 0,
+            'solution'                    => isset($_POST['solution']) ? trim((string)$_POST['solution']) : '',
+            'solution_type_id'            => isset($_POST['solution_type_id']) ? (int)$_POST['solution_type_id'] : 0,
+            'solution_template_id'        => isset($_POST['solution_template_id']) ? (int)$_POST['solution_template_id'] : 0,
+         ];
 
-          if ($ticket_id > 0 && $new_status > 0) {
-             $ticket = new Ticket();
-             if ($ticket->getFromDB($ticket_id)) {
-                if ($ticket->canUpdateItem()) {
-                   $ticket_entities = $ticket->getEntities();
-                   if (!in_array($_SESSION['glpiactive_entity'], $ticket_entities)
-                       && !in_array(0, $ticket_entities)) {
-                      http_response_code(403);
-                      echo json_encode(['success' => false, 'error' => 'Entity mismatch']);
-                      exit;
-                   }
-                   $updated = $ticket->update([
-                      'id'     => $ticket_id,
-                      'status' => $new_status
-                   ]);
-
-                   header("Content-Type: application/json; charset=UTF-8");
-                   echo json_encode(['success' => $updated]);
-                   exit;
-                } else {
-                   http_response_code(403);
-                   echo json_encode(['success' => false, 'error' => 'Permission Denied']);
-                   exit;
-                }
-             }
-          }
-          http_response_code(400);
-          echo json_encode(['success' => false, 'error' => 'Bad Request']);
+          header("Content-Type: application/json; charset=UTF-8");
+          echo json_encode([
+             'result'     => PluginKanbanKanban::updateTicketStatus($ticket_id, $new_status, $extra),
+             // Issue #1: the single-use CSRF token is consumed on every POST, so a
+             // fresh token must accompany every response or the next action in the
+             // same page session would fail.
+             'csrf_token' => Session::getNewCSRFToken(),
+          ]);
           exit;
     }
 }
@@ -182,22 +187,47 @@ foreach ($glpi_statuses as $id => $name) {
    ];
 }
 
+// Apply the admin-configured column order (PluginKanbanConfig) when set.
+// Statuses not listed are appended in their native order so a newly-created
+// ticket status never disappears from the board.
+$status_order = PluginKanbanConfig::getStatusOrder();
+if (count($status_order) > 0) {
+   $ordered = [];
+   foreach ($status_order as $sid) {
+      if (isset($kanban_statuses[$sid])) {
+         $ordered[$sid] = $kanban_statuses[$sid];
+         unset($kanban_statuses[$sid]);
+      }
+   }
+   $kanban_statuses = $ordered + $kanban_statuses;
+}
+
 // Get filter data from model
 $technicians = PluginKanbanKanban::getTechniciansForFilter();
 $requesters  = PluginKanbanKanban::getRequestersForFilter();
 $groups      = PluginKanbanKanban::getGroupsForFilter();
 $categories  = PluginKanbanKanban::getCategoriesForFilter();
 
-// Inject JS variables
-echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses) . ";</script>";
-echo "<script>var KANBAN_GLPI_ROOT = " . json_encode($CFG_GLPI['root_doc']) . ";</script>";
-echo "<script>var KANBAN_TECHNICIANS = " . json_encode($technicians) . ";</script>";
+// Inject JS variables.
+// JSON_HEX_* keep `<`, `>`, `&`, quotes and apostrophes out of the inline
+// <script> context so DB-sourced strings can never break out of the literal.
+$kanban_json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_GLPI_ROOT = " . json_encode($CFG_GLPI['root_doc'], $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_TECHNICIANS = " . json_encode($technicians, $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_CURRENT_USER = " . json_encode([
    'id'   => (int)Session::getLoginUserID(),
    'name' => getUserName(Session::getLoginUserID()),
-]) . ";</script>";
-echo "<script>var KANBAN_TIMEZONE_OFFSET = " . json_encode(date('P')) . ";</script>";
-echo "<script>var KANBAN_SORT_OPTIONS = " . json_encode(PluginKanbanKanban::getSortOptions()) . ";</script>";
+], $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_TIMEZONE_OFFSET = " . json_encode(date('P'), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_SORT_OPTIONS = " . json_encode(PluginKanbanKanban::getSortOptions(), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_ENABLE_DRAG_DROP = " . json_encode(PluginKanbanConfig::getEnableDragDrop() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_REQUIRE_PENDING_REASON = " . json_encode(PluginKanbanConfig::getRequirePendingReason() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_REQUIRE_SOLUTION_MODEL = " . json_encode(PluginKanbanConfig::getRequireSolutionModel() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_REQUIRE_SOLUTION_TYPE = " . json_encode(PluginKanbanConfig::getRequireSolutionType() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_SOLUTION_TEMPLATES = " . json_encode(PluginKanbanKanban::getSolutionTemplates(), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_SOLUTION_TYPES = " . json_encode(PluginKanbanKanban::getSolutionTypes(), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_PENDING_REASONS = " . json_encode(PluginKanbanKanban::getPendingReasons(), $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
    "open" => __("Open", "kanban"),
    "unassigned" => __("Unassigned", "kanban"),
@@ -213,6 +243,11 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "cardFields" => __("Card fields", "kanban"),
     "allTechnicians" => __("All Technicians", "kanban"),
     "allCategories" => __("All Categories", "kanban"),
+    "noTechnician" => __("No Technician", "kanban"),
+    "noRequester" => __("No Requester", "kanban"),
+    "noGroup" => __("No Group", "kanban"),
+    "noType" => __("No Type", "kanban"),
+    "noCategoryFilter" => __("No Category", "kanban"),
     "searchByNumber" => __("Search by ticket number", "kanban"),
     "searchPlaceholder" => __("Search: number, title, category, description...", "kanban"),
     "advancedFilters" => __("Advanced Filters", "kanban"),
@@ -249,15 +284,41 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "fieldDuration" => __("Open duration", "kanban"),
     "ticketDuration" => __("Open duration", "kanban"),
     "slaFrozenHint" => __("SLA paused", "kanban"),
+    "statusUpdated" => __("Status updated", "kanban"),
+    "moveTo" => __("Move to", "kanban"),
+    "cancel" => __("Cancel", "kanban"),
+    "confirmMove" => __("Move", "kanban"),
+    "pendingReason" => __("Pending reason", "kanban"),
+    "pendingReasonPlaceholder" => __("Describe why the ticket is pending...", "kanban"),
+    "solutionDescription" => __("Solution", "kanban"),
+    "solutionModel" => __("Solution model", "kanban"),
+    "solutionType" => __("Solution type", "kanban"),
+    "noSolutionModel" => __("Select a model...", "kanban"),
+    "noSolutionType" => __("No type", "kanban"),
+    "moveToPending" => __("Move to Pending", "kanban"),
+    "moveToSolved" => __("Move to Solved", "kanban"),
+    "followupSkipped" => __("The status changed, but the pending reason was not recorded (no follow-up right).", "kanban"),
+    "solutionSkipped" => __("The status changed, but the solution was not recorded (the ticket can no longer be solved).", "kanban"),
+    "setStatusPending" => __("Set the status to pending", "kanban"),
+    "noPendingReason" => __("Select a reason...", "kanban"),
+    "automaticFollowup" => __("Automatic follow-up", "kanban"),
+    "automaticResolution" => __("Automatic resolution", "kanban"),
+    "pendingDescription" => __("Description", "kanban"),
+    "statusUnchanged" => __("Status unchanged; only the follow-up was recorded", "kanban"),
+    "requirePendingReason" => __("Select a pending reason before moving the card.", "kanban"),
+    "requireSolutionModel" => __("Select a solution model before moving the card.", "kanban"),
+    "requireSolutionType" => __("Select a solution type before moving the card.", "kanban"),
+    "requiredPendingDescription" => __("A description is required to move to Pending", "kanban"),
+    "requiredSolutionDescription" => __("A solution description is required to move to Solved", "kanban"),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
       3 => __("Normal", "kanban"),
       4 => __("High", "kanban"),
       5 => __("Very High", "kanban"),
-      6 => __("Major", "kanban"),
-   ],
-]) . ";</script>";
+6 => __("Major", "kanban"),
+    ],
+], $kanban_json_flags) . ";</script>";
 
 // Load assets via setup.php hooks (add_css / add_javascript)
 ?>
@@ -388,50 +449,55 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
 
                   <div class="col-auto kanban-filter-item">
                      <label class="visually-hidden" for="filter-technician"><?php echo __('Technician', 'kanban'); ?></label>
-                     <select class="form-select select2-simple" id="filter-technician" name="technician" style="min-width: 150px;">
-                        <option value=""><?php echo __('All Technicians', 'kanban'); ?></option>
-                        <?php foreach ($technicians as $user): ?>
-                           <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
+                      <select class="form-select select2-simple" id="filter-technician" name="technician" style="min-width: 150px;">
+<option value=""><?php echo __('All Technicians', 'kanban'); ?></option>
+                         <option value="0"><?php echo __('No Technician', 'kanban'); ?></option>
+                         <?php foreach ($technicians as $user): ?>
+                           <option value="<?php echo (int)$user['id']; ?>"><?php echo htmlspecialchars($user['name'], ENT_QUOTES, 'UTF-8'); ?></option>
                         <?php endforeach; ?>
                      </select>
                   </div>
 
                   <div class="col-auto kanban-filter-item">
                      <label class="visually-hidden" for="filter-requester"><?php echo __('Requester', 'kanban'); ?></label>
-                     <select class="form-select select2-simple" id="filter-requester" name="requester" style="min-width: 150px;">
-                        <option value=""><?php echo __('All Requesters', 'kanban'); ?></option>
-                        <?php foreach ($requesters as $user): ?>
-                           <option value="<?php echo $user['id']; ?>"><?php echo $user['name']; ?></option>
+                      <select class="form-select select2-simple" id="filter-requester" name="requester" style="min-width: 150px;">
+<option value=""><?php echo __('All Requesters', 'kanban'); ?></option>
+                         <option value="0"><?php echo __('No Requester', 'kanban'); ?></option>
+                         <?php foreach ($requesters as $user): ?>
+                           <option value="<?php echo (int)$user['id']; ?>"><?php echo htmlspecialchars($user['name'], ENT_QUOTES, 'UTF-8'); ?></option>
                         <?php endforeach; ?>
                      </select>
                   </div>
 
                   <div class="col-auto kanban-filter-item">
                      <label class="visually-hidden" for="filter-group"><?php echo __('Group', 'kanban'); ?></label>
-                     <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 150px;">
-                        <option value=""><?php echo __('All Groups', 'kanban'); ?></option>
-                        <?php foreach ($groups as $group): ?>
-                           <option value="<?php echo $group['id']; ?>"><?php echo $group['name']; ?></option>
+                      <select class="form-select select2-simple" id="filter-group" name="group" style="min-width: 150px;">
+<option value=""><?php echo __('All Groups', 'kanban'); ?></option>
+                         <option value="0"><?php echo __('No Group', 'kanban'); ?></option>
+                         <?php foreach ($groups as $group): ?>
+                           <option value="<?php echo (int)$group['id']; ?>"><?php echo htmlspecialchars($group['name'], ENT_QUOTES, 'UTF-8'); ?></option>
                         <?php endforeach; ?>
                      </select>
                   </div>
 
                   <div class="col-auto kanban-filter-item">
                      <label class="visually-hidden" for="filter-type"><?php echo __('Ticket type', 'kanban'); ?></label>
-                     <select class="form-select select2-simple" id="filter-type" name="type" style="min-width: 150px;">
-                        <option value=""><?php echo __('All types', 'kanban'); ?></option>
-                        <?php foreach (Ticket::getTypes() as $type_id => $type_name): ?>
-                           <option value="<?php echo $type_id; ?>"><?php echo $type_name; ?></option>
+                      <select class="form-select select2-simple" id="filter-type" name="type" style="min-width: 150px;">
+<option value=""><?php echo __('All types', 'kanban'); ?></option>
+                         <option value="0"><?php echo __('No Type', 'kanban'); ?></option>
+                         <?php foreach (Ticket::getTypes() as $type_id => $type_name): ?>
+                           <option value="<?php echo (int)$type_id; ?>"><?php echo htmlspecialchars($type_name, ENT_QUOTES, 'UTF-8'); ?></option>
                         <?php endforeach; ?>
                      </select>
                   </div>
 
                   <div class="col-auto kanban-filter-item">
                      <label class="visually-hidden" for="filter-category"><?php echo __('Category', 'kanban'); ?></label>
-                     <select class="form-select select2-simple" id="filter-category" name="category" style="min-width: 150px;">
-                        <option value=""><?php echo __('All Categories', 'kanban'); ?></option>
-                        <?php foreach ($categories as $category): ?>
-                           <option value="<?php echo $category['id']; ?>"><?php echo $category['name']; ?></option>
+                      <select class="form-select select2-simple" id="filter-category" name="category" style="min-width: 150px;">
+<option value=""><?php echo __('All Categories', 'kanban'); ?></option>
+                         <option value="0"><?php echo __('No Category', 'kanban'); ?></option>
+                         <?php foreach ($categories as $category): ?>
+                           <option value="<?php echo (int)$category['id']; ?>"><?php echo htmlspecialchars($category['name'], ENT_QUOTES, 'UTF-8'); ?></option>
                         <?php endforeach; ?>
                      </select>
                   </div>
@@ -549,10 +615,10 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
              <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
              </div>
-          </div>
-       </div>
-    </div>
- </div>
+           </div>
+        </div>
+     </div>
+  </div>
 <?php
 
 Html::footer();

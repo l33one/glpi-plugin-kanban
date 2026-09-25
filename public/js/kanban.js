@@ -24,10 +24,48 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
-const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', searchByNumber: 'Search by ticket number', searchPlaceholder: 'Search...', advancedFilters: 'Advanced Filters', assignedToMe: 'Assigned to me', clearFilters: 'Clear', quickActions: 'Quick actions', assignToMe: 'Assign to me', listFollowups: 'List follow-ups', changePriority: 'Change priority', followupsTitle: 'Follow-ups', noFollowups: 'No follow-ups', metricTotal: 'Visible tickets', metricSlaOnTime: 'Within SLA', metricSlaOverdue: 'SLA overdue', metricAssignedToMe: 'Assigned to me', metricUnassigned: 'Unassigned', saved: 'Saved', assigned: 'Assigned', justNow: 'just now', minutesAgo: 'X min ago', hoursAgo: 'X h ago', daysAgo: 'X d ago', today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', inDays: 'in X d', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused' };
+const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', noTechnician: 'No Technician', noRequester: 'No Requester', noGroup: 'No Group', noType: 'No Type', noCategoryFilter: 'No Category', searchByNumber: 'Search by ticket number', searchPlaceholder: 'Search...', advancedFilters: 'Advanced Filters', assignedToMe: 'Assigned to me', clearFilters: 'Clear', quickActions: 'Quick actions', assignToMe: 'Assign to me', listFollowups: 'List follow-ups', changePriority: 'Change priority', followupsTitle: 'Follow-ups', noFollowups: 'No follow-ups', metricTotal: 'Visible tickets', metricSlaOnTime: 'Within SLA', metricSlaOverdue: 'SLA overdue', metricAssignedToMe: 'Assigned to me', metricUnassigned: 'Unassigned', saved: 'Saved', assigned: 'Assigned', justNow: 'just now', minutesAgo: 'X min ago', hoursAgo: 'X h ago', daysAgo: 'X d ago', today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', inDays: 'in X d', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused', statusUpdated: 'Status updated', moveTo: 'Move to', cancel: 'Cancel', confirmMove: 'Move', pendingReason: 'Pending reason', pendingReasonPlaceholder: 'Describe why the ticket is pending...', solutionDescription: 'Solution', solutionModel: 'Solution model', solutionType: 'Solution type', noSolutionModel: 'Select a model...', noSolutionType: 'No type', moveToPending: 'Move to Pending', moveToSolved: 'Move to Solved', followupSkipped: 'The status changed, but the pending reason was not recorded (no follow-up right).', solutionSkipped: 'The status changed, but the solution was not recorded (the ticket can no longer be solved).' };
 
 // Current logged-in user (id + name), injected server-side
 const currentUser = window.KANBAN_CURRENT_USER || { id: 0, name: '' };
+
+// Drag & drop support, injected server-side from the plugin configuration.
+const enableDragDrop = window.KANBAN_ENABLE_DRAG_DROP ? true : false;
+const requirePendingReason = window.KANBAN_REQUIRE_PENDING_REASON ? true : false;
+const requireSolutionModel = window.KANBAN_REQUIRE_SOLUTION_MODEL ? true : false;
+const requireSolutionType = window.KANBAN_REQUIRE_SOLUTION_TYPE ? true : false;
+const solutionTemplates = window.KANBAN_SOLUTION_TEMPLATES || [];
+const solutionTypes = window.KANBAN_SOLUTION_TYPES || [];
+const pendingReasons = window.KANBAN_PENDING_REASONS || [];
+
+// Values/labels mirror GLPI's PendingReason widget ("Automatic follow-up" and
+// "Automatic resolution" selectors), sharing the same option values so saved
+// data remains interchangeable with the native ticket form.
+const pendingFrequencyOptions = [
+   { value: 0,       label: lang.pendingFreqDisabled || 'Automatic follow-up disabled' },
+   { value: 86400,   label: 'Every day' },
+   { value: 172800,  label: 'Every two days' },
+   { value: 259200,  label: 'Every three days' },
+   { value: 345600,  label: 'Every four days' },
+   { value: 432000,  label: 'Every five days' },
+   { value: 518400,  label: 'Every six days' },
+   { value: 604800,  label: 'Every week' },
+   { value: 1209600, label: 'Every two weeks' },
+   { value: 1814400, label: 'Every three weeks' },
+   { value: 2419200, label: 'Every four weeks' }
+];
+const pendingResolutionOptions = [
+   { value: 0, label: lang.pendingResDisabled || 'Disabled' },
+   { value: 1, label: 'After one follow-up' },
+   { value: 2, label: 'After two follow-ups' },
+   { value: 3, label: 'After three follow-ups' }
+];
+
+// State of the in-flight drag (null when idle).
+let dragState = null; // { ticketId, fromStatus }
+
+// Pending status transition awaiting the (optional) modal confirmation.
+let transitionAction = null; // { ticketId, toStatus }
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
@@ -123,52 +161,23 @@ function saveHiddenColumns() {
    }
 
     /**
-     * Escape HTML entities
+     * Escape HTML entities.
+     * Coerces the value to a string so numeric inputs cannot throw a TypeError.
      */
     function escapeHtml(str) {
-       if (!str) return '';
+       if (str === null || str === undefined) return '';
+       str = String(str);
        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' };
        return str.replace(/[&<>'"]/g, tag => map[tag] || tag);
     }
 
     /**
-     * Sanitize HTML content by stripping dangerous tags and attributes.
-     * Allows safe formatting tags (p, br, b, i, u, strong, em, a, ul, ol, li, etc.)
-     * while removing script, iframe, object, embed, form, and event handler attributes.
+     * Rich-text content (ticket descriptions, follow-ups) is sanitized
+     * SERVER-SIDE with GLPI's RichText::getSafeHtml() before it is sent to the
+     * browser. It is therefore safe to insert directly as HTML — no
+     * client-side sanitizer is needed (hand-rolled sanitizers are too easy to
+     * bypass with SVG/mutation-XSS payloads).
      */
-    function sanitizeHtml(html) {
-       if (!html) return '';
-       const tmp = document.createElement('div');
-       tmp.innerHTML = html;
-       const dangerousTags = /script|iframe|object|embed|form|input|textarea|select|button|style|link|meta|base/i;
-       const eventAttrs = /^on/i;
-       const walk = (node) => {
-          const children = Array.from(node.childNodes);
-          for (const child of children) {
-             if (child.nodeType === 1) {
-                if (dangerousTags.test(child.tagName)) {
-                   child.remove();
-                   continue;
-                }
-                const attrs = Array.from(child.attributes);
-                for (const attr of attrs) {
-                   if (eventAttrs.test(attr.name)) {
-                      child.removeAttribute(attr.name);
-                   }
-                   if (attr.name === 'href' || attr.name === 'src') {
-                      const val = (attr.value || '').trim().toLowerCase();
-                      if (val.startsWith('javascript:') || val.startsWith('data:')) {
-                         child.removeAttribute(attr.name);
-                      }
-                   }
-                }
-                walk(child);
-             }
-          }
-       };
-       walk(tmp);
-       return tmp.innerHTML;
-    }
 
    /**
     * Render the Kanban Board structure initially
@@ -345,13 +354,15 @@ function renderBoardColumns() {
           }
        });
 
-       document.querySelectorAll('.kanban-columns-menu .kanban-column-toggle').forEach(item => {
-          const checkbox = item.querySelector('input[type="checkbox"]');
-          if (checkbox) {
-             checkbox.checked = !hiddenColumns.has(item.getAttribute('data-status-id'));
-          }
-       });
-    }
+        document.querySelectorAll('.kanban-columns-menu .kanban-column-toggle').forEach(item => {
+           const checkbox = item.querySelector('input[type="checkbox"]');
+           if (checkbox) {
+              checkbox.checked = !hiddenColumns.has(item.getAttribute('data-status-id'));
+           }
+        });
+
+        recalculateVisibleMetrics();
+     }
 
     /**
      * Populate the "Columns" dropdown with a toggle per status.
@@ -494,10 +505,15 @@ const checkbox = document.createElement('input');
        const current = sel.value;
        sel.innerHTML = '';
 
-       const optAll = document.createElement('option');
-       optAll.value = '';
-       optAll.textContent = lang.allTechnicians || 'All Technicians';
-       sel.appendChild(optAll);
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = lang.allTechnicians || 'All Technicians';
+        sel.appendChild(optAll);
+
+        const optNone = document.createElement('option');
+        optNone.value = '0';
+        optNone.textContent = lang.noTechnician || 'No Technician';
+        sel.appendChild(optNone);
 
        techs.forEach(t => {
           const opt = document.createElement('option');
@@ -555,9 +571,9 @@ const checkbox = document.createElement('input');
        const badge = document.getElementById('kanban-adv-count');
        if (!badge) return;
        let count = 0;
-       ['filter-technician', 'filter-requester', 'filter-group', 'filter-type', 'filter-category'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el && el.value && el.value !== '') count++;
+        ['filter-technician', 'filter-requester', 'filter-group', 'filter-type', 'filter-category'].forEach(id => {
+           const el = document.getElementById(id);
+           if (el && el.value !== '' && el.value !== null && el.value !== undefined) count++;
        });
        if (count > 0) {
           badge.textContent = count;
@@ -663,7 +679,7 @@ const checkbox = document.createElement('input');
                       <span class="fw-semibold">${escapeHtml(fu.user)}</span>
                       <small class="text-muted" title="${escapeHtml(fu.date)}">${escapeHtml(relativeDate(fu.date))}</small>
                    </div>
-                   <div class="kanban-followup-content">${sanitizeHtml(fu.content || '')}</div>
+                   <div class="kanban-followup-content">${fu.content || ''}</div>
                 </div>
              `).join('');
           })
@@ -736,10 +752,10 @@ function loadTickets() {
        params.append('_t', Date.now());
 
        for (const [key, value] of formData.entries()) {
-          if (value) {
-             params.append(key, value);
-          }
-       }
+           if (value !== '' && value !== null && value !== undefined) {
+              params.append(key, value);
+           }
+        }
 
        fetch(apiUrl + '?' + params.toString())
           .then(response => {
@@ -793,11 +809,18 @@ function loadTickets() {
                  }
               });
 
-              // Update total tickets counter in header
-              const totalBadge = document.getElementById('kanban-total');
-              if (totalBadge) {
-                 totalBadge.textContent = totalTickets;
-              }
+// Update total tickets counter in header. Columns hidden via the
+               // board menu (persisted in localStorage) are excluded, so the
+               // badge and the "visible tickets" indicator always match the
+               // columns actually shown.
+               if (hiddenColumns.size > 0) {
+                  recalculateVisibleMetrics();
+               } else {
+                  const totalBadge = document.getElementById('kanban-total');
+                  if (totalBadge) {
+                     totalBadge.textContent = totalTickets;
+                  }
+               }
 
 
                           updateCountdowns();
@@ -872,8 +895,61 @@ function loadTickets() {
        set('metric-overdue', metrics.sla_overdue != null ? metrics.sla_overdue : 0,
           (metrics.sla_overdue || 0) > 0 ? 'text-danger' : null);
        set('metric-assigned', metrics.assigned_to_me != null ? metrics.assigned_to_me : 0);
-       set('metric-unassigned', metrics.unassigned != null ? metrics.unassigned : 0,
-          (metrics.unassigned || 0) > 0 ? 'text-warning' : null);
+        set('metric-unassigned', metrics.unassigned != null ? metrics.unassigned : 0,
+           (metrics.unassigned || 0) > 0 ? 'text-warning' : null);
+    }
+
+    /**
+     * Recalculate metrics from client-side tickets, excluding hidden columns.
+     * Called after toggling column visibility so the metrics bar always reflects
+     * the currently visible board state.
+     */
+    function recalculateVisibleMetrics() {
+       let total = 0, withSla = 0, slaOnTime = 0, slaOverdue = 0;
+       let assignedToMe = 0, unassigned = 0;
+       const userId = currentUser.id;
+
+       for (const [statusId, tickets] of Object.entries(ticketsByStatus)) {
+          if (hiddenColumns.has(statusId)) continue;
+          for (const ticket of tickets) {
+             total++;
+             const sla = ticket.sla_progress || null;
+             if (sla && sla.status && sla.status !== 'no_sla') {
+                withSla++;
+                if (sla.status === 'overdue' || (sla.percent || 0) >= 100) {
+                   slaOverdue++;
+                } else {
+                   slaOnTime++;
+                }
+             }
+             const techs = ticket.assigned_techs || [];
+             if (userId > 0 && techs.length > 0) {
+                for (const tech of techs) {
+                   if (parseInt(tech.id) === userId) {
+                      assignedToMe++;
+                      break;
+                   }
+                }
+             }
+             if (techs.length === 0) {
+                unassigned++;
+             }
+          }
+       }
+
+       const slaPercent = withSla > 0 ? Math.round((slaOnTime / withSla) * 100) : 100;
+       updateMetrics({
+          total: total,
+          sla_percent: slaPercent,
+          sla_overdue: slaOverdue,
+          assigned_to_me: assignedToMe,
+          unassigned: unassigned,
+       });
+
+       const totalBadge = document.getElementById('kanban-total');
+       if (totalBadge) {
+          totalBadge.textContent = total;
+       }
     }
 
     /**
@@ -970,6 +1046,11 @@ function createCardElement(ticket) {
        card.className = 'kanban-card card';
               card.setAttribute('data-ticket-id', ticket.id);
                      card.setAttribute('aria-label', 'Ticket #' + ticket.id + ' - ' + (ticket.title || ''));
+
+       if (enableDragDrop) {
+          card.setAttribute('draggable', 'true');
+          card.classList.add('kanban-card-draggable');
+       }
 
        // Apply border styling based on priority
        card.style.borderLeftColor = priorityColors[ticket.priority] || '#0d6efd';
@@ -1124,6 +1205,383 @@ function createCardElement(ticket) {
       setTimeout(() => {
          if (toast.parentNode) toast.remove();
       }, 3500);
+   }
+
+   // =============================================
+   // Drag & Drop (move cards between columns)
+   // =============================================
+
+   function clearDragHighlights() {
+      dragState = null;
+      document.querySelectorAll('.kanban-drop-zone-active').forEach(z => z.classList.remove('kanban-drop-zone-active'));
+   }
+
+   function onDragStart(e) {
+      const card = e.target.closest('.kanban-card');
+      if (!card || !enableDragDrop) return;
+      const ticketId = card.getAttribute('data-ticket-id');
+      const col = card.closest('.kanban-column');
+      if (!ticketId) return;
+      dragState = { ticketId: ticketId, fromStatus: col ? col.getAttribute('data-status-id') : null };
+      e.dataTransfer.setData('text/plain', ticketId);
+      e.dataTransfer.effectAllowed = 'move';
+   }
+
+   function onDragOver(e) {
+      const zone = e.target.closest('.kanban-cards-dropzone');
+      if (!zone) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      zone.classList.add('kanban-drop-zone-active');
+   }
+
+   function onDragLeave(e) {
+      const zone = e.target.closest('.kanban-cards-dropzone');
+      if (!zone) return;
+      if (!zone.contains(e.relatedTarget)) {
+         zone.classList.remove('kanban-drop-zone-active');
+      }
+   }
+
+   function onDrop(e) {
+      const zone = e.target.closest('.kanban-cards-dropzone');
+      const inFlight = dragState;
+      clearDragHighlights();
+      if (!zone || !inFlight) return;
+      e.preventDefault();
+      const toStatus = String(zone.getAttribute('data-status') || '');
+      const fromStatus = String(inFlight.fromStatus || '');
+      if (!inFlight.ticketId || !toStatus || fromStatus === toStatus) return;
+      openStatusTransitionModal(inFlight.ticketId, fromStatus, toStatus);
+   }
+
+   function onDragEnd() {
+      clearDragHighlights();
+   }
+
+   // =============================================
+   // Status transition modal (drag & drop)
+   // =============================================
+
+   /**
+    * Ensure the transition modal exists once (Bootstrap markup).
+    */
+   function ensureTransitionModal() {
+      let modalEl = document.getElementById('kanbanTransitionModal');
+      if (modalEl) return modalEl;
+
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = `
+         <div class="modal fade" id="kanbanTransitionModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+               <div class="modal-content">
+                  <div class="modal-header">
+                     <h5 class="modal-title" id="kanbanTransitionModalTitle"></h5>
+                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body" id="kanbanTransitionModalBody"></div>
+                  <div class="modal-footer">
+                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${escapeHtml(lang.cancel || 'Cancel')}</button>
+                     <button type="button" class="btn btn-primary" id="kanbanTransitionConfirm">${escapeHtml(lang.confirmMove || 'Move')}</button>
+                  </div>
+               </div>
+            </div>
+         </div>
+      `;
+      modalEl = wrapper.querySelector('#kanbanTransitionModal');
+      document.body.appendChild(modalEl);
+
+      modalEl.querySelector('#kanbanTransitionConfirm').addEventListener('click', function () {
+         confirmTransition();
+      });
+
+      return modalEl;
+   }
+
+   /**
+    * Build the modal body for a status transition (Pending differs from Solved).
+    */
+   function buildTransitionBody(toStatus) {
+      if (toStatus === '4') {
+         const reasonOptions = pendingReasons.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join('');
+         const hasReasons = pendingReasons.length > 0;
+         const freqOptions = pendingFrequencyOptions.map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('');
+         const resOptions = pendingResolutionOptions.map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('');
+         const reasonLabel = requirePendingReason && hasReasons
+            ? `<label for="kanban-move-pendingreason" class="form-label fw-semibold kanban-required-label">${escapeHtml(lang.pendingReason || 'Pending reason')}</label>`
+            : `<label for="kanban-move-pendingreason" class="form-label fw-semibold">${escapeHtml(lang.pendingReason || 'Pending reason')}</label>`;
+         return `
+            <div id="kanban-transition-msg" class="d-none"></div>
+            <div class="form-check form-switch mb-2">
+               <input class="form-check-input" type="checkbox" role="switch" id="kanban-set-pending" checked>
+               <label class="form-check-label fw-semibold" for="kanban-set-pending">${escapeHtml(lang.setStatusPending || 'Set the status to pending')}</label>
+            </div>
+            ${hasReasons ? `
+            <div class="mb-2">
+               ${reasonLabel}
+               <select class="form-select" id="kanban-move-pendingreason">
+                  <option value="">${escapeHtml(lang.noPendingReason || 'Select a reason...')}</option>
+                  ${reasonOptions}
+               </select>
+            </div>
+            <div class="row g-2 mb-2">
+               <div class="col-sm-6">
+                  <label for="kanban-move-followup-freq" class="form-label fw-semibold">${escapeHtml(lang.automaticFollowup || 'Automatic follow-up')}</label>
+                  <select class="form-select" id="kanban-move-followup-freq">${freqOptions}</select>
+               </div>
+               <div class="col-sm-6">
+                  <label for="kanban-move-followups-before-res" class="form-label fw-semibold">${escapeHtml(lang.automaticResolution || 'Automatic resolution')}</label>
+                  <select class="form-select" id="kanban-move-followups-before-res">${resOptions}</select>
+               </div>
+            </div>` : ''}
+            <div class="mb-2">
+               <label for="kanban-move-reason" class="form-label fw-semibold kanban-required-label">${escapeHtml(lang.pendingDescription || 'Description')}</label>
+               <textarea class="form-control" id="kanban-move-reason" rows="3" placeholder="${escapeHtml(lang.pendingReasonPlaceholder || 'Describe why the ticket is pending...')}"></textarea>
+            </div>
+         `;
+      }
+
+      if (toStatus === '5') {
+         const hasModels = solutionTemplates.length > 0;
+         const hasTypes = solutionTypes.length > 0;
+         const modelLabel = requireSolutionModel && hasModels
+            ? `<label for="kanban-move-template" class="form-label fw-semibold kanban-required-label">${escapeHtml(lang.solutionModel || 'Solution model')}</label>`
+            : `<label for="kanban-move-template" class="form-label fw-semibold">${escapeHtml(lang.solutionModel || 'Solution model')}</label>`;
+         const typeLabel = requireSolutionType && hasTypes
+            ? `<label for="kanban-move-type" class="form-label fw-semibold kanban-required-label">${escapeHtml(lang.solutionType || 'Solution type')}</label>`
+            : `<label for="kanban-move-type" class="form-label fw-semibold">${escapeHtml(lang.solutionType || 'Solution type')}</label>`;
+         const modelRow = hasModels ? `
+            <div class="mb-2">
+               ${modelLabel}
+               <select class="form-select" id="kanban-move-template">
+                  <option value="">${escapeHtml(lang.noSolutionModel || 'Select a model...')}</option>
+                  ${solutionTemplates.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}
+               </select>
+            </div>` : '';
+         const typeRow = hasTypes ? `
+            <div class="mb-2">
+               ${typeLabel}
+               <select class="form-select" id="kanban-move-type">
+                  <option value="">${escapeHtml(lang.noSolutionType || 'No type')}</option>
+                  ${solutionTypes.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}
+               </select>
+            </div>` : '';
+         return `
+            <div id="kanban-transition-msg" class="d-none"></div>
+            <div class="mb-2">
+               <label for="kanban-move-solution" class="form-label fw-semibold kanban-required-label">${escapeHtml(lang.solutionDescription || 'Solution')}</label>
+               <textarea class="form-control" id="kanban-move-solution" rows="4" placeholder="${escapeHtml(lang.solutionDescription || 'Solution')}..."></textarea>
+            </div>
+            ${modelRow}
+            ${typeRow}
+         `;
+      }
+
+      return '';
+   }
+
+   /**
+    * Open the transition modal when the destination status requires extra data.
+    * Other statuses transition immediately.
+    */
+   function openStatusTransitionModal(ticketId, fromStatus, toStatus) {
+      if (!toStatus || toStatus === fromStatus) return;
+
+      // Directly transition unless the destination needs the supporting screen.
+      if (toStatus !== '4' && toStatus !== '5') {
+         performStatusChange(ticketId, toStatus, null);
+         return;
+      }
+
+      const modalEl = ensureTransitionModal();
+      const titleEl = document.getElementById('kanbanTransitionModalTitle');
+      const bodyEl = document.getElementById('kanbanTransitionModalBody');
+      const statusName = (window.KANBAN_STATUSES || {})[toStatus]?.name || '';
+      if (titleEl) titleEl.textContent = (lang.moveTo || 'Move to') + ' ' + (statusName || toStatus) + '  #' + ticketId;
+      if (bodyEl) bodyEl.innerHTML = buildTransitionBody(toStatus);
+
+      transitionAction = { ticketId: String(ticketId), toStatus: String(toStatus) };
+
+      // Selecting a model pre-fills the solution description.
+      const modelSel = document.getElementById('kanban-move-template');
+      if (modelSel) {
+         modelSel.addEventListener('change', function () {
+            modelSel.classList.remove('is-invalid');
+            clearRequiredAlert();
+            const t = solutionTemplates.find(x => String(x.id) === String(modelSel.value));
+            const sol = document.getElementById('kanban-move-solution');
+            if (t && sol) sol.value = t.content || '';
+            if (t && t.solutiontypes_id) {
+               const typeSel = document.getElementById('kanban-move-type');
+               if (typeSel) typeSel.value = String(t.solutiontypes_id);
+            }
+         });
+      }
+
+      // Selecting a pending reason fills the automatic follow-up controls,
+      // exactly like the native pendency widget does.
+      const prSel = document.getElementById('kanban-move-pendingreason');
+      if (prSel) {
+         prSel.addEventListener('change', function () {
+            prSel.classList.remove('is-invalid');
+            clearRequiredAlert();
+            const pr = pendingReasons.find(x => String(x.id) === String(prSel.value));
+            const f = document.getElementById('kanban-move-followup-freq');
+            const r = document.getElementById('kanban-move-followups-before-res');
+            const fv = pr ? pr.followup_frequency : 0;
+            const rv = pr ? pr.followups_before_resolution : 0;
+            if (f) f.value = String(fv);
+            if (r) r.value = String(rv);
+         });
+      }
+
+      // Typing in the description/solution clears the required-field alert.
+      const reasonTa = document.getElementById('kanban-move-reason');
+      if (reasonTa) {
+         reasonTa.addEventListener('input', function () {
+            reasonTa.classList.remove('is-invalid');
+            clearRequiredAlert();
+         });
+      }
+      const solTa = document.getElementById('kanban-move-solution');
+      if (solTa) {
+         solTa.addEventListener('input', function () {
+            solTa.classList.remove('is-invalid');
+            clearRequiredAlert();
+         });
+      }
+
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.show();
+   }
+
+   function confirmTransition() {
+      const action = transitionAction;
+      if (!action) return;
+      const bodyEl = document.getElementById('kanbanTransitionModalBody');
+      if (!bodyEl) return;
+
+      const extra = {};
+      const setPending = document.getElementById('kanban-set-pending');
+      if (setPending) extra.pending = setPending.checked ? '1' : '0';
+      const pReasonSel = document.getElementById('kanban-move-pendingreason');
+      const pFreqSel = document.getElementById('kanban-move-followup-freq');
+      const pResSel = document.getElementById('kanban-move-followups-before-res');
+      if (pReasonSel) extra.pendingreasons_id = pReasonSel.value || '0';
+      if (pFreqSel) extra.followup_frequency = pFreqSel.value || '0';
+      if (pResSel) extra.followups_before_resolution = pResSel.value || '0';
+
+      const reason = document.getElementById('kanban-move-reason');
+      if (reason) extra.pending_reason = reason.value;
+
+      const solution = document.getElementById('kanban-move-solution');
+      const templateSel = document.getElementById('kanban-move-template');
+      const typeSel = document.getElementById('kanban-move-type');
+      if (solution) extra.solution = solution.value;
+      if (templateSel && templateSel.value) extra.solution_template_id = templateSel.value;
+      if (typeSel && typeSel.value) extra.solution_type_id = typeSel.value;
+
+      // The description is ALWAYS required (no configuration toggle).
+      if (action.toStatus === '4' && reason && reason.value.trim() === '') {
+         rejectRequiredField(reason, lang.requiredPendingDescription || 'A description is required to move to Pending.');
+         return;
+      }
+      if (action.toStatus === '5' && solution && solution.value.trim() === '') {
+         rejectRequiredField(solution, lang.requiredSolutionDescription || 'A solution description is required to move to Solved.');
+         return;
+      }
+
+      // Enforced required fields (mirrors the plugin configuration).
+      if (action.toStatus === '4' && requirePendingReason
+         && extra.pending !== '0'
+         && (!pReasonSel || !pReasonSel.value || pReasonSel.value === '0')) {
+         rejectRequiredField(pReasonSel, lang.requirePendingReason || 'Select a pending reason before moving the card.');
+         return;
+      }
+      if (action.toStatus === '5' && requireSolutionModel
+         && (!templateSel || !templateSel.value || templateSel.value === '0')) {
+         rejectRequiredField(templateSel, lang.requireSolutionModel || 'Select a solution model before moving the card.');
+         return;
+      }
+      if (action.toStatus === '5' && requireSolutionType
+         && (!typeSel || !typeSel.value || typeSel.value === '0')) {
+         rejectRequiredField(typeSel, lang.requireSolutionType || 'Select a solution type before moving the card.');
+         return;
+      }
+
+      transitionAction = null;
+      const modalEl = document.getElementById('kanbanTransitionModal');
+      if (modalEl) {
+         const modal = bootstrap.Modal.getInstance(modalEl);
+         if (modal) modal.hide();
+      }
+
+      performStatusChange(action.ticketId, action.toStatus, extra);
+   }
+
+   /**
+    * Show an inline required-field alert in the transition modal, highlight
+    * the offending field and scroll it into view.
+    */
+   function rejectRequiredField(fieldEl, message) {
+      if (fieldEl) {
+         fieldEl.classList.add('is-invalid');
+         fieldEl.focus();
+      }
+      const msg = document.getElementById('kanban-transition-msg');
+      if (msg) {
+         msg.className = 'alert alert-danger py-2 px-3 d-flex align-items-center gap-2';
+         msg.innerHTML = `<i class="ti ti-alert-triangle"></i><span>${escapeHtml(message)}</span>`;
+      }
+      showToast(message, 'warning');
+   }
+
+   function clearRequiredAlert() {
+      const msg = document.getElementById('kanban-transition-msg');
+      if (msg) msg.className = 'd-none';
+      const bodyEl = document.getElementById('kanbanTransitionModalBody');
+      if (bodyEl) bodyEl.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+   }
+
+   /**
+    * POST a status change to the Kanban API and reload the board.
+    */
+   function performStatusChange(ticketId, toStatus, extra) {
+      const body = new URLSearchParams();
+      body.append('action', 'update_ticket_status');
+      body.append('ticket_id', ticketId);
+      body.append('status', toStatus);
+      if (extra) {
+         if (extra.pending) body.append('pending', extra.pending);
+         if (extra.pendingreasons_id) body.append('pendingreasons_id', extra.pendingreasons_id);
+         if (extra.followup_frequency) body.append('followup_frequency', extra.followup_frequency);
+         if (extra.followups_before_resolution) body.append('followups_before_resolution', extra.followups_before_resolution);
+         if (extra.pending_reason) body.append('pending_reason', extra.pending_reason);
+         if (extra.solution) body.append('solution', extra.solution);
+         if (extra.solution_type_id) body.append('solution_type_id', extra.solution_type_id);
+         if (extra.solution_template_id) body.append('solution_template_id', extra.solution_template_id);
+      }
+      if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
+
+      fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+         .then(r => r.json())
+         .then(res => {
+            if (res && res.csrf_token) {
+               _csrfToken = res.csrf_token;
+            }
+            const result = res && res.result ? res.result : res;
+            if (result && result.success) {
+               showToast((lang.statusUpdated || 'Status updated') + ' #' + ticketId, 'success');
+               if (result.status_unchanged) showToast(lang.statusUnchanged || 'Status unchanged; only the follow-up was recorded', 'info');
+               if (result.followup_skipped) showToast(lang.followupSkipped || 'Pending reason not recorded.', 'warning');
+               if (result.solution_skipped) showToast(lang.solutionSkipped || 'Solution not recorded.', 'warning');
+               closeCardMenus();
+               loadTickets();
+            } else {
+               showToast((result && result.error) || 'Error', 'danger');
+            }
+         })
+         .catch(() => showToast('Error updating status', 'danger'));
    }
 
    // =============================================
@@ -1422,7 +1880,8 @@ function updateCountdowns() {
           `;
        }
 
-       const content = sanitizeHtml(ticket.content || 'No description available.');
+       // Content is already sanitized server-side via GLPI RichText::getSafeHtml().
+       const content = ticket.content || 'No description available.';
 
        body.innerHTML = `
            <div class="row g-0">
@@ -1600,8 +2059,17 @@ document.addEventListener('DOMContentLoaded', function () {
       });
    }
 
-   // Start countdown (will self-regulate based on visible timers)
-   startTimerIfNeeded();
+    // Drag & drop (delegated so re-rendered cards keep working)
+    if (enableDragDrop) {
+       document.addEventListener('dragstart', onDragStart);
+       document.addEventListener('dragover', onDragOver);
+       document.addEventListener('dragleave', onDragLeave);
+       document.addEventListener('drop', onDrop);
+       document.addEventListener('dragend', onDragEnd);
+    }
+
+    // Start countdown (will self-regulate based on visible timers)
+    startTimerIfNeeded();
 });
 
 })();

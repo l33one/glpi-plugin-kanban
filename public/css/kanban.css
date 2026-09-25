@@ -362,6 +362,21 @@
    transition: background-color 0.2s ease !important;
 }
 
+/* ===== Drag & drop (issue #1) ===== */
+.kanban-card-draggable {
+   cursor: grab !important;
+   touch-action: none;
+}
+.kanban-card-draggable:active {
+   cursor: grabbing !important;
+}
+.kanban-cards-dropzone.kanban-drop-zone-active {
+   background-color: rgba(13, 110, 253, 0.08) !important;
+   outline: 2px dashed rgba(13, 110, 253, 0.55) !important;
+   outline-offset: -2px;
+   border-radius: 0.625rem;
+}
+
 /* ===== Hidden columns ===== */
 .kanban-column-hidden {
    display: none !important;
@@ -1111,4 +1126,14 @@ a:focus-visible,
 /* Relative date hint color for overdue-like emphasis */
 .card-meta .text-relative-overdue {
    color: var(--status-color, var(--kanban-primary));
+}
+
+/* Required fields in the transition modal */
+.kanban-required-label::after {
+   content: ' *';
+   color: var(--glpi-danger, #dc3545);
+}
+#kanbanTransitionModalBody .form-select.is-invalid,
+#kanbanTransitionModalBody .form-control.is-invalid {
+   border-color: var(--glpi-danger, #dc3545);
 }

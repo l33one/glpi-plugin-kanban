@@ -103,45 +103,91 @@ class PluginKanbanKanban extends CommonGLPI {
       }
 
       // Apply Technician filter (joins glpi_tickets_users for ASSIGN type)
-      if (!empty($filters['technician'])) {
-         $criteria['INNER JOIN']['glpi_tickets_users AS tu_tech'] = [
-            'ON' => [
-               't'       => 'id',
-               'tu_tech' => 'tickets_id'
-            ]
-         ];
-         $criteria['WHERE']['tu_tech.users_id'] = (int)$filters['technician'];
-         $criteria['WHERE']['tu_tech.type'] = CommonITILActor::ASSIGN;
+      if (isset($filters['technician']) && $filters['technician'] !== null) {
+         $tech_id = (int)$filters['technician'];
+         if ($tech_id > 0) {
+            $criteria['INNER JOIN']['glpi_tickets_users AS tu_tech'] = [
+               'ON' => [
+                  't'       => 'id',
+                  'tu_tech' => 'tickets_id'
+               ]
+            ];
+            $criteria['WHERE']['tu_tech.users_id'] = $tech_id;
+            $criteria['WHERE']['tu_tech.type'] = CommonITILActor::ASSIGN;
+         } else {
+            // "No Technician" – tickets with no assigned technician
+            $criteria['LEFT JOIN']['glpi_tickets_users AS tu_tech_none'] = [
+               'ON' => [
+                  't'              => 'id',
+                  'tu_tech_none'   => 'tickets_id',
+                  ['AND' => ['tu_tech_none.type' => CommonITILActor::ASSIGN]]
+               ]
+            ];
+            $criteria['WHERE'][] = ['tu_tech_none.tickets_id' => null];
+         }
       }
 
       // Apply Requester filter (joins glpi_tickets_users for REQUESTER type)
-      if (!empty($filters['requester'])) {
-         $criteria['INNER JOIN']['glpi_tickets_users AS tu_req'] = [
-            'ON' => [
-               't'      => 'id',
-               'tu_req' => 'tickets_id'
-            ]
-         ];
-         $criteria['WHERE']['tu_req.users_id'] = (int)$filters['requester'];
-         $criteria['WHERE']['tu_req.type'] = CommonITILActor::REQUESTER;
+      if (isset($filters['requester']) && $filters['requester'] !== null) {
+         $req_id = (int)$filters['requester'];
+         if ($req_id > 0) {
+            $criteria['INNER JOIN']['glpi_tickets_users AS tu_req'] = [
+               'ON' => [
+                  't'      => 'id',
+                  'tu_req' => 'tickets_id'
+               ]
+            ];
+            $criteria['WHERE']['tu_req.users_id'] = $req_id;
+            $criteria['WHERE']['tu_req.type'] = CommonITILActor::REQUESTER;
+         } else {
+            // "No Requester" – tickets with no requester
+            $criteria['LEFT JOIN']['glpi_tickets_users AS tu_req_none'] = [
+               'ON' => [
+                  't'             => 'id',
+                  'tu_req_none'   => 'tickets_id',
+                  ['AND' => ['tu_req_none.type' => CommonITILActor::REQUESTER]]
+               ]
+            ];
+            $criteria['WHERE'][] = ['tu_req_none.tickets_id' => null];
+         }
       }
 
       // Apply Group filter (joins glpi_groups_tickets).
       // When a group is selected, include the group and all of its subgroups.
-      if (!empty($filters['group'])) {
+      if (isset($filters['group']) && $filters['group'] !== null) {
          $group_id = (int)$filters['group'];
-         $group_ids = getSonsOf('glpi_groups', $group_id);
-         if (empty($group_ids)) {
-            $group_ids = [$group_id => $group_id];
+         if ($group_id > 0) {
+            $group_ids = getSonsOf('glpi_groups', $group_id);
+            if (empty($group_ids)) {
+               $group_ids = [$group_id => $group_id];
+            }
+            $criteria['INNER JOIN']['glpi_groups_tickets AS gt'] = [
+               'ON' => [
+                  't'  => 'id',
+                  'gt' => 'tickets_id'
+               ]
+            ];
+            $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
+         } else {
+            // "No Group" – tickets with no group assigned
+            $criteria['LEFT JOIN']['glpi_groups_tickets AS gt_none'] = [
+               'ON' => [
+                  't'        => 'id',
+                  'gt_none'  => 'tickets_id'
+               ]
+            ];
+            $criteria['WHERE'][] = ['gt_none.tickets_id' => null];
          }
-         $criteria['INNER JOIN']['glpi_groups_tickets AS gt'] = [
-            'ON' => [
-               't'  => 'id',
-               'gt' => 'tickets_id'
-            ]
-         ];
-          $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
-       }
+      }
+
+      // Exact ticket-number filter: match tickets whose id contains the typed
+      // digits (a leading "#" or any  other non-digit character is ignored).
+      if (isset($filters['ticket_id']) && $filters['ticket_id'] !== null && $filters['ticket_id'] !== '') {
+         $ticket_number = preg_replace('/\D/', '', (string)$filters['ticket_id']);
+         if ($ticket_number !== '') {
+            $criteria['WHERE']['t.id'] = ['LIKE', '%' . $ticket_number . '%'];
+         }
+      }
 
       // Apply omnichannel search: matches ticket number, title, category or
       // description. A leading "#" or any non-digit character is ignored for
@@ -165,27 +211,47 @@ class PluginKanbanKanban extends CommonGLPI {
       }
 
       // Apply Ticket type filter (incident or request)
-      if (!empty($filters['type'])) {
+      if (isset($filters['type']) && $filters['type'] !== null) {
          $type = (int)$filters['type'];
-         $allowed_types = [
-            defined('Ticket::INCIDENT_TYPE') ? Ticket::INCIDENT_TYPE : Ticket::INCIDENT,
-            defined('Ticket::DEMAND_TYPE') ? Ticket::DEMAND_TYPE : Ticket::DEMAND,
-         ];
-         if (in_array($type, $allowed_types)) {
-            $criteria['WHERE']['t.type'] = $type;
+         if ($type > 0) {
+            $allowed_types = [
+               defined('Ticket::INCIDENT_TYPE') ? Ticket::INCIDENT_TYPE : Ticket::INCIDENT,
+               defined('Ticket::DEMAND_TYPE') ? Ticket::DEMAND_TYPE : Ticket::DEMAND,
+            ];
+            if (in_array($type, $allowed_types)) {
+               $criteria['WHERE']['t.type'] = $type;
+            }
+         } else {
+            // "No Type" – tickets with type = 0 or NULL
+            $criteria['WHERE'][] = [
+               'OR' => [
+                  't.type' => 0,
+                  't.type' => null,
+               ]
+            ];
          }
       }
 
       // Apply Category filter (joins nothing extra: glpi_itilcategories is
       // already LEFT JOINed for the category name). When a category is
       // selected, include the category and all of its subcategories.
-      if (!empty($filters['category'])) {
+      if (isset($filters['category']) && $filters['category'] !== null) {
          $category_id = (int)$filters['category'];
-         $category_ids = getSonsOf('glpi_itilcategories', $category_id);
-         if (empty($category_ids)) {
-            $category_ids = [$category_id => $category_id];
+         if ($category_id > 0) {
+            $category_ids = getSonsOf('glpi_itilcategories', $category_id);
+            if (empty($category_ids)) {
+               $category_ids = [$category_id => $category_id];
+            }
+            $criteria['WHERE']['t.itilcategories_id'] = array_values($category_ids);
+         } else {
+            // "No Category" – tickets with category = 0 or NULL
+            $criteria['WHERE'][] = [
+               'OR' => [
+                  't.itilcategories_id' => 0,
+                  't.itilcategories_id' => null,
+               ]
+            ];
          }
-         $criteria['WHERE']['t.itilcategories_id'] = array_values($category_ids);
       }
 
       // Apply Sorting
@@ -238,10 +304,12 @@ class PluginKanbanKanban extends CommonGLPI {
            // Add status name for display
            $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
 
-           // Decode GLPI-sanitized text fields before sending them to the frontend
-           $ticket['title']    = self::unsanitizeOutput($ticket['title']);
-           $ticket['content']  = self::unsanitizeOutput($ticket['content']);
-           $ticket['category'] = self::unsanitizeOutput($ticket['category']);
+           // Decode GLPI-10-encoded plain-text fields (GLPI 11 stores raw
+           // values) and sanitize the rich-text content on the server so the
+           // browser never parses untrusted stored markup.
+           $ticket['title']    = self::decodeStoredValue($ticket['title']);
+           $ticket['content']  = self::safeRichText($ticket['content']);
+           $ticket['category'] = self::decodeStoredValue($ticket['category']);
 
            // Add requester name
            $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
@@ -378,7 +446,7 @@ class PluginKanbanKanban extends CommonGLPI {
      * @param array $group_ids
      * @return int[]
      */
-    private static function expandGroupIds(array $group_ids): array {
+    public static function expandGroupIds(array $group_ids): array {
        $expanded = [];
        foreach (array_filter(array_map('intval', $group_ids)) as $gid) {
           $sons = getSonsOf('glpi_groups', $gid);
@@ -393,17 +461,36 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
     /**
-     * Decode GLPI-sanitized data before sending it to the frontend.
+     * Decode values stored by GLPI 10's input Sanitizer.
      *
-     * GLPI stores user input with HTML entities (e.g. ">" is stored as "&#62;").
-     * Fields read via raw SQL must be unsanitized on output, otherwise titles
-     * show "&#62;" and descriptions show raw HTML code.
+     * GLPI 10 stored user input HTML-entity-encoded (e.g. ">" as "&#62;"), so
+     * plain-text fields read through $DB->request() need decoding before they
+     * are displayed. GLPI 11 stores raw values and escapes them on output, and
+     * its Sanitizer is deprecated, so no decoding is applied on GLPI 11.
      *
      * @param mixed $value
      * @return mixed
      */
-    private static function unsanitizeOutput($value) {
-       return \Glpi\Toolbox\Sanitizer::unsanitize($value);
+    private static function decodeStoredValue($value) {
+       if (defined('GLPI_VERSION') && version_compare((string)GLPI_VERSION, '11.0.0', '<')) {
+          return \Glpi\Toolbox\Sanitizer::unsanitize($value);
+       }
+       return $value;
+    }
+
+    /**
+     * Sanitize a rich-text field (ticket/followup content) server-side.
+     *
+     * Uses GLPI's own sanitizer — the same one the core applies when rendering
+     * stored HTML — so untrusted content never reaches the browser as live
+     * markup. No client-side sanitizer is required.
+     *
+     * @param mixed $value Raw stored value (may be null)
+     * @return string
+     */
+    private static function safeRichText($value): string {
+       $value = ($value === null || $value === false) ? '' : (string)$value;
+       return \Glpi\RichText\RichText::getSafeHtml($value);
     }
 
     /**
@@ -528,27 +615,36 @@ class PluginKanbanKanban extends CommonGLPI {
        foreach ($iterator as $user) {
           $users[] = [
              'id'   => (int)$user['id'],
-             'name' => self::unsanitizeOutput(getUserName($user['id']))
+             'name' => self::decodeStoredValue(getUserName($user['id']))
           ];
        }
        self::sortUsersByName($users);
        return $users;
     }
 
-     /**
+/**
       * Get technicians (users) who are members of a group or any of its subgroups.
-     *
-     * @param int $group_id
-     * @return array Array of ['id' => int, 'name' => string]
-     */
+      *
+      * The caller must be authorized to see the group (the front controller
+      * validates the id against the caller's own groups before calling this),
+      * and only members that belong to the caller's active entities are
+      * returned.
+      *
+      * @param int $group_id
+      * @return array Array of ['id' => int, 'name' => string]
+      */
     public static function getTechniciansForGroup(int $group_id): array {
        global $DB;
+       $group_id = (int)$group_id;
+       if ($group_id <= 0) {
+          return [];
+       }
        $group_ids = getSonsOf('glpi_groups', $group_id);
        if (empty($group_ids)) {
           $group_ids = [$group_id => $group_id];
        }
        $users = [];
-       $iterator = $DB->request([
+       $criteria = [
           'SELECT'     => ['u.id', 'u.realname', 'u.firstname'],
           'FROM'       => 'glpi_users AS u',
           'INNER JOIN' => [
@@ -567,16 +663,21 @@ class PluginKanbanKanban extends CommonGLPI {
           'DISTINCT'   => true,
           'ORDER'      => 'u.realname ASC',
           'LIMIT'      => 500
-       ]);
-foreach ($iterator as $user) {
-            $users[] = [
-               'id'   => (int)$user['id'],
-               'name' => self::unsanitizeOutput(getUserName($user['id']))
-            ];
-         }
-          self::sortUsersByName($users);
-          return $users;
+       ];
+        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $_SESSION['glpiactiveentities'] ?? [0], true);
+        if (!empty($entity_restriction)) {
+           $criteria['WHERE'][] = $entity_restriction;
+        }
+       $iterator = $DB->request($criteria);
+       foreach ($iterator as $user) {
+          $users[] = [
+             'id'   => (int)$user['id'],
+             'name' => self::decodeStoredValue(getUserName($user['id']))
+          ];
        }
+       self::sortUsersByName($users);
+       return $users;
+    }
 
      /**
       * Sort a list of users alphabetically by display name.
@@ -590,30 +691,50 @@ foreach ($iterator as $user) {
        });
     }
 
-     /**
-      * Get list of requesters for filter dropdown
-     *
-     * @return array Array of ['id' => int, 'name' => string]
-     */
+/**
+      * Get list of requesters for filter dropdown.
+      *
+      * Only active users of the caller's active entities who actually appear
+      * as requesters (type REQUESTER) on at least one ticket are returned, so
+      * the board never discloses accounts from unrelated entities.
+      *
+      * @return array Array of ['id' => int, 'name' => string]
+      */
     public static function getRequestersForFilter(): array {
        global $DB;
        $requesters = [];
-       $iterator = $DB->request([
-          'SELECT' => ['id', 'realname', 'firstname'],
-          'FROM'   => 'glpi_users',
-          'WHERE'  => [
-             'is_deleted' => 0,
-             'is_active'  => 1,
+       $criteria = [
+          'SELECT'     => ['u.id', 'u.realname', 'u.firstname'],
+          'FROM'       => 'glpi_users AS u',
+          'INNER JOIN' => [
+             'glpi_tickets_users AS tu' => [
+                'ON' => [
+                   'u'  => 'id',
+                   'tu' => 'users_id'
+                ]
+             ]
           ],
-          'ORDER'  => 'realname ASC',
-          'LIMIT'  => 500
-       ]);
+          'WHERE'  => [
+             'u.is_deleted' => 0,
+             'u.is_active'  => 1,
+             'tu.type'      => CommonITILActor::REQUESTER,
+          ],
+          'DISTINCT' => true,
+          'ORDER'    => 'realname ASC',
+          'LIMIT'    => 500
+       ];
+        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $_SESSION['glpiactiveentities'] ?? [0], true);
+        if (!empty($entity_restriction)) {
+           $criteria['WHERE'][] = $entity_restriction;
+        }
+        $iterator = $DB->request($criteria);
         foreach ($iterator as $user) {
            $requesters[] = [
               'id'   => (int)$user['id'],
-              'name' => self::unsanitizeOutput(getUserName($user['id']))
+              'name' => self::decodeStoredValue(getUserName($user['id']))
            ];
         }
+        self::sortUsersByName($requesters);
         return $requesters;
     }
 
@@ -655,7 +776,7 @@ foreach ($iterator as $user) {
         foreach ($iterator as $group) {
            $groups[] = [
               'id'   => (int)$group['id'],
-              'name' => self::unsanitizeOutput($group['name'])
+              'name' => self::decodeStoredValue($group['name'])
            ];
         }
         return $groups;
@@ -688,7 +809,7 @@ foreach ($iterator as $user) {
         foreach ($iterator as $category) {
            $categories[] = [
               'id'   => (int)$category['id'],
-              'name' => self::unsanitizeOutput($category['name'])
+              'name' => self::decodeStoredValue($category['name'])
            ];
         }
         return $categories;
@@ -725,9 +846,9 @@ foreach ($iterator as $user) {
           if ($user['id']) {
              $techs[] = [
                 'id'        => (int)$user['id'],
-                'name'      => self::unsanitizeOutput(getUserName($user['id'])),
-                'firstname' => self::unsanitizeOutput($user['firstname']),
-                'realname'  => self::unsanitizeOutput($user['realname']),
+                'name'      => self::decodeStoredValue(getUserName($user['id'])),
+                'firstname' => self::decodeStoredValue($user['firstname']),
+                'realname'  => self::decodeStoredValue($user['realname']),
                 'picture'   => self::getPictureUrlCompat($user['picture']),
              ];
           }
@@ -786,7 +907,7 @@ foreach ($iterator as $user) {
 
         foreach ($iterator as $user) {
            if ($user['id']) {
-              $requester = self::unsanitizeOutput(getUserName($user['id']));
+              $requester = self::decodeStoredValue(getUserName($user['id']));
            }
         }
         return $requester;
@@ -865,10 +986,12 @@ foreach ($iterator as $user) {
        $status = (int)$ticket['status'];
        $all_statuses = Ticket::getAllStatusArray();
 
-       // Decode GLPI-sanitized text fields before sending them to the frontend
-       $ticket['title']    = self::unsanitizeOutput($ticket['title']);
-       $ticket['content']  = self::unsanitizeOutput($ticket['content']);
-       $ticket['category'] = self::unsanitizeOutput($ticket['category']);
+// Decode GLPI-10-encoded plain-text fields (GLPI 11 stores raw
+           // values) and sanitize the rich-text content on the server so the
+           // browser never parses untrusted stored markup.
+           $ticket['title']    = self::decodeStoredValue($ticket['title']);
+           $ticket['content']  = self::safeRichText($ticket['content']);
+           $ticket['category'] = self::decodeStoredValue($ticket['category']);
 
        $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
        $ticket['priority_label'] = Ticket::getPriorityName($ticket['priority'] ?? 0);
@@ -1081,7 +1204,13 @@ foreach ($iterator as $user) {
       if (!$ticket->getFromDB($ticket_id)) {
          return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
       }
-      if (!$ticket->canUpdateItem()) {
+      // Technician-level write right is required: "requester may edit their own
+      // ticket" (canUpdateItem) alone must not allow actor changes.
+      if (!Session::haveRight(Ticket::$rightname, UPDATE) || !$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      // The ticket must be one the board would have shown to this user.
+      if (!self::isTicketVisible($ticket_id)) {
          return ['success' => false, 'error' => __('Permission denied', 'kanban')];
       }
 
@@ -1137,9 +1266,9 @@ foreach ($iterator as $user) {
          }
          $followups[] = [
             'id'      => (int)$row['id'],
-            'content' => self::unsanitizeOutput($row['content']),
+            'content' => self::safeRichText($row['content']),
             'date'    => $row['date'],
-            'user'    => $row['users_id'] ? self::unsanitizeOutput(getUserName((int)$row['users_id'])) : __('Unknown', 'kanban'),
+            'user'    => $row['users_id'] ? self::decodeStoredValue(getUserName((int)$row['users_id'])) : __('Unknown', 'kanban'),
             'private' => (bool)$row['is_private'],
          ];
       }
@@ -1164,11 +1293,310 @@ foreach ($iterator as $user) {
       if (!$ticket->getFromDB($ticket_id)) {
          return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
       }
-      if (!$ticket->canUpdateItem()) {
+      // Technician-level write right is required: "requester may edit their own
+      // ticket" (canUpdateItem) alone must not allow priority changes.
+      if (!Session::haveRight(Ticket::$rightname, UPDATE) || !$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      // The ticket must be one the board would have shown to this user.
+      if (!self::isTicketVisible($ticket_id)) {
          return ['success' => false, 'error' => __('Permission denied', 'kanban')];
       }
 
       $ok = $ticket->update(['id' => $ticket_id, 'priority' => $priority]);
       return ['success' => (bool)$ok, 'error' => $ok ? null : __('Could not update priority', 'kanban')];
+   }
+
+   /**
+    * Transition a ticket to a new status (drag & drop).
+    *
+* Depending on the destination the associated GLPI data is recorded too:
+     *   - WAITING (4): the pending reason is stored as a ticket follow-up and
+     *                   linked through PendingReason_Item (like GLPI's native
+     *                   "Set the status to pending" widget).
+     *   - SOLVED  (5): a solution (description, optional type, or from a
+     *                  solution template) is stored as an ITILSolution.
+     *
+* GLPI rights are always respected: if the caller may not create follow-ups
+      * or solutions, that part is skipped (flagged) but the status transition
+      * still happens, mirroring what GLPI itself allows the user to do.
+      *
+      * The description is ALWAYS required when moving to Pending or Solved
+      * (a selected solution template auto-fills the Solved description).
+      * The plugin configuration can additionally require a pending reason
+      * (to Pending), a solution model and/or a solution type (to Solved);
+      * in those cases the transition is rejected unless the field is provided.
+      *
+     * @param int   $ticket_id
+     * @param int   $new_status   Destination status id.
+     * @param array $extra        'pending' (flag), 'pending_reason',
+     *                            'pendingreasons_id', 'followup_frequency',
+     *                            'followups_before_resolution', 'solution',
+     *                            'solution_type_id', 'solution_template_id'.
+     * @return array ['success' => bool, 'error' => string|null,
+     *                'followup_skipped' => bool, 'solution_skipped' => bool,
+     *                'status_unchanged' => bool]
+    */
+   public static function updateTicketStatus(int $ticket_id, int $new_status, array $extra = []): array {
+      $ticket_id  = (int)$ticket_id;
+      $new_status = (int)$new_status;
+      if ($ticket_id <= 0 || $new_status <= 0) {
+         return ['success' => false, 'error' => __('Invalid request', 'kanban')];
+      }
+
+      $ticket = new Ticket();
+      if (!$ticket->getFromDB($ticket_id)) {
+         return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
+      }
+      // Technician-level write right is required (same as the other actions).
+      if (!Session::haveRight(Ticket::$rightname, UPDATE) || !$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      // The ticket must be one the board would have shown to this user.
+      if (!self::isTicketVisible($ticket_id)) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+
+      $user_id = (int)Session::getLoginUserID();
+      $out = [
+         'success'           => false,
+         'error'             => null,
+         'followup_skipped'  => false,
+         'solution_skipped'  => false,
+      ];
+
+      // WAITING: record the pending reason.
+      // The "pending" flag mirrors GLPI's "Set the status to pending" checkbox.
+      // When it is off, the follow-up is recorded (if any text) but the status
+      // is left untouched, exactly like in the native "add follow-up" screen.
+      $set_pending    = in_array((string)($extra['pending'] ?? ''), ['1', 'on', 'true', 'yes'], true);
+      $pending_reason = trim((string)($extra['pending_reason'] ?? ''));
+      if ($new_status === Ticket::WAITING) {
+         // The description is ALWAYS required (no configuration toggle).
+         if ($pending_reason === '') {
+            return [
+               'success' => false,
+               'error'   => __('A description is required to move to Pending', 'kanban'),
+            ];
+         }
+         if (!$set_pending) {
+            if ($pending_reason !== '') {
+               if (ITILFollowup::canCreate()) {
+                  $fu = new ITILFollowup();
+                  $result = $fu->add([
+                     'items_id'   => $ticket_id,
+                     'itemtype'   => 'Ticket',
+                     'users_id'   => $user_id,
+                     'content'    => $pending_reason,
+                     'is_private' => 0,
+                  ]);
+                  if (!$result) {
+                     $out['followup_skipped'] = true;
+                  }
+               } else {
+                  $out['followup_skipped'] = true;
+               }
+            }
+            $out['success']          = true;
+            $out['status_unchanged'] = true;
+            return $out;
+         }
+
+         if ($set_pending && PluginKanbanConfig::getRequirePendingReason()
+            && (int)($extra['pendingreasons_id'] ?? 0) <= 0) {
+            return [
+               'success' => false,
+               'error'   => __('A pending reason is required to move to Pending', 'kanban'),
+            ];
+         }
+
+         // Follow-up carrying the reason text, as GLPI does for pendency blocks.
+         $fu = null;
+         if ($pending_reason !== '') {
+            if (ITILFollowup::canCreate()) {
+               $fu = new ITILFollowup();
+               $result = $fu->add([
+                  'items_id'   => $ticket_id,
+                  'itemtype'   => 'Ticket',
+                  'users_id'   => $user_id,
+                  'content'    => $pending_reason,
+                  'is_private' => 0,
+               ]);
+               if (!$result) {
+                  $out['followup_skipped'] = true;
+                  $fu = null;
+               }
+            } else {
+               $out['followup_skipped'] = true;
+            }
+         }
+
+         // Store the pending reason link on the ticket (and the follow-up),
+         // mirroring the native widget so the timeline shows it exactly like
+         // when the status is changed from the ticket form.
+         $pending_fields = [
+            'pendingreasons_id'           => (int)($extra['pendingreasons_id'] ?? 0),
+            'followup_frequency'          => (int)($extra['followup_frequency'] ?? 0),
+            'followups_before_resolution' => (int)($extra['followups_before_resolution'] ?? 0),
+         ];
+         if (class_exists('PendingReason_Item')) {
+            PendingReason_Item::createForItem($ticket, $pending_fields);
+            if ($fu !== null) {
+               PendingReason_Item::createForItem($fu, $pending_fields);
+            }
+         }
+      }
+
+      // SOLVED: store the solution (description, type or from a template).
+      if ($new_status === Ticket::SOLVED) {
+         $solution = trim((string)($extra['solution'] ?? ''));
+         $template_id = (int)($extra['solution_template_id'] ?? 0);
+         $solution_type_id = (int)($extra['solution_type_id'] ?? 0);
+         if (PluginKanbanConfig::getRequireSolutionModel() && $template_id <= 0) {
+            return [
+               'success' => false,
+               'error'   => __('A solution model is required to move to Solved', 'kanban'),
+            ];
+         }
+         if ($solution === '') {
+            if ($template_id > 0) {
+               $tmpl = new SolutionTemplate();
+               if ($tmpl->getFromDB($template_id)) {
+                  $solution = (string)$tmpl->fields['content'];
+                  if ($solution_type_id <= 0) {
+                     $solution_type_id = (int)$tmpl->fields['solutiontypes_id'];
+                  }
+               }
+            }
+         }
+         if (PluginKanbanConfig::getRequireSolutionType() && $solution_type_id <= 0) {
+            return [
+               'success' => false,
+               'error'   => __('A solution type is required to move to Solved', 'kanban'),
+            ];
+         }
+         // The solution description is ALWAYS required (no configuration toggle).
+         // A selected template auto-fills it; otherwise the text must be provided.
+         if ($solution === '') {
+            return [
+               'success' => false,
+               'error'   => __('A solution description is required to move to Solved', 'kanban'),
+            ];
+         }
+         if ($solution !== '') {
+            if ($ticket->canSolve()) {
+               $sol = new ITILSolution();
+               $ok = $sol->add([
+                  'itemtype'         => 'Ticket',
+                  'items_id'         => $ticket_id,
+                  'users_id'         => $user_id,
+                  'content'          => $solution,
+                  'solutiontypes_id' => max(0, $solution_type_id),
+               ]);
+               if (!$ok) {
+                  $out['solution_skipped'] = true;
+               }
+            } else {
+               $out['solution_skipped'] = true;
+            }
+         }
+      }
+
+      $updated = $ticket->update(['id' => $ticket_id, 'status' => $new_status]);
+      $out['success'] = (bool)$updated;
+      if (!$updated) {
+         $out['error'] = __('Could not update status', 'kanban');
+      }
+      return $out;
+   }
+
+   /**
+    * Solution templates available for the "Solved" drag & drop modal.
+    *
+    * @return array List of ['id', 'name', 'content', 'solutiontypes_id']
+    */
+   public static function getSolutionTemplates(): array {
+      global $DB;
+      $criteria = [
+         'SELECT' => ['id', 'name', 'content', 'solutiontypes_id'],
+         'FROM'   => 'glpi_solutiontemplates',
+         'ORDER'  => 'name ASC',
+         'LIMIT'  => 200,
+      ];
+      $entity_restriction = getEntitiesRestrictCriteria('glpi_solutiontemplates', '', $_SESSION['glpiactiveentities'] ?? [0], true);
+      if (!empty($entity_restriction)) {
+         $criteria['WHERE'][] = $entity_restriction;
+      }
+      $out = [];
+      foreach ($DB->request($criteria) as $row) {
+         $out[] = [
+            'id'               => (int)$row['id'],
+            'name'             => self::decodeStoredValue($row['name']),
+            'content'          => (string)$row['content'],
+            'solutiontypes_id' => (int)$row['solutiontypes_id'],
+         ];
+      }
+      return $out;
+   }
+
+   /**
+    * Solution types available for the "Solved" drag & drop modal.
+    *
+    * @return array List of ['id', 'name']
+    */
+   public static function getSolutionTypes(): array {
+      global $DB;
+      $criteria = [
+         'SELECT' => ['id', 'name'],
+         'FROM'   => 'glpi_solutiontypes',
+         'ORDER'  => 'name ASC',
+         'LIMIT'  => 200,
+      ];
+      $entity_restriction = getEntitiesRestrictCriteria('glpi_solutiontypes', '', $_SESSION['glpiactiveentities'] ?? [0], true);
+      if (!empty($entity_restriction)) {
+         $criteria['WHERE'][] = $entity_restriction;
+      }
+      $out = [];
+      foreach ($DB->request($criteria) as $row) {
+         $out[] = [
+            'id'   => (int)$row['id'],
+            'name' => self::decodeStoredValue($row['name']),
+         ];
+      }
+      return $out;
+   }
+
+   /**
+    * Pending reasons available for the "Pending" drag & drop modal.
+    *
+    * Same data source as the native "Set the status to pending" widget:
+    * the PendingReason dropdown (glpi_pendingreasons).
+    *
+    * @return array List of ['id', 'name', 'comment', 'followup_frequency',
+    *                         'followups_before_resolution']
+    */
+   public static function getPendingReasons(): array {
+      global $DB;
+      $criteria = [
+         'SELECT' => ['id', 'name', 'comment', 'followup_frequency', 'followups_before_resolution'],
+         'FROM'   => PendingReason::getTable(),
+         'ORDER'  => 'name ASC',
+         'LIMIT'  => 200,
+      ];
+      $entity_restriction = getEntitiesRestrictCriteria(PendingReason::getTable(), '', $_SESSION['glpiactiveentities'] ?? [0], true);
+      if (!empty($entity_restriction)) {
+         $criteria['WHERE'][] = $entity_restriction;
+      }
+      $out = [];
+      foreach ($DB->request($criteria) as $row) {
+         $out[] = [
+            'id'                          => (int)$row['id'],
+            'name'                        => self::decodeStoredValue($row['name']),
+            'comment'                     => self::decodeStoredValue($row['comment'] ?? ''),
+            'followup_frequency'          => (int)($row['followup_frequency'] ?? 0),
+            'followups_before_resolution' => (int)($row['followups_before_resolution'] ?? 0),
+         ];
+      }
+      return $out;
    }
 }

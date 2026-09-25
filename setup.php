@@ -54,15 +54,15 @@ function plugin_init_kanban() {
          'helpdesk' => 'PluginKanbanMenu',
       ];
 
-      // Register the plugin under the Setup menu for configuration
-      $PLUGIN_HOOKS['menu_toadd']['kanban']['config'] = 'PluginKanbanConfig';
-
       // Load CSS and JS assets in the plugin page
       $PLUGIN_HOOKS['add_css']['kanban']      = ['public/css/kanban.css'];
       $PLUGIN_HOOKS['add_javascript']['kanban'] = ['public/js/kanban.js'];
 
       // Declare that this plugin does not use custom database tables
       $PLUGIN_HOOKS['use_tables']['kanban'] = [];
+
+      // Register the config page so the "Configure" button appears on the plugins list
+      $PLUGIN_HOOKS['config_page']['kanban'] = 'front/config.php';
 
       // Set the plugin version constant (must be before registerClass to avoid
       // breaking the plugin init if a class fails to load).
@@ -72,14 +72,18 @@ function plugin_init_kanban() {
       try {
          Plugin::registerClass('PluginKanbanProfile', ['addtabon' => ['Profile']]);
       } catch (\Throwable $e) {
-         // Non-fatal: profile tab won't work but the board will still load
+         // Non-fatal: profile tab won't work but the board will still load.
+         // Log it so a genuine class-loading failure is not silently hidden.
+         error_log('[kanban] Plugin::registerClass(PluginKanbanProfile) failed: ' . $e->getMessage());
       }
 
       // Register the config class
       try {
          Plugin::registerClass('PluginKanbanConfig');
       } catch (\Throwable $e) {
-         // Non-fatal: config page won't work but the board will still load
+         // Non-fatal: config page won't work but the board will still load.
+         // Log it so a genuine class-loading failure is not silently hidden.
+         error_log('[kanban] Plugin::registerClass(PluginKanbanConfig) failed: ' . $e->getMessage());
       }
    }
 }

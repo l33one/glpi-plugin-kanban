@@ -1,5 +1,7 @@
 .env
+.env.example
 tests/config.php
+phpunit.xml.dist
 .phpunit.result.cache
 .vscode/
 .idea/
@@ -7,4 +9,11 @@ tests/config.php
 vendor/
 node_modules/
 prompt.md
-docker/bin/
+docker/
+docker-compose*.yml
+create_test_tickets.php
+test-plugin.ps1
+tests/
+tools/
+*.har
+kanban.zip
