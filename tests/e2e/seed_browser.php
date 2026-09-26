@@ -65,7 +65,15 @@ run($conn, "INSERT IGNORE INTO glpi_groups (id, entities_id, is_recursive, name,
 run($conn, "INSERT IGNORE INTO glpi_itilcategories (id, entities_id, is_recursive, name, completename, level, ancestors_cache, sons_cache)
             VALUES (9701, 0, 1, 'KB Categoria Busca', 'KB Categoria Busca', 1, '[]', '{}')", 'category 9701');
 
-$hash = password_hash('kanban-test', PASSWORD_DEFAULT);
+// No default password on purpose: the accounts created below must never be
+// provisioned with a value that is hard-coded in the repository.
+$test_pass = (string)getenv('KANBAN_TEST_PASS');
+if ($test_pass === '') {
+    fwrite(STDERR, "Set KANBAN_TEST_PASS before running: the seeded accounts are never created with a built-in password.\n");
+    exit(1);
+}
+
+$hash = password_hash($test_pass, PASSWORD_DEFAULT);
 foreach (['kb_member' => 9751, 'kb_colleague' => 9751] as $uname => $gid) {
     run($conn, "INSERT IGNORE INTO glpi_users (name, password, authtype, auths_id, entities_id, is_active, is_deleted, realname, firstname)
                 VALUES ('$uname', '$hash', 1, 0, 0, 1, 0, 'KB $uname', '$uname')", "user $uname");

@@ -25,9 +25,10 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $marker  = 'KB E2E GLPI11';
-$pass    = getenv('KANBAN_TEST_PASS') ?: 'kanban-test';
-$hash    = password_hash($pass, PASSWORD_DEFAULT);
 
+// No default password on purpose: the accounts created below must never be
+// provisioned with a value that is hard-coded in the repository.
+$pass    = (string)getenv('KANBAN_TEST_PASS');
 $host = (string)getenv('KANBAN_DB_HOST');
 $user = (string)getenv('KANBAN_DB_USER');
 $passdb = (string)getenv('KANBAN_DB_PASS');
@@ -36,6 +37,11 @@ if ($host === '' || $user === '' || $passdb === '' || $name === '') {
     fwrite(STDERR, "Set KANBAN_DB_HOST, KANBAN_DB_USER, KANBAN_DB_PASS and KANBAN_DB_NAME before running.\n");
     exit(1);
 }
+if ($pass === '') {
+    fwrite(STDERR, "Set KANBAN_TEST_PASS before running: the seeded accounts are never created with a built-in password.\n");
+    exit(1);
+}
+$hash = password_hash($pass, PASSWORD_DEFAULT);
 
 $conn = new mysqli($host, $user, $passdb, $name);
 if ($conn->connect_error) {
@@ -159,6 +165,22 @@ run($conn, "INSERT INTO glpi_tickets_users (tickets_id, users_id, type)
             VALUES ($t_outside, " . $uid($conn, 'kb_outsider') . ", 2)", 'tu fora');
 run($conn, "INSERT INTO glpi_tickets_users (tickets_id, users_id, type)
             VALUES ($t_ext, " . $uid($conn, 'kb_extuser') . ", 2)", 'tu ext');
+
+// Solicitantes distintos por chamado: o filtro de solicitantes só pode listar quem
+// aparece em chamados visíveis a quem está olhando o quadro.
+$requesters = [
+    'grupo-pai'       => [$t_grp,     'kb_member'],
+    'delegado-membro' => [$t_deleg,   'kb_colleague'],
+    'subgrupo'        => [$t_sub,     'kb_child'],
+    'fora'            => [$t_outside, 'kb_noright'],
+    'outro-grupo'     => [$t_other,   'kb_extuser'],
+    'observador'      => [$t_obs,     'kb_outsider'],
+    'estrangeiro'     => [$t_ext,     'kb_noright'],
+];
+foreach ($requesters as $label => [$tid, $uname]) {
+    run($conn, "INSERT INTO glpi_tickets_users (tickets_id, users_id, type)
+                VALUES ($tid, " . $uid($conn, $uname) . ", 1)", "solicitante $label ($uname)");
+}
 
 echo "====================================================\n";
 echo "Cenario criado (senha dos usuários kb_*: $pass)\n";

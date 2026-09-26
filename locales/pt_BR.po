@@ -163,6 +163,9 @@ msgstr "Solicitante"
 msgid "Saved"
 msgstr "Salvo"
 
+msgid "Could not save configuration"
+msgstr "Não foi possível salvar a configuração"
+
 msgid "Search by ticket number"
 msgstr "Buscar por número do chamado"
 

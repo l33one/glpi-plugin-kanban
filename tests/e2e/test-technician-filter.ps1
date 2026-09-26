@@ -32,7 +32,11 @@ $ErrorActionPreference = 'Stop'
 
 $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
-$WebPassword  = 'kanban-test'
+$WebPassword  = $env:KANBAN_TEST_PASS
+if ([string]::IsNullOrWhiteSpace($WebPassword)) {
+    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explícita."
+    exit 1
+}
 
 if ($Cleanup) {
     & docker compose -f $composeFiles[$Version] exec -T db mariadb -uglpi -pglpi_password glpi -e @"
@@ -50,6 +54,7 @@ DELETE FROM glpi_users WHERE name IN ('kb_ana','kb_bruno','kb_carlos','kb_zebra'
 # Garante o cenario base (kb_* , grupos 9751/9753, perfil 9701) via seeder oficial.
 & docker compose -f $composeFiles[$Version] exec -T `
     -e KANBAN_DB_HOST=db -e KANBAN_DB_USER=glpi -e KANBAN_DB_PASS=glpi_password -e KANBAN_DB_NAME=glpi `
+    -e KANBAN_TEST_PASS=$WebPassword `
     glpi php /var/www/glpi/plugins/kanban/tests/e2e/seeder.php
 if ($LASTEXITCODE -ne 0) { throw "Seeder base falhou (exit $LASTEXITCODE)" }
 

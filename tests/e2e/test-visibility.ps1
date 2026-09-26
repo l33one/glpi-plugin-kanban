@@ -36,7 +36,12 @@ $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11
 $ports        = @{ 10 = 8090; 11 = 8091 }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
 
-$WebPassword = 'kanban-test'
+# O seeder nunca cria contas com senha fixa: a senha vem do ambiente.
+$WebPassword = $env:KANBAN_TEST_PASS
+if ([string]::IsNullOrWhiteSpace($WebPassword)) {
+    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explícita."
+    exit 1
+}
 
 $expected = @{
     'kb_manager'  = @('KB-E2E grupo-pai', 'KB-E2E delegado-membro', 'KB-E2E subgrupo')
@@ -60,6 +65,7 @@ function Invoke-Seeder {
         '-e', 'KANBAN_DB_USER=glpi',
         '-e', 'KANBAN_DB_PASS=glpi_password',
         '-e', 'KANBAN_DB_NAME=glpi',
+        '-e', "KANBAN_TEST_PASS=$WebPassword",
         'glpi', 'php', '/var/www/glpi/plugins/kanban/tests/e2e/seeder.php'
     )
     if ($Cleanup) {
@@ -116,6 +122,31 @@ function Get-BoardTitles {
         }
     }
     return @{ 'blocked' = $false; 'titles' = $titles; 'code' = $code }
+}
+
+function Get-FilterData {
+    param([int]$Version, [string]$Login, [string]$Password = $WebPassword)
+    # Mesmo login do Get-BoardTitles, porém na ação que alimenta os dropdowns.
+    Start-Sleep -Milliseconds 900
+    $base = $baseUrl[$Version]
+    $jar = Join-Path $env:TEMP ("kb_e2e_fd_$Version.cookies.txt")
+    Remove-Item $jar -ErrorAction SilentlyContinue
+
+    $loginPage = & curl.exe -s -c $jar "$base/"
+    $f = Get-LoginFields -Html $loginPage
+    if (-not $f[0] -or -not $f[1]) { return @{ 'blocked' = $true; 'requesters' = @() } }
+
+    $data = "$($f[0])=$Login&$($f[1])=$Password"
+    if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
+    & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
+
+    $raw = & curl.exe -s -b $jar ($base + '/plugins/kanban/front/kanban.php?action=get_filter_data')
+    $body = ($raw -join "`n").TrimStart()
+    if (-not $body.StartsWith('{')) { return @{ 'blocked' = $true; 'requesters' = @() } }
+    $json = $body | ConvertFrom-Json
+    $names = @()
+    if ($null -ne $json.requesters) { $names = @($json.requesters | ForEach-Object { [string]$_.name }) }
+    return @{ 'blocked' = $false; 'requesters' = $names }
 }
 
 $failures = 0
@@ -177,6 +208,31 @@ foreach ($v in $Versions) {
     Check (Contains $mgr.titles 'KB-E2E delegado-membro') 'kb_manager vê chamado delegado a kb_colleague (membro do grupo)'
     $mem = Get-BoardTitles -Version $v -Login 'kb_member'
     Check (-not (Contains $mem.titles 'KB-E2E delegado-membro')) 'kb_member (não gerente) NÃO vê chamado delegado ao colega'
+
+    Write-Host '-- Regra: filtro de solicitantes só revela requisitantes de chamados visíveis --'
+    # Cada chamado do cenário tem um solicitante distinto:
+    #   grupo-pai=kb_member, delegado-membro=kb_colleague, subgrupo=kb_child,
+    #   fora=kb_noright, outro-grupo=kb_extuser, observador=kb_outsider,
+    #   estrangeiro=kb_noright
+    # Os nomes são comparados por substring porque getUserName() monta o nome
+    # completo (primeiro nome + sobrenome) conforme a configuração da instância.
+    $req = @{}
+    foreach ($user in @('kb_manager', 'kb_member', 'kb_child', 'kb_outsider')) {
+        $req[$user] = @((Get-FilterData -Version $v -Login $user).requesters)
+    }
+    function ContainsLike($list, $item) {
+        return @($list | Where-Object { $_ -like "*$item*" }).Count -gt 0
+    }
+    Check (ContainsLike $req['kb_manager'] 'KB kb_member') 'kb_manager VÊ solicitante do chamado grupo-pai (visível)'
+    Check (ContainsLike $req['kb_manager'] 'KB kb_colleague') 'kb_manager VÊ solicitante do chamado delegado (visível como gerente)'
+    Check (ContainsLike $req['kb_manager'] 'KB kb_child') 'kb_manager VÊ solicitante do chamado do subgrupo (visível)'
+    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_extuser')) 'kb_manager NÃO vê solicitante do chamado de outro grupo (invisível)'
+    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_noright')) 'kb_manager NÃO vê solicitante dos chamados fora do seu grupo (invisível)'
+    Check (-not (ContainsLike $req['kb_member'] 'KB kb_colleague')) 'kb_member NÃO vê solicitante do chamado delegado a colega (invisível)'
+    Check (ContainsLike $req['kb_member'] 'KB kb_child') 'kb_member VÊ solicitante do chamado do subgrupo (visível)'
+    Check (-not (ContainsLike $req['kb_member'] 'KB kb_noright')) 'kb_member NÃO vê solicitante do chamado fora (invisível)'
+    Check (ContainsLike $req['kb_outsider'] 'KB kb_noright') 'kb_outsider VÊ o solicitante do próprio chamado'
+    Check ($req['kb_outsider'].Count -eq 1) "kb_outsider vê SOMENTE 1 solicitante (obtido: $($req['kb_outsider'].Count))"
 }
 
 Write-Host "`n===== RESUMO ====="

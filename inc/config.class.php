@@ -124,59 +124,54 @@ if (isset($stored[$key])) {
       $error = '';
 
       if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['kanban_config'])) {
-         // GLPI >= 10.0.8 (and GLPI 11) validate AND consume the single-use CSRF
-         // token in core (inc/includes.php / CheckCsrfListener) before this script
-         // runs, so re-checking here would always fail ("Invalid CSRF token") and
-         // the config could never be saved. On older GLPI we validate as usual.
-         $csrfOk = true;
-         if (version_compare(GLPI_VERSION, '10.0.8', '<')) {
-            $csrfOk = Session::validateCSRF($_POST);
+         // CSRF is enforced by GLPI core before this script runs, on every POST:
+         //   - GLPI 10: inc/includes.php calls Session::checkCSRF($_POST);
+         //   - GLPI 11: CheckCsrfListener calls Session::checkCSRF($request->request).
+         // Session::validateCSRF() *consumes* the token (unset from
+         // $_SESSION['glpicsrftokens']) unless GLPI_KEEP_CSRF_TOKEN is defined,
+         // and that constant is only defined for /ajax/ routes. Verified in the
+         // upstream sources: this is already the case at tag 10.0.0, so a second
+         // validation here could only ever fail and the form could never be saved.
+         $refresh_raw = $_POST['refresh_options'] ?? '';
+         $refresh_values = array_filter(
+            array_map('intval', array_map('trim', explode(',', $refresh_raw)))
+         );
+         $refresh_values = array_unique(array_filter($refresh_values, function ($v) {
+            return $v >= 1 && $v <= 60;
+         }));
+         if (empty($refresh_values)) {
+            $refresh_values = [1, 2, 3];
          }
+         sort($refresh_values);
 
-         if (!$csrfOk) {
-            $error = __('Invalid CSRF token', 'kanban');
-         } else {
-            $refresh_raw = $_POST['refresh_options'] ?? '';
-            $refresh_values = array_filter(
-               array_map('intval', array_map('trim', explode(',', $refresh_raw)))
-            );
-            $refresh_values = array_unique(array_filter($refresh_values, function ($v) {
-               return $v >= 1 && $v <= 60;
-            }));
-            if (empty($refresh_values)) {
-               $refresh_values = [1, 2, 3];
-            }
-            sort($refresh_values);
+         $order_raw = $_POST['status_order'] ?? '';
+         $order_values = array_filter(
+            array_map('intval', array_map('trim', explode(',', $order_raw)))
+         );
+         $order_values = array_values(array_unique(array_filter($order_values, function ($v) {
+            return $v > 0;
+         })));
 
-            $order_raw = $_POST['status_order'] ?? '';
-            $order_values = array_filter(
-               array_map('intval', array_map('trim', explode(',', $order_raw)))
-            );
-            $order_values = array_values(array_unique(array_filter($order_values, function ($v) {
-               return $v > 0;
-            })));
+         // Checkbox present (checked => "on") or hidden pre-filled value.
+         $drag = isset($_POST['enable_drag_drop'])
+            && in_array($_POST['enable_drag_drop'], ['1', 'on', 'true'], true);
+         $require_pending = isset($_POST['require_pending_reason'])
+            && in_array($_POST['require_pending_reason'], ['1', 'on', 'true'], true);
+         $require_model = isset($_POST['require_solution_model'])
+            && in_array($_POST['require_solution_model'], ['1', 'on', 'true'], true);
+         $require_type = isset($_POST['require_solution_type'])
+            && in_array($_POST['require_solution_type'], ['1', 'on', 'true'], true);
 
-            // Checkbox present (checked => "on") or hidden pre-filled value.
-            $drag = isset($_POST['enable_drag_drop'])
-               && in_array($_POST['enable_drag_drop'], ['1', 'on', 'true'], true);
-            $require_pending = isset($_POST['require_pending_reason'])
-               && in_array($_POST['require_pending_reason'], ['1', 'on', 'true'], true);
-            $require_model = isset($_POST['require_solution_model'])
-               && in_array($_POST['require_solution_model'], ['1', 'on', 'true'], true);
-            $require_type = isset($_POST['require_solution_type'])
-               && in_array($_POST['require_solution_type'], ['1', 'on', 'true'], true);
-
-            $success = self::save([
-               'refresh_options'        => array_values($refresh_values),
-               'status_order'           => $order_values,
-               'enable_drag_drop'       => $drag ? 1 : 0,
-               'require_pending_reason' => $require_pending ? 1 : 0,
-               'require_solution_model' => $require_model ? 1 : 0,
-               'require_solution_type'  => $require_type ? 1 : 0,
-            ]);
-            if (!$success) {
-               $error = __('Could not save configuration file', 'kanban');
-            }
+         $success = self::save([
+            'refresh_options'        => array_values($refresh_values),
+            'status_order'           => $order_values,
+            'enable_drag_drop'       => $drag ? 1 : 0,
+            'require_pending_reason' => $require_pending ? 1 : 0,
+            'require_solution_model' => $require_model ? 1 : 0,
+            'require_solution_type'  => $require_type ? 1 : 0,
+         ]);
+         if (!$success) {
+            $error = __('Could not save configuration', 'kanban');
          }
       }
 

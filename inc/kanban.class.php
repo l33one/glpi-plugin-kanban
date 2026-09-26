@@ -653,6 +653,12 @@ class PluginKanbanKanban extends CommonGLPI {
                    'u'  => 'id',
                    'gu' => 'users_id'
                 ]
+             ],
+             'glpi_groups AS g' => [
+                'ON' => [
+                   'gu' => 'groups_id',
+                   'g'  => 'id'
+                ]
              ]
           ],
           'WHERE'      => [
@@ -664,7 +670,14 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'      => 'u.realname ASC',
           'LIMIT'      => 500
        ];
-        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $_SESSION['glpiactiveentities'] ?? [0], true);
+        $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
+        // The group itself must live in an active entity: restricting only the
+        // members is not enough, a foreign-entity group would still be expanded.
+        $group_entity_restriction = getEntitiesRestrictCriteria('g', 'entities_id', $active_entities, true);
+        if (!empty($group_entity_restriction)) {
+           $criteria['WHERE'][] = $group_entity_restriction;
+        }
+        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $active_entities, true);
         if (!empty($entity_restriction)) {
            $criteria['WHERE'][] = $entity_restriction;
         }
@@ -703,6 +716,9 @@ class PluginKanbanKanban extends CommonGLPI {
     public static function getRequestersForFilter(): array {
        global $DB;
        $requesters = [];
+       // Never expose the whole user directory: the list is restricted to users
+       // that hold a profile in the caller's active entities AND that actually
+       // appear as requesters on a ticket the caller is allowed to see.
        $criteria = [
           'SELECT'     => ['u.id', 'u.realname', 'u.firstname'],
           'FROM'       => 'glpi_users AS u',
@@ -711,6 +727,18 @@ class PluginKanbanKanban extends CommonGLPI {
                 'ON' => [
                    'u'  => 'id',
                    'tu' => 'users_id'
+                ]
+             ],
+             'glpi_tickets AS t' => [
+                'ON' => [
+                   'tu' => 'tickets_id',
+                   't'  => 'id'
+                ]
+             ],
+             'glpi_profiles_users AS pu' => [
+                'ON' => [
+                   'u'  => 'id',
+                   'pu' => 'users_id'
                 ]
              ]
           ],
@@ -723,9 +751,21 @@ class PluginKanbanKanban extends CommonGLPI {
           'ORDER'    => 'realname ASC',
           'LIMIT'    => 500
        ];
-        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $_SESSION['glpiactiveentities'] ?? [0], true);
+        $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
+        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $active_entities, true);
         if (!empty($entity_restriction)) {
            $criteria['WHERE'][] = $entity_restriction;
+        }
+        // The profile assignment must live in an active entity as well, otherwise a
+        // user who only holds a profile elsewhere would still be disclosed.
+        $profile_entity_restriction = getEntitiesRestrictCriteria('pu', 'entities_id', $active_entities, true);
+        if (!empty($profile_entity_restriction)) {
+           $criteria['WHERE'][] = $profile_entity_restriction;
+        }
+        // Only requesters of tickets visible on this board.
+        $visibility = self::getTicketVisibilityCriteria();
+        if ($visibility !== null) {
+           $criteria['WHERE'][] = $visibility;
         }
         $iterator = $DB->request($criteria);
         foreach ($iterator as $user) {
