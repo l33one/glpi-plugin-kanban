@@ -151,7 +151,12 @@ docker compose -f docker-compose.glpi10.yml exec -T \
 
 ### Testes E2E de visibilidade (web, multiusuário)
 
-O cenário `tests/e2e/seeder.php` + `tests/e2e/test-visibility.ps1` valida as regras de visibilidade via **login real** em cada versão:
+O cenário `tests/e2e/seeder.php` + `tests/e2e/test-visibility.ps1` valida as regras de visibilidade via **login real** em cada versão. O seeder é **CLI-only** e lê credenciais **somente do ambiente** (sem padrão e sem fallback):
+
+```powershell
+$env:KANBAN_DB_HOST='127.0.0.1'; $env:KANBAN_DB_USER='glpi'
+$env:KANBAN_DB_PASS='glpi_password'; $env:KANBAN_DB_NAME='glpi'
+$env:KANBAN_TEST_PASS='kanban-test'   # opcional, default do cenário
 
 ```powershell
 # Testa as regras no GLPI 10 e 11 (30 checks por versão)
@@ -183,39 +188,69 @@ O cenário cria 2 perfis (com e sem o direito do plugin), 3 grupos (pai → subg
 kanban/
 ├── setup.php                  # Registro do plugin, hooks, versão
 ├── hook.php                   # Instalação/desinstalação
+├── kanban.xml                 # Descriptor (versão, compatibilidade, download_url)
 ├── inc/
 │   ├── kanban.class.php       # Model principal: queries, filtros, SLA, visibilidade, direitos
+│   ├── config.class.php       # Configuração via Config API do GLPI
 │   ├── menu.class.php         # Registro do menu no GLPI
 │   └── profile.class.php      # Aba de permissões no formulário de Perfil
 ├── front/
-│   └── kanban.php             # Controller: página e endpoints AJAX
+│   ├── kanban.php             # Controller: página e endpoints AJAX
+│   └── config.php             # Página de configuração do plugin
 ├── templates/
 │   └── kanban.html.twig       # Template Twig (server-side rendering)
 ├── public/
 │   ├── js/kanban.js           # Lógica frontend: drag-drop, filtros, countdown
 │   └── css/kanban.css         # Estilos customizados + responsivo
-├── tests/
-│   ├── bootstrap.php          # Bootstrap da suíte PHPUnit
-│   ├── PluginKanban*Test.php  # Suíte PHPUnit (GLPI 10)
-│   └── e2e/
-│       ├── seeder.php         # Semeia usuários/grupos/perfis/chamados do cenário
-│       └── test-visibility.ps1# Testes E2E de visibilidade via web (GLPI 10 e 11)
-├── create_test_tickets.php    # Script para criar os 14 chamados de teste (todos os status)
-├── docker-compose.glpi10.yml  # Stack GLPI 10 (porta 8090)
-├── docker-compose.glpi11.yml  # Stack GLPI 11 (porta 8091)
-├── test-plugin.ps1            # Orquestrador: up/install/ativo/seed/tests/down
+├── locales/                   # Traduções en_GB / pt_BR
+├── tests/                     # [dev] suíte PHPUnit + E2E
+├── tools/                     # [dev] compilador de locales e build de release
+├── docker/                    # [dev] binários auxiliares (phpunit.phar é baixado sob demanda)
+├── create_test_tickets.php    # [dev] cria os 14 chamados de teste (todos os status)
+├── docker-compose.glpi10.yml  # [dev] stack GLPI 10 (porta 8090)
+├── docker-compose.glpi11.yml  # [dev] stack GLPI 11 (porta 8091)
+├── test-plugin.ps1            # [dev] orquestrador: up/install/ativo/seed/tests/down
 └── README.md
 ```
+
+> Os itens marcados com `[dev]` existem no repositório para revisão e CI, mas
+> **nunca** são publicados: ver [Publicação](#-publicação).
+
+---
+
+## 📦 Publicação
+
+O pacote distribuível é gerado a partir de um **commit/tag** com `git archive`, e o
+`.gitattributes` define o que entra nele:
+
+```bash
+# após commitar, cria a tag 1.2.0 e gera o pacote
+git tag -a 1.2.0 -m "1.2.0"
+tools/build-release.sh            # ou: tools/build-release.sh 1.2.0 dist
+# -> dist/glpi-plugin-kanban-1.2.0.tar.bz2
+```
+
+Regras aplicadas em `.gitattributes` (`export-ignore`), que **excluem do pacote**:
+`tests/`, `tools/`, `docker/`, `docker-compose*.yml`, `create_test_tickets.php`,
+`.env.example`, `phpunit.xml.dist`, `test-plugin.ps1` e `prompt.md`.
+
+O script falha (exit != 0) se a árvore tiver alterações não commitadas, se a versão
+não apontar para o `HEAD`, se o prefixo `kanban/` estiver ausente ou se qualquer
+arquivo de desenvolvimento escapar para o pacote. O `download_url` publicado no
+`kanban.xml` aponta exatamente para esse `.tar.bz2`.
 
 ---
 
 ## 🔒 Segurança
 
-* CSRF token em todas as requisições POST
-* Acesso à página e ao menu controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`
-* Validação de permissões de atualização via `Ticket::canUpdateItem()`
-* Restrição de entidades via `$_SESSION['glpiactiveentities']`
-* Visibilidade item-level em **todas** as consultas (quadro e detalhe), independente de perfis com leitura ampla (READALL)
+* **Autorização:** acesso à página e ao menu controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`
+* **Autorização por item:** toda escrita (`assign_to_me`, `change_priority`, `update_ticket_status`) valida a visibilidade do chamado no quadro (`isTicketVisible()`) **antes** de gravar, além de `Ticket::canUpdateItem()` — um perfil com leitura ampla (READALL) ou Super-Admin não contorna a regra de visibilidade do quadro
+* **CSRF:** token do GLPI validado pelo core em todo POST (`Session::checkCSRF` no GLPI 10, `CheckCsrfListener` no GLPI 11) e token novo devolvido em cada resposta AJAX, pois o token é de uso único
+* **XSS:** labels dos filtros escapados com `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`; conteúdo rico (descrição e seguimentos) sanitizado **no servidor** com `Glpi\RichText\RichText::getSafeHtml()`; valores inline em `<script>` com `JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT`
+* **Filtros sem vazamento:** o filtro de requerentes lista apenas usuários que realmente são requerentes em chamados (`INNER JOIN glpi_tickets_users`), e o filtro de técnicos por grupo só aceita grupos expandidos do próprio usuário
+* **Entidades:** todo acesso respeita `$_SESSION['glpiactiveentities']` via `getEntitiesRestrictCriteria()`
+* **Configuração:** persistida pela Config API do GLPI (`Config::setConfigurationValues`/`getConfigurationValues`) — não há mais arquivo PHP incluível; a desinstalação remove o contexto e o `kanban_config.php` legado
+* **Scaffolding de desenvolvimento:** seeders e docker são CLI-only (`PHP_SAPI !== 'cli'` → 403), leem credenciais **somente do ambiente** (abortam se `KANBAN_DB_*` não estiver definido) e são excluídos do pacote de release
 
 ---
 

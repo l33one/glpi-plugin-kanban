@@ -1,7 +1,10 @@
+# Local secrets and build/test artifacts only.
+# Development scaffolding (tests/, tools/, docker/, docker-compose*.yml,
+# create_test_tickets.php, test-plugin.ps1, phpunit.xml.dist, .env.example) is
+# tracked on purpose so the security fixes and the test suite stay reviewable;
+# it is kept out of the release archive by .gitattributes (export-ignore).
 .env
-.env.example
 tests/config.php
-phpunit.xml.dist
 .phpunit.result.cache
 .vscode/
 .idea/
@@ -9,11 +12,7 @@ phpunit.xml.dist
 vendor/
 node_modules/
 prompt.md
-docker/
-docker-compose*.yml
-create_test_tickets.php
-test-plugin.ps1
-tests/
-tools/
+dist/
+docker/bin/
 *.har
 kanban.zip
