@@ -85,6 +85,9 @@ msgstr "Alta"
 msgid "in X d"
 msgstr "em X d"
 
+msgid "An error occurred while loading the board"
+msgstr "Ocorreu um erro ao carregar o quadro"
+
 msgid "Invalid request"
 msgstr "Solicitação inválida"
 

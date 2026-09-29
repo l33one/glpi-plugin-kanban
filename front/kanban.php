@@ -57,8 +57,12 @@ switch ($action) {
           try {
              $tickets = PluginKanbanKanban::getTicketsForKanban($filters, $sort);
           } catch (\Throwable $e) {
+             // The message can carry SQL on a database error: log it server-side
+             // and return a generic error to the browser.
+             Toolbox::logInFile('kanban', 'get_tickets failed: ' . $e->getMessage());
              http_response_code(500);
-             echo json_encode(['error' => $e->getMessage()]);
+             header("Content-Type: application/json; charset=UTF-8");
+             echo json_encode(['error' => __('An error occurred while loading the board', 'kanban')]);
              exit;
           }
 

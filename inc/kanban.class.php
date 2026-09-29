@@ -1249,6 +1249,12 @@ class PluginKanbanKanban extends CommonGLPI {
       if (!Session::haveRight(Ticket::$rightname, UPDATE) || !$ticket->canUpdateItem()) {
          return ['success' => false, 'error' => __('Permission denied', 'kanban')];
       }
+      // Core only lets a Ticket UPDATE holder add themselves as technician
+      // when they hold STEAL, or OWN on a still-unassigned ticket. addTeamMember()
+      // inserts the Ticket_User row directly and checks nothing, so enforce it here.
+      if (!$ticket->canAssignToMe() && !$ticket->canAssign()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
       // The ticket must be one the board would have shown to this user.
       if (!self::isTicketVisible($ticket_id)) {
          return ['success' => false, 'error' => __('Permission denied', 'kanban')];
@@ -1289,7 +1295,7 @@ class PluginKanbanKanban extends CommonGLPI {
       }
 
       $ticket = new Ticket();
-      if (!$ticket->getFromDB($ticket_id) || !self::isTicketVisible($ticket_id)) {
+      if (!$ticket->getFromDB($ticket_id) || !$ticket->canViewItem() || !self::isTicketVisible($ticket_id)) {
          return [];
       }
 
@@ -1301,6 +1307,12 @@ class PluginKanbanKanban extends CommonGLPI {
          'date DESC'
       );
       foreach ($rows as $row) {
+         // Enforce core's per-followup view rule (ticket READ + SEEPUBLIC /
+         // SEEPRIVATE), not only the plugin's private-author test. canViewItem()
+         // reads $this->fields, so the row must actually be loaded.
+         if (!$fu->getFromDB((int)$row['id']) || !$fu->canViewItem()) {
+            continue;
+         }
          if (!empty($row['is_private']) && (int)$row['users_id'] !== $current_user) {
             continue;
          }
@@ -1380,7 +1392,7 @@ class PluginKanbanKanban extends CommonGLPI {
    public static function updateTicketStatus(int $ticket_id, int $new_status, array $extra = []): array {
       $ticket_id  = (int)$ticket_id;
       $new_status = (int)$new_status;
-      if ($ticket_id <= 0 || $new_status <= 0) {
+      if ($ticket_id <= 0 || $new_status <= 0 || !Ticket::isStatusExists($new_status)) {
          return ['success' => false, 'error' => __('Invalid request', 'kanban')];
       }
 
@@ -1498,15 +1510,18 @@ class PluginKanbanKanban extends CommonGLPI {
                'error'   => __('A solution model is required to move to Solved', 'kanban'),
             ];
          }
-         if ($solution === '') {
-            if ($template_id > 0) {
-               $tmpl = new SolutionTemplate();
-               if ($tmpl->getFromDB($template_id)) {
-                  $solution = (string)$tmpl->fields['content'];
-                  if ($solution_type_id <= 0) {
-                     $solution_type_id = (int)$tmpl->fields['solutiontypes_id'];
-                  }
-               }
+         // When the description is empty but a template was selected, let the
+         // core render the template body instead of copying the raw stored
+         // value ourselves: on GLPI 10 the query builder does not escape
+         // string values, so a template body copied verbatim would be a
+         // second-order SQL injection.
+         $use_template = ($solution === '' && $template_id > 0);
+         if ($use_template) {
+            $tmpl = new SolutionTemplate();
+            if (!$tmpl->getFromDB($template_id)) {
+               $use_template = false;
+            } elseif ($solution_type_id <= 0) {
+               $solution_type_id = (int)$tmpl->fields['solutiontypes_id'];
             }
          }
          if (PluginKanbanConfig::getRequireSolutionType() && $solution_type_id <= 0) {
@@ -1517,28 +1532,32 @@ class PluginKanbanKanban extends CommonGLPI {
          }
          // The solution description is ALWAYS required (no configuration toggle).
          // A selected template auto-fills it; otherwise the text must be provided.
-         if ($solution === '') {
+         if ($solution === '' && !$use_template) {
             return [
                'success' => false,
                'error'   => __('A solution description is required to move to Solved', 'kanban'),
             ];
          }
-         if ($solution !== '') {
-            if ($ticket->canSolve()) {
-               $sol = new ITILSolution();
-               $ok = $sol->add([
-                  'itemtype'         => 'Ticket',
-                  'items_id'         => $ticket_id,
-                  'users_id'         => $user_id,
-                  'content'          => $solution,
-                  'solutiontypes_id' => max(0, $solution_type_id),
-               ]);
-               if (!$ok) {
-                  $out['solution_skipped'] = true;
-               }
+         if ($ticket->canSolve()) {
+            $sol = new ITILSolution();
+            $sol_input = [
+               'itemtype'         => 'Ticket',
+               'items_id'         => $ticket_id,
+               'users_id'         => $user_id,
+               'solutiontypes_id' => max(0, $solution_type_id),
+            ];
+            if ($use_template) {
+               // Core renders and escapes the template on both majors
+               // (ITILSolution::prepareInputForAdd()).
+               $sol_input['_solutiontemplates_id'] = $template_id;
             } else {
+               $sol_input['content'] = $solution;
+            }
+            if (!$sol->add($sol_input)) {
                $out['solution_skipped'] = true;
             }
+         } else {
+            $out['solution_skipped'] = true;
          }
       }
 
@@ -1572,7 +1591,7 @@ class PluginKanbanKanban extends CommonGLPI {
          $out[] = [
             'id'               => (int)$row['id'],
             'name'             => self::decodeStoredValue($row['name']),
-            'content'          => (string)$row['content'],
+            'content'          => self::decodeStoredValue((string)$row['content']),
             'solutiontypes_id' => (int)$row['solutiontypes_id'],
          ];
       }

@@ -36,7 +36,7 @@
  *  --------------------------------------------------------------------------
  */
 
-define('PLUGIN_KANBAN_VERSION', '1.2.1');
+define('PLUGIN_KANBAN_VERSION', '1.2.2');
 
 /**
  * Init the hooks of the plugin

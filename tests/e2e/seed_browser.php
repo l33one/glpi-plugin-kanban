@@ -58,7 +58,9 @@ $conn->query("DELETE FROM glpi_tickets WHERE content LIKE '%" . $conn->real_esca
 
 // --------------------------------------- PERFIL E USUÁRIOS BASE (9701/9751)
 run($conn, "INSERT IGNORE INTO glpi_profiles (id, name, interface) VALUES (9701, 'KB Test Tech', 'central')", 'profile 9701');
-run($conn, "INSERT IGNORE INTO glpi_profilerights (profiles_id, name, rights) VALUES (9701, 'ticket', 3)", 'profile rights ticket');
+// ticket = READ(1) | UPDATE(2) | STEAL(16384): o STEAL é exigido por
+// Ticket::canAssignToMe(), que o plugin reproduz na ação assign_to_me.
+run($conn, "INSERT IGNORE INTO glpi_profilerights (profiles_id, name, rights) VALUES (9701, 'ticket', 16387)", 'profile rights ticket');
 run($conn, "INSERT IGNORE INTO glpi_profilerights (profiles_id, name, rights) VALUES (9701, 'plugin_kanban', 1)", 'profile rights kanban');
 run($conn, "INSERT IGNORE INTO glpi_groups (id, entities_id, is_recursive, name, date_mod, completename, level, ancestors_cache, sons_cache)
             VALUES (9751, 0, 1, 'KB Pai', NOW(), 'KB Pai', 1, '[]', '{}')", 'group 9751');

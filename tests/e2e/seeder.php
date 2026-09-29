@@ -89,7 +89,9 @@ run($conn, "INSERT INTO glpi_profiles (id, name, interface) VALUES (9702, 'KB Te
 foreach ([
     // 9701: técnico do quadro — precisa ler e atualizar chamados para as
     // ações rápidas (atribuir a mim / mudar prioridade) funcionarem.
-    [9701, 'entity', 33], [9701, 'ticket', 3], [9701, 'plugin_kanban', 1],
+    // ticket = READ(1) | UPDATE(2) | STEAL(16384): o STEAL é exigido por
+    // Ticket::canAssignToMe(), que o plugin agora reproduz em assign_to_me.
+    [9701, 'entity', 33], [9701, 'ticket', 16387], [9701, 'plugin_kanban', 1],
     [9702, 'entity', 33], [9702, 'ticket', 1], [9702, 'plugin_kanban', 0],
 ] as [$pid, $rname, $rval]) {
     run($conn, "INSERT INTO glpi_profilerights (profiles_id, name, rights)

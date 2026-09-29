@@ -85,6 +85,9 @@ msgstr "High"
 msgid "in X d"
 msgstr "in X d"
 
+msgid "An error occurred while loading the board"
+msgstr "An error occurred while loading the board"
+
 msgid "Invalid request"
 msgstr "Invalid request"
 

@@ -245,8 +245,12 @@ arquivo de desenvolvimento escapar para o pacote. O `download_url` publicado no
 
 * **Autorização:** acesso à página e ao menu controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`
 * **Autorização por item:** toda escrita (`assign_to_me`, `change_priority`, `update_ticket_status`) valida a visibilidade do chamado no quadro (`isTicketVisible()`) **antes** de gravar, além de `Ticket::canUpdateItem()` — um perfil com leitura ampla (READALL) ou Super-Admin não contorna a regra de visibilidade do quadro
+* **Auto-atribuição:** `assign_to_me` reproduz a regra do core (`Ticket::canAssignToMe()` ou `Ticket::canAssign()`, ou seja, `STEAL`, ou `OWN` em chamado ainda sem técnico) — `addTeamMember()` insere a linha em `glpi_tickets_users` sem nenhuma checagem
+* **Leitura de seguimentos:** `get_followups` exige `Ticket::canViewItem()` (checagem de entidade) e filtra cada acompanhamento com `ITILFollowup::canViewItem()` (`SEEPUBLIC`/`SEEPRIVATE`), além de esconder privados de outros autores
+* **SQL:** nenhum corpo de template de solução é copiado do banco para o `add()`; o plugin passa `_solutiontemplates_id` e deixa o core renderizar e escapar (`ITILSolution::prepareInputForAdd()`), o que é obrigatório no GLPI 10, onde o query builder não escapa valores
 * **CSRF:** token do GLPI validado pelo core em todo POST (`Session::checkCSRF` no GLPI 10, `CheckCsrfListener` no GLPI 11) e token novo devolvido em cada resposta AJAX, pois o token é de uso único
 * **XSS:** labels dos filtros escapados com `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`; conteúdo rico (descrição e seguimentos) sanitizado **no servidor** com `Glpi\RichText\RichText::getSafeHtml()`; valores inline em `<script>` com `JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT`
+* **Erros:** falhas no `get_tickets` são registradas no log do GLPI e retornam mensagem genérica — a exceção bruta (que pode conter SQL) nunca chega ao navegador
 * **Filtros sem vazamento:** o filtro de requerentes lista apenas usuários que realmente são requerentes em chamados (`INNER JOIN glpi_tickets_users`), e o filtro de técnicos por grupo só aceita grupos expandidos do próprio usuário
 * **Entidades:** todo acesso respeita `$_SESSION['glpiactiveentities']` via `getEntitiesRestrictCriteria()`
 * **Configuração:** persistida pela Config API do GLPI (`Config::setConfigurationValues`/`getConfigurationValues`) — não há mais arquivo PHP incluível; a desinstalação remove o contexto e o `kanban_config.php` legado

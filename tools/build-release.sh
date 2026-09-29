@@ -83,7 +83,7 @@ if ! printf '%s\n' "$listing" | sed -n '1p' | grep -q '^kanban/$'; then
 fi
 
 if printf '%s\n' "$listing" \
-    | grep -Eq '^(tests/|tools/|docker/|docker-compose|create_test_tickets\.php|\.env\.example|phpunit\.xml\.dist|test-plugin\.ps1|prompt\.md)'; then
+    | grep -Eq '^kanban/(tests/|tools/|docker/|docker-compose|create_test_tickets\.php|\.env\.example|phpunit\.xml\.dist|test-plugin\.ps1|prompt\.md)'; then
     echo "erro: arquivos de desenvolvimento no pacote de release." >&2
     exit 1
 fi
