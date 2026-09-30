@@ -156,7 +156,9 @@ O cenário `tests/e2e/seeder.php` + `tests/e2e/test-visibility.ps1` valida as re
 ```powershell
 $env:KANBAN_DB_HOST='127.0.0.1'; $env:KANBAN_DB_USER='glpi'
 $env:KANBAN_DB_PASS='glpi_password'; $env:KANBAN_DB_NAME='glpi'
-$env:KANBAN_TEST_PASS='kanban-test'   # opcional, default do cenário
+# senha das contas do cenário: obrigatória, escolha a sua
+$env:KANBAN_TEST_PASS='<senha-do-cenário>'
+```
 
 ```powershell
 # Testa as regras no GLPI 10 e 11 (30 checks por versão)
