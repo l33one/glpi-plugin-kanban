@@ -11,6 +11,15 @@
  * checks for a local config.php file.
  */
 
+// CLI-only defence in depth: this bootstrap creates files/_tests/* and loads
+// GLPI with GLPI_USE_CSRF_CHECK disabled, so it must never be web-reachable,
+// even when the plugin is deployed with `git clone` (tests/ is export-ignored
+// from the release archive, but not from a clone).
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die("CLI only.\n");
+}
+
 // Determine GLPI root: env var > config.php > default
 $glpi_root = getenv('GLPI_ROOT') ?: '';
 if (!$glpi_root) {

@@ -12,6 +12,14 @@
  * It scans <plugin>/locales/*.po and writes the sibling <lang>.mo file.
  */
 
+// CLI-only defence in depth: this script rewrites locales/*.mo in place, so it
+// must never be reachable over HTTP (tools/ is export-ignored from the release
+// archive, but not from a `git clone` deployment).
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die("CLI only.\n");
+}
+
 $locales_dir = __DIR__ . '/../locales';
 
 function mo_encode(array $pairs): string
