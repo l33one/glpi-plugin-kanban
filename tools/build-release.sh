@@ -46,11 +46,14 @@ fi
 # must point at the reviewed code.
 head_ref="$(git rev-parse HEAD)"
 tag_ref="refs/tags/$version"
-if git rev-parse --verify --quiet "$tag_ref" >/dev/null; then
-    tag_ref="$(git rev-list -n 1 "$tag_ref")"
+if ! git rev-parse --verify --quiet "$tag_ref" >/dev/null; then
+    echo "erro: a tag $version nao existe ainda." >&2
+    echo "      crie-a sobre o codigo revisado: git tag -a $version -m \"$version\"" >&2
+    exit 1
 fi
+tag_ref="$(git rev-list -n 1 "$tag_ref")"
 if [ "$tag_ref" != "$head_ref" ]; then
-    echo "erro: a versao $version ($tag_ref) nao aponta para o HEAD ($head_ref)." >&2
+    echo "erro: a tag $version aponta para $tag_ref, e nao para o HEAD ($head_ref)." >&2
     exit 1
 fi
 
