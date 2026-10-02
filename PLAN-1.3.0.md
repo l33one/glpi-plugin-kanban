@@ -185,18 +185,35 @@ shim de compatibilidade: ele não mais carrega autoloader nem banco, então o
 bootstrap do plugin termina com `Class "User" not found` (16 erros, 48 pulados em
 65 testes). Suportá-lo exigiria um segundo bootstrap, usando o `Kernel` do GLPI 11.
 A CI já restringe o PHPUnit à matriz 10 (`if: matrix.glpi == 10`) e o GLPI 11 fica
-coberto pelos E2E, que exercitam a mesma functionality pela web.
+coberto pelos E2E, que exercitam a mesma funcionalidade pela web.
 
 ---
 
 ## 6. Pendências
 
-1. **`git diff` completo** — passar por tudo antes de commitar; o conjunto é grande
-   (~2000 linhas adicionadas)
-2. **Commitar** — `.github/` está untracked; sem isso a CI nem roda
-3. **Build do pacote** e conferir que só entra o runtime
-4. **Release 1.3.0** — tag, `.tar.bz2` e o `download_url` do `kanban.xml`
+Resolvido nesta rodada (5 commits, `e2a6640`..`23e0010`):
+
+1. ~~Revisar o `git diff` completo~~ — 3803 linhas adicionadas em 27 arquivos,
+   divididos por fronteira de arquivo: runtime, testes, tooling/CI e docs
+2. ~~Commitar~~ — inclusive `.github/`, que estava untracked e impedia a CI
+3. ~~Build do pacote~~ — `dist/glpi-plugin-kanban-1.3.0.tar.bz2`, 79.404 bytes,
+   contendo só `front/`, `inc/`, `locales/`, `public/`, `hook.php`, `setup.php`,
+   `kanban.xml`, `kanban.png`, `LICENSE` e `README.md`. Nenhum `tests/`, `tools/`,
+   `.github/`, `docker/`, `docker-compose*` ou `PLAN-*.md`
+4. **Publicar o release 1.3.0** — falta *push* dos 5 commits e da tag `1.3.0`
+   (criada e apontando para `23e0010`), mais o upload do `.tar.bz2` no GitHub
+   Releases. O `download_url` do `kanban.xml` já aponta para o nome e a versão
+   certos, então publica sem edição adicional
 5. **Decidir o PHPUnit no GLPI 11** — opcional: hoje o GLPI 11 é coberto só pelos E2E
+
+### O pacote também foi testado como artifact
+
+Não bastava listar o tar: ele foi extraído, montado no lugar do diretório do
+plugin no container do GLPI 10 e os E2E rodaram contra os arquivos extraídos —
+36/36 e 40/40. É o que pega um arquivo de runtime export-ignored por engano, já que
+o E2E normal roda contra a árvore de trabalho. (O `tests/e2e/seeder.php` foi
+injetado na extração temporária, porque `tests/` é justamente o que não entra no
+pacote.)
 
 ### Bloqueios do ambiente
 
