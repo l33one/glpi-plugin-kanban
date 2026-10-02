@@ -191,20 +191,46 @@ coberto pelos E2E, que exercitam a mesma funcionalidade pela web.
 
 ## 6. Pendências
 
-Resolvido nesta rodada (5 commits, `e2a6640`..`23e0010`):
+Tudo resolvido nesta rodada (`e2a6640`..`1516846`):
 
 1. ~~Revisar o `git diff` completo~~ — 3803 linhas adicionadas em 27 arquivos,
    divididos por fronteira de arquivo: runtime, testes, tooling/CI e docs
 2. ~~Commitar~~ — inclusive `.github/`, que estava untracked e impedia a CI
-3. ~~Build do pacote~~ — `dist/glpi-plugin-kanban-1.3.0.tar.bz2`, 79.404 bytes,
+3. ~~Build do pacote~~ — `dist/glpi-plugin-kanban-1.3.0.tar.bz2`, 79.383 bytes,
    contendo só `front/`, `inc/`, `locales/`, `public/`, `hook.php`, `setup.php`,
-   `kanban.xml`, `kanban.png`, `LICENSE` e `README.md`. Nenhum `tests/`, `tools/`,
-   `.github/`, `docker/`, `docker-compose*` ou `PLAN-*.md`
-4. **Publicar o release 1.3.0** — falta *push* dos 5 commits e da tag `1.3.0`
-   (criada e apontando para `23e0010`), mais o upload do `.tar.bz2` no GitHub
-   Releases. O `download_url` do `kanban.xml` já aponta para o nome e a versão
-   certos, então publica sem edição adicional
-5. **Decidir o PHPUnit no GLPI 11** — opcional: hoje o GLPI 11 é coberto só pelos E2E
+   `kanban.xml`, `kanban.png`, `LICENSE` e `README.md` (21 arquivos). Nenhum
+   `tests/`, `tools/`, `.github/`, `docker/`, `docker-compose*` ou `PLAN-*.md`
+4. ~~Publicar o release 1.3.0~~ — `main` e a tag `1.3.0` no ar, release em
+   <https://github.com/l33one/glpi-plugin-kanban/releases/tag/1.3.0>, com o
+   `.tar.bz2` anexado. O asset publicado confere com o pacote local, SHA-256
+   `f8b595afc6ee6f9fb721eb7a91f67499987003f287fec7837350d04162f83e23`. A tag
+   aponta para `a034e58`, e os commits seguintes são só de CI e testes, sem tocar
+   no runtime
+5. ~~Decidir o PHPUnit no GLPI 11~~ — não: o GLPI 11 fica coberto pelos E2E, que
+   sobem a stack de verdade e exercitam a funcionalidade pela web
+
+### O que só apareceu na CI
+
+A CI foi o que expôs que a suíte de PHPUnit nunca teve fixtures de verdade. Local
+ela passava por dados que sobraram de execuções anteriores; na CI, que sobe com
+volume novo, o quadro vinha vazio e ela falhava. Três defeitos distintos, todos no
+armazenamento de estado e não no plugin:
+
+- `kanban_plugin_create_test_tickets()` existia no bootstrap mas ninguém chamava,
+  e ainda usava a assinatura do GLPI 9 (`$DB->insert($array)`);
+- depois de chamada, ela lia o id do retorno de `insert()`, que no GLPI 10 é
+  booleano — o id vem de `insertId()`. Todos os actors apontavam para o ticket 1,
+  o que passa despercebido em base vazia (onde o primeiro ticket *é* o 1) e
+  esvazia o quadro em qualquer base já usada;
+- dois testes dependiam desse estado herdado: um criava tickets sem Responsible
+  (o quadro só mostra chamados que o usuário responde) e outro afirmava testar uma
+  coluna vazia com `assertNotNull`, quando `checkWipLimit()` devolve `null` para
+  permitir — ou seja, validava o ramo oposto ao que a mensagem descreve, e só
+  passava porque a coluna estava cheia.
+
+Com isso a suíte passou de 235 para 413 asserções no mesmo banco: boa parte do
+quadro estava sendo testada contra nada. A CI verde (`37048984781`) é o primeiro
+run em que lint, package, E2E do GLPI 10 e E2E do GLPI 11 passam juntos.
 
 ### O pacote também foi testado como artifact
 
