@@ -17,14 +17,14 @@
       - kb_extuser (grupo 9753) vê apenas Zink Zeca (e ele mesmo) - nunca os do 9751.
       - kb_outsider (sem grupo) não vê técnico algum.
 
-.PARAMETER Version
-    Versão do GLPI a testar (10 ou 11).
+.PARAMETER Versions
+    Versões do GLPI a testar (10 e/ou 11).
 
 .PARAMETER Cleanup
     Apenas remove os usuários/tickets do cenário KB TECHFILTER.
 #>
 param(
-    [int]$Version = 10,
+    [int[]]$Versions = @(10, 11),
     [switch]$Cleanup
 )
 
@@ -38,6 +38,11 @@ if ([string]::IsNullOrWhiteSpace($WebPassword)) {
     exit 1
 }
 
+foreach ($v in $Versions) {
+    if (-not $composeFiles.ContainsKey($v)) { continue }
+    # As funções abaixo leem $Version do escopo de quem chama.
+    $Version = $v
+
 if ($Cleanup) {
     & docker compose -f $composeFiles[$Version] exec -T db mariadb -uglpi -pglpi_password glpi -e @"
 SET @marker = 'KB TECHFILTER';
@@ -47,8 +52,9 @@ DELETE FROM glpi_groups_users WHERE users_id IN (SELECT id FROM glpi_users WHERE
 DELETE FROM glpi_profiles_users WHERE users_id IN (SELECT id FROM glpi_users WHERE name IN ('kb_ana','kb_bruno','kb_carlos','kb_zebra'));
 DELETE FROM glpi_users WHERE name IN ('kb_ana','kb_bruno','kb_carlos','kb_zebra');
 "@
-    if ($LASTEXITCODE -eq 0) { Write-Host "Cenario KB TECHFILTER removido." }
-    exit $LASTEXITCODE
+    if ($LASTEXITCODE -eq 0) { Write-Host "Cenario KB TECHFILTER removido (GLPI $Version)." }
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    continue
 }
 
 # Garante o cenario base (kb_* , grupos 9751/9753, perfil 9701) via seeder oficial.
@@ -112,7 +118,7 @@ function Get-FilterData {
     if ($csrf) { $data += "&_glpi_csrf_token=$csrf" }
     & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$action"
 
-    $raw = (& curl.exe -s -b $jar ($base + '/plugins/kanban/front/kanban.php?action=get_filter_data')) -join "`n"
+    $raw = (& curl.exe -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')) -join "`n"
     if (-not $raw) { return @() }
     $json = $raw | ConvertFrom-Json
     $techs = @()
@@ -147,3 +153,4 @@ Check ($o.Count -eq 0) "kb_outsider (sem grupo) nao ve nenhum tecnico"
 Write-Host "`n===== RESUMO ====="
 if ($failures -eq 0) { Write-Host "TODOS OS $checks CHECKS PASSARAM" -ForegroundColor Green }
 else { Write-Host "$failures falha(s) em $checks checks" -ForegroundColor Red; exit 1 }
+}

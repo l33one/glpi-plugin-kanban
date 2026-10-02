@@ -208,9 +208,14 @@ class PluginKanbanKanbanTest extends TestCase
             }
             $this->assertContains($ticket_a, $ids, 'Search with leading # must still match');
 
-            // A number with no matching ticket must produce an empty board
-            $result = PluginKanbanKanban::getTicketsForKanban(['ticket_id' => '999999'], [], 100);
-            $this->assertSame([], $result);
+// A number with no matching ticket must leave every column empty.
+         // The columns themselves stay: the board is built from the configured
+         // statuses, not from the rows that happened to match.
+         $result = PluginKanbanKanban::getTicketsForKanban(['ticket_id' => '999999'], [], 100);
+         $this->assertNotEmpty($result);
+         foreach ($result as $status => $tickets) {
+             $this->assertSame([], $tickets, "Column $status must be empty");
+         }
         } finally {
             foreach ([$ticket_a, $ticket_b] as $tid) {
                 if ($tid > 0) {
@@ -1314,6 +1319,203 @@ class PluginKanbanKanbanTest extends TestCase
             $DB->delete('glpi_groups_users', ['groups_id' => [$parent, $child, $other]]);
             $DB->delete('glpi_groups', ['id' => [$parent, $child, $other]]);
         }
+    }
+
+    public function testGetBoardDataReportsRealTotalsAndHasMore(): void
+    {
+        global $DB;
+
+        $_SESSION['glpiactiveentities'] = [0];
+        unset($_SESSION['glpigroups']);
+
+        $tickets = [];
+        try {
+            // Three tickets in the same status so a limit of 2 truncates the
+            // column: that is the case the board used to hide.
+            for ($i = 0; $i < 3; $i++) {
+                $id = self::insertKanbanTestTicket('Kanban pagination ticket ' . $i);
+                $tickets[] = $id;
+                if ($id > 0) {
+                    $DB->update('glpi_tickets', ['status' => Ticket::INCOMING], ['id' => $id]);
+                }
+            }
+            $this->assertNotEmpty($tickets);
+
+            $board = PluginKanbanKanban::getBoardData([], ['by' => 'date', 'order' => 'DESC'], 2);
+
+            $this->assertIsArray($board);
+            $this->assertArrayHasKey('statuses', $board);
+            $this->assertArrayHasKey('totals', $board);
+            $this->assertArrayHasKey('has_more', $board);
+
+            $loaded = $board['statuses'][Ticket::INCOMING] ?? [];
+            $total = $board['totals'][Ticket::INCOMING] ?? 0;
+            $more = $board['has_more'][Ticket::INCOMING] ?? false;
+
+            $this->assertLessThanOrEqual(2, count($loaded), 'The column must honour the requested limit');
+            $this->assertGreaterThanOrEqual(count($loaded), $total, 'The total cannot be smaller than what is loaded');
+            $this->assertSame(
+                $total > count($loaded),
+                (bool)$more,
+                'has_more must be true exactly when the column was truncated'
+            );
+
+            // The second page continues where the first stopped.
+            $page2 = PluginKanbanKanban::getBoardData(
+                [],
+                ['by' => 'date', 'order' => 'DESC'],
+                2,
+                2,
+                Ticket::INCOMING
+            );
+            $loaded2 = $page2['statuses'][Ticket::INCOMING] ?? [];
+            $first_ids = array_column($loaded, 'id');
+            foreach ($loaded2 as $ticket) {
+                $this->assertNotContains((int)$ticket['id'], $first_ids, 'A page must not repeat the previous page');
+            }
+        } finally {
+            foreach ($tickets as $id) {
+                if ($id > 0) {
+                    $DB->delete('glpi_tickets', ['id' => $id]);
+                }
+            }
+        }
+    }
+
+    public function testGetTicketsForKanbanStaysAWrapperOverGetBoardData(): void
+    {
+        $wrapper = PluginKanbanKanban::getTicketsForKanban([], ['by' => 'date', 'order' => 'DESC'], 5);
+        $board = PluginKanbanKanban::getBoardData([], ['by' => 'date', 'order' => 'DESC'], 5);
+
+        $this->assertSame(array_keys($board['statuses']), array_keys($wrapper));
+    }
+
+    public function testComputeMetricsUsesTotalsAndFlagsPartialData(): void
+    {
+        $statuses = [
+            Ticket::INCOMING => [
+                ['id' => 1, 'status' => Ticket::INCOMING, 'assigned_techs' => [], 'sla_progress' => ['status' => 'ok', 'percent' => 50]],
+                ['id' => 2, 'status' => Ticket::INCOMING, 'assigned_techs' => [], 'sla_progress' => ['status' => 'no_sla', 'percent' => 0]],
+            ],
+        ];
+
+        $with_totals = PluginKanbanKanban::computeMetrics($statuses, [Ticket::INCOMING => 7]);
+        $this->assertSame(7, $with_totals['total'], 'The total is the server count, not the number of cards');
+        $this->assertSame(2, $with_totals['cards']);
+        $this->assertTrue($with_totals['partial'], 'A truncated board must say so');
+        $this->assertSame(2, $with_totals['unassigned']);
+
+        $without_totals = PluginKanbanKanban::computeMetrics($statuses);
+        $this->assertSame(2, $without_totals['total']);
+        $this->assertFalse($without_totals['partial']);
+    }
+
+    public function testCountVisibleTicketsInStatusMatchesTheColumnTotal(): void
+    {
+        global $DB;
+
+        $_SESSION['glpiactiveentities'] = [0];
+        unset($_SESSION['glpigroups']);
+
+        $tickets = [];
+        try {
+            for ($i = 0; $i < 2; $i++) {
+                $id = self::insertKanbanTestTicket('Kanban wip ticket ' . $i);
+                $tickets[] = $id;
+                if ($id > 0) {
+                    $DB->update('glpi_tickets', ['status' => Ticket::PLANNED], ['id' => $id]);
+                }
+            }
+
+            $board = PluginKanbanKanban::getBoardData([], ['by' => 'date', 'order' => 'DESC'], 1);
+            $total_from_board = $board['totals'][Ticket::PLANNED] ?? 0;
+
+            $this->assertSame(
+                $total_from_board,
+                PluginKanbanKanban::countVisibleTicketsInStatus(Ticket::PLANNED),
+                'The work-in-progress count must be the same number the board shows'
+            );
+            $this->assertGreaterThanOrEqual(2, $total_from_board);
+        } finally {
+            foreach ($tickets as $id) {
+                if ($id > 0) {
+                    $DB->delete('glpi_tickets', ['id' => $id]);
+                }
+            }
+        }
+    }
+
+    public function testUndoStatusChangeRestoresThePreviousStatus(): void
+    {
+        global $DB;
+
+        $ticket_id = self::insertKanbanTestTicket('Kanban undo ticket');
+        $this->assertGreaterThan(0, $ticket_id);
+
+        try {
+            $DB->update('glpi_tickets', ['status' => Ticket::ASSIGNED], ['id' => $ticket_id]);
+            // The board only ever shows tickets the user is responsible for,
+            // and undo reuses that gate, so the ticket must be assigned.
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => (int)Session::getLoginUserID(),
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+
+            $result = PluginKanbanKanban::undoStatusChange($ticket_id, Ticket::INCOMING);
+            $this->assertTrue($result['success'], 'Undo must put the ticket back: ' . (string)$result['error']);
+
+            $ticket = new Ticket();
+            $ticket->getFromDB($ticket_id);
+            $this->assertSame(Ticket::INCOMING, (int)$ticket->fields['status']);
+        } finally {
+            if ($ticket_id > 0) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_id]);
+                $DB->delete('glpi_tickets', ['id' => $ticket_id]);
+            }
+        }
+    }
+
+    public function testUndoStatusChangeRefusesAnUnknownStatus(): void
+    {
+        $result = PluginKanbanKanban::undoStatusChange(0, 999999);
+
+        $this->assertFalse($result['success']);
+        $this->assertNotNull($result['error']);
+    }
+
+    public function testCheckWipLimitBlocksOnlyWhenConfiguredToBlock(): void
+    {
+        $saved = \Config::getConfigurationValues('plugin:kanban');
+        try {
+            \Config::setConfigurationValues('plugin:kanban', ['wip_limit' => 1, 'wip_block_exceed' => 1]);
+
+            $this->assertSame(1, PluginKanbanConfig::getWipLimit());
+            $this->assertTrue(PluginKanbanConfig::getWipBlockExceed());
+
+            // A closed status nobody uses is full once the limit is 1.
+            $this->assertNotNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::CLOSED),
+                'With a limit of 1 and an empty column the first move is allowed'
+            );
+
+            \Config::setConfigurationValues('plugin:kanban', ['wip_limit' => 0, 'wip_block_exceed' => 1]);
+            $this->assertSame(0, PluginKanbanConfig::getWipLimit());
+            $this->assertNull(PluginKanbanKanban::checkWipLimit(Ticket::CLOSED), 'Zero disables the limit');
+        } finally {
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit' => $saved['wip_limit'] ?? 0,
+                'wip_block_exceed' => $saved['wip_block_exceed'] ?? 0,
+            ]);
+        }
+    }
+
+    public function testConfigExposesTheNewBoardSettings(): void
+    {
+        $this->assertGreaterThanOrEqual(1, PluginKanbanConfig::getCardsPerColumn());
+        $this->assertLessThanOrEqual(200, PluginKanbanConfig::getCardsPerColumn());
+        $this->assertIsBool(PluginKanbanConfig::getWipBlockExceed());
+        $this->assertIsBool(PluginKanbanConfig::getEnableUndo());
     }
 
     private static function insertKanbanTestUser(string $name): int

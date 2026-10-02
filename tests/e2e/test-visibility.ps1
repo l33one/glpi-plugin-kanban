@@ -65,12 +65,14 @@ function Invoke-Seeder {
         '-e', 'KANBAN_DB_USER=glpi',
         '-e', 'KANBAN_DB_PASS=glpi_password',
         '-e', 'KANBAN_DB_NAME=glpi',
-        '-e', "KANBAN_TEST_PASS=$WebPassword",
-        'glpi', 'php', '/var/www/glpi/plugins/kanban/tests/e2e/seeder.php'
+        '-e', "KANBAN_TEST_PASS=$WebPassword"
     )
     if ($Cleanup) {
-        $args = @('exec', '-T', '-e', 'KANBAN_CLEANUP=1', 'glpi', 'php', '/var/www/glpi/plugins/kanban/tests/e2e/seeder.php')
+        # Keep the credentials: the seeder refuses to run without them, cleanup
+        # or not.
+        $args += @('-e', 'KANBAN_CLEANUP=1')
     }
+    $args += @('glpi', 'php', '/var/www/glpi/plugins/kanban/tests/e2e/seeder.php')
     & docker compose -f $file @args
     if ($LASTEXITCODE -ne 0) { throw "Seeder falhou no GLPI $Version (exit $LASTEXITCODE)" }
 }
@@ -104,16 +106,24 @@ function Get-BoardTitles {
     if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
     $loginStatus = & curl.exe -s -o NUL -b $jar -c $jar -d $data -w '%{http_code}' "$base$($f[2])"
 
-    $endpoint = "$base/plugins/kanban/front/kanban.php"
+    $endpoint = "$base/plugins/kanban/front/api.php"
     $raw = & curl.exe -s -b $jar -w "`n%{http_code}" ($endpoint + '?action=get_tickets')
     $code = ($raw -split "`n")[-1]
     $body = ($raw -split "`n")[0..($raw.Length - 2)] -join "`n"
     $body = $body.TrimStart()
 
+    # A API nega com 403 e corpo JSON {success:false}: "não é JSON" só detecta
+    # a página de erro do GLPI, não a recusa da API.
+    if ($code -eq '403') {
+        return @{ 'blocked' = $true; 'titles' = @(); 'code' = $code }
+    }
     if (-not $body.StartsWith('{') -and -not $body.StartsWith('[')) {
         return @{ 'blocked' = $true; 'titles' = @(); 'code' = $code }
     }
     $json = $body | ConvertFrom-Json
+    if ($json -and $json.success -eq $false) {
+        return @{ 'blocked' = $true; 'titles' = @(); 'code' = $code }
+    }
     $titles = @()
     if ($null -ne $json) {
         $statuses = if ($null -ne $json.statuses) { $json.statuses } else { $json }
@@ -140,7 +150,7 @@ function Get-FilterData {
     if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
     & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
 
-    $raw = & curl.exe -s -b $jar ($base + '/plugins/kanban/front/kanban.php?action=get_filter_data')
+    $raw = & curl.exe -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')
     $body = ($raw -join "`n").TrimStart()
     if (-not $body.StartsWith('{')) { return @{ 'blocked' = $true; 'requesters' = @() } }
     $json = $body | ConvertFrom-Json

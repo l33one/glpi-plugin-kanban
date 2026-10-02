@@ -53,10 +53,18 @@ define('PLUGINS_DIRECTORIES', [
 if (!file_exists(GLPI_VAR_DIR)) {
     mkdir(GLPI_VAR_DIR, 0777, true);
 }
-foreach (array_filter(compact([
-    'GLPI_CRON_DIR', 'GLPI_LOG_DIR', 'GLPI_DUMP_DIR', 'GLPI_PICTURE_DIR',
-    'GLPI_TMP_DIR', 'GLPI_CACHE_DIR', 'GLPI_SESSION_DIR',
-]), 'strlen') as $dir) {
+// compact() only resolves variables, so the constants have to be listed here:
+// the loop below never ran and GLPI had to create the directories itself.
+$test_dirs = [
+    GLPI_CRON_DIR,
+    GLPI_LOG_DIR,
+    GLPI_DUMP_DIR,
+    GLPI_PICTURE_DIR,
+    GLPI_TMP_DIR,
+    GLPI_CACHE_DIR,
+    GLPI_SESSION_DIR,
+];
+foreach ($test_dirs as $dir) {
     if (!file_exists($dir)) {
         mkdir($dir, 0777, true);
     }
