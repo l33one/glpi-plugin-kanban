@@ -1,25 +1,25 @@
-<#
+﻿<#
 .SYNOPSIS
-    Testes E2E das funcionalidades novas do quadro Kanban (paginação, undo, WIP e
+    Testes E2E das funcionalidades novas do quadro Kanban (paginaÃ§Ã£o, undo, WIP e
     saved views) via web (login real) em GLPI 10 e/ou 11.
 
 .DESCRIPTION
-    Depende do cenário semeado por tests/e2e/seeder.php (o mesmo de test-visibility.ps1)
+    Depende do cenÃ¡rio semeado por tests/e2e/seeder.php (o mesmo de test-visibility.ps1)
     e valida:
-      - get_tickets devolve 'totals' e 'has_more' por coluna, e o total é maior que
-        a quantidade de cards quando a coluna foi truncada (nada é escondido em silêncio).
-      - a paginação por coluna funciona: status + offset devolvem a página seguinte e
+      - get_tickets devolve 'totals' e 'has_more' por coluna, e o total Ã© maior que
+        a quantidade de cards quando a coluna foi truncada (nada Ã© escondido em silÃªncio).
+      - a paginaÃ§Ã£o por coluna funciona: status + offset devolvem a pÃ¡gina seguinte e
         has_more reflete o que ainda falta.
       - um movimento de status pode ser desfeito (update_ticket_status + undo_ticket_status),
         devolvendo o chamado ao status anterior.
-      - o limite de WIP é contado por status (get_wip_state).
+      - o limite de WIP Ã© contado por status (get_wip_state).
       - saved views: salvar, listar e apagar.
-      - a API só aceita escrita por POST (GET em uma ação de escrita responde 405),
-        e rejeita ação desconhecida com 404.
-      - um usuário sem o direito plugin_kanban continua bloqueado (403).
+      - a API sÃ³ aceita escrita por POST (GET em uma aÃ§Ã£o de escrita responde 405),
+        e rejeita aÃ§Ã£o desconhecida com 404.
+      - um usuÃ¡rio sem o direito plugin_kanban continua bloqueado (403).
 
 .PARAMETER Versions
-    Versões do GLPI a testar (10 e/ou 11).
+    VersÃµes do GLPI a testar (10 e/ou 11).
 
 .EXAMPLE
     .\test-board-features.ps1
@@ -34,6 +34,13 @@ param(
    # $env:TEMP nao existe no PowerShell do Linux (a CI roda em ubuntu-latest),
    # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
    $tmpDir = [System.IO.Path]::GetTempPath()
+   
+   # curl.exe e o dispositivo nulo 'NUL' so existem no Windows. $IsWindows nao
+   # existe no Windows PowerShell 5.1, que tambem roda estes scripts, entao a
+   # deteccao usa $env:OS, presente nas duas plataformas.
+   $isWindows   = $env:OS -eq 'Windows_NT'
+   $curl        = if ($isWindows) { 'curl.exe' } else { 'curl' }
+   $nullDevice  = if ($isWindows) { 'NUL' } else { '/dev/null' }
    
    $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
    $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
@@ -88,15 +95,15 @@ function New-Session {
     $jar = Join-Path $tmpDir ("kb_feat_$($Login)_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
-    $loginPage = (& curl.exe -s -c $jar "$base/") -join "`n"
+    $loginPage = (& $curl -s -c $jar "$base/") -join "`n"
     $f = Get-LoginFields -Html $loginPage
     if (-not $f[0] -or -not $f[1]) { return @{ blocked = $true; jar = $null; csrf = '' } }
 
     $data = "$($f[0])=$Login&$($f[1])=$Password"
     if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
-    & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
+    & $curl -s -o $nullDevice -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
 
-    $board = (& curl.exe -s -b $jar -c $jar "$base/plugins/kanban/front/kanban.php") -join "`n"
+    $board = (& $curl -s -b $jar -c $jar "$base/plugins/kanban/front/kanban.php") -join "`n"
     $csrf = ''
     if ($board -match '<input[^>]*type="hidden"[^>]*name="_glpi_csrf_token"[^>]*value="([^"]+)"') { $csrf = $Matches[1] }
 
@@ -117,11 +124,11 @@ function Invoke-Api {
     foreach ($k in $Params.Keys) { $query += "&" + [uri]::EscapeDataString($k) + "=" + [uri]::EscapeDataString([string]$Params[$k]) }
 
     if (-not $Post) {
-        $raw = & curl.exe -s -b $Session.jar -w "`n%{http_code}" "$endpoint`?$query"
+        $raw = & $curl -s -b $Session.jar -w "`n%{http_code}" "$endpoint`?$query"
     } else {
         # O token do GLPI e de uso unico e precisa acompanhar cada POST.
         if ($Session.csrf) { $query += "&_glpi_csrf_token=" + [uri]::EscapeDataString($Session.csrf) }
-        $raw = & curl.exe -s -b $Session.jar -w "`n%{http_code}" -d $query "$endpoint"
+        $raw = & $curl -s -b $Session.jar -w "`n%{http_code}" -d $query "$endpoint"
     }
 
     $code = ($raw -split "`n")[-1]
@@ -150,7 +157,7 @@ foreach ($v in $Versions) {
     $r = Invoke-Api -Session $sessNoRight -Action 'get_tickets'
     Check ($r.code -eq '403') "kb_noright recebe HTTP 403 em get_tickets (obtido $($r.code))"
 
-    Write-Host '-- Paginação: totais reais e has_more por coluna --'
+    Write-Host '-- PaginaÃ§Ã£o: totais reais e has_more por coluna --'
     $sess = New-Session -Version $v -Login 'kb_manager'
     Check (-not $sess.blocked) 'kb_manager autenticado'
 
@@ -160,9 +167,9 @@ foreach ($v in $Versions) {
         Check ($null -ne $full.json.totals) 'a resposta traz "totals" por coluna'
         Check ($null -ne $full.json.has_more) 'a resposta traz "has_more" por coluna'
         Check ($null -ne $full.json.metrics) 'a resposta traz "metrics"'
-        Check ($null -eq $full.json.metrics.PSObject.Properties['error']) 'a resposta não traz erro'
+        Check ($null -eq $full.json.metrics.PSObject.Properties['error']) 'a resposta nÃ£o traz erro'
 
-        # O cenário do seeder deixa 3 chamados visíveis para kb_manager no status 1.
+        # O cenÃ¡rio do seeder deixa 3 chamados visÃ­veis para kb_manager no status 1.
         $total1 = [int]$full.json.totals.'1'
         $loaded1 = @($full.json.statuses.'1').Count
         Check ($total1 -ge $loaded1) "total ($total1) >= cards carregados ($loaded1) no status 1"
@@ -170,10 +177,10 @@ foreach ($v in $Versions) {
         Check ([bool]$full.json.has_more.'1' -eq ($total1 -gt $loaded1)) 'has_more coerente com o total'
 
         $ids = @($full.json.statuses.'1' | ForEach-Object { [int]$_.id })
-        Check ($ids.Count -gt 0) 'há cards no status 1 para testar a paginação'
+        Check ($ids.Count -gt 0) 'hÃ¡ cards no status 1 para testar a paginaÃ§Ã£o'
     }
 
-    Write-Host '-- Paginação: página seguinte por coluna --'
+    Write-Host '-- PaginaÃ§Ã£o: pÃ¡gina seguinte por coluna --'
     if ($full.json) {
         $total1 = [int]$full.json.totals.'1'
         if ($total1 -gt 2) {
@@ -181,10 +188,10 @@ foreach ($v in $Versions) {
             $p2ids = @($page2.json.statuses.'1' | ForEach-Object { [int]$_.id })
             $firstIds = @($full.json.statuses.'1' | ForEach-Object { [int]$_.id })
             Check ($p2ids.Count -gt 0) "offset=2 devolve cards (obtidos $($p2ids.Count))"
-            Check (-not ($p2ids | Where-Object { $firstIds -contains $_ })) 'a página seguinte não repete cards da primeira'
-            Check ([bool]$page2.json.has_more.'1' -eq ($total1 -gt ($p2ids.Count + 2))) 'has_more da página seguinte coerente'
+            Check (-not ($p2ids | Where-Object { $firstIds -contains $_ })) 'a pÃ¡gina seguinte nÃ£o repete cards da primeira'
+            Check ([bool]$page2.json.has_more.'1' -eq ($total1 -gt ($p2ids.Count + 2))) 'has_more da pÃ¡gina seguinte coerente'
         } else {
-            Write-Host "  (poucos chamados no cenário: pulando o teste de offset)" -ForegroundColor Yellow
+            Write-Host "  (poucos chamados no cenÃ¡rio: pulando o teste de offset)" -ForegroundColor Yellow
         }
     }
 
@@ -198,11 +205,11 @@ foreach ($v in $Versions) {
             $undo = Invoke-Api -Session $sess -Action 'undo_ticket_status' -Post -Params @{ ticket_id = $ticketId; from_status = 1 }
             Check ($undo.json.result.success -eq $true) "undo do chamado #$ticketId volta ao status 1 (erro: $($undo.json.result.error))"
 
-            # Undo para um status que não existe tem de ser recusado.
+            # Undo para um status que nÃ£o existe tem de ser recusado.
             $badUndo = Invoke-Api -Session $sess -Action 'undo_ticket_status' -Post -Params @{ ticket_id = $ticketId; from_status = 9999 }
-            Check ($badUndo.json.result.success -eq $false) 'undo com status inexistente é recusado'
+            Check ($badUndo.json.result.success -eq $false) 'undo com status inexistente Ã© recusado'
         } else {
-            Check $false 'nenhum chamado disponível para testar o undo'
+            Check $false 'nenhum chamado disponÃ­vel para testar o undo'
         }
     }
 
@@ -215,7 +222,7 @@ foreach ($v in $Versions) {
         $hasStatus1 = $null -ne $wip.json.wip.'1'
         Check $hasStatus1 'o status 1 aparece no estado de WIP'
         if ($hasStatus1) {
-            Check ([int]$wip.json.wip.'1'.current -ge 0) 'a contagem de WIP é um número'
+            Check ([int]$wip.json.wip.'1'.current -ge 0) 'a contagem de WIP Ã© um nÃºmero'
         }
     }
 
@@ -232,11 +239,11 @@ foreach ($v in $Versions) {
     $withName = @($list.json.presets | Where-Object { [string]$_.name -eq $viewName })
     if ($withName.Count -eq 1) {
         Check ($null -ne $withName[0].filters) 'a view devolve os filtros guardados'
-        Check ([bool]$withName[0].can_write) 'o dono pode editar a própria view'
+        Check ([bool]$withName[0].can_write) 'o dono pode editar a prÃ³pria view'
     }
 
     $badSave = Invoke-Api -Session $sess -Action 'save_preset' -Post -Params @{ name = '   ' }
-    Check ($badSave.json.result.success -eq $false) 'view sem nome é recusada'
+    Check ($badSave.json.result.success -eq $false) 'view sem nome Ã© recusada'
 
 if ($viewId -gt 0) {
         $del = Invoke-Api -Session $sess -Action 'delete_preset' -Post -Params @{ id = $viewId }
@@ -246,26 +253,26 @@ if ($viewId -gt 0) {
         Check (-not (($afterNames | Where-Object { $_ -eq $viewName }).Count -gt 0)) 'a view apagada some da lista'
     }
 
-    Write-Host '-- Contrato da API: escrita só por POST, ações desconhecidas --'
+    Write-Host '-- Contrato da API: escrita sÃ³ por POST, aÃ§Ãµes desconhecidas --'
     $viaGet = Invoke-Api -Session $sess -Action 'update_ticket_status' -Params @{ ticket_id = 1; status = 2 }
-    Check ($viaGet.code -eq '405') "GET em ação de escrita responde 405 (obtido $($viaGet.code))"
+    Check ($viaGet.code -eq '405') "GET em aÃ§Ã£o de escrita responde 405 (obtido $($viaGet.code))"
 
     $unknown = Invoke-Api -Session $sess -Action 'nao_existe'
-    Check ($unknown.code -eq '404') "ação desconhecida responde 404 (obtido $($unknown.code))"
+    Check ($unknown.code -eq '404') "aÃ§Ã£o desconhecida responde 404 (obtido $($unknown.code))"
 
     $bogus = Invoke-Api -Session $sess -Action '../../config'
-    Check ($bogus.code -in @('400', '404')) "ação com caracteres inválidos é recusada (obtido $($bogus.code))"
+    Check ($bogus.code -in @('400', '404')) "aÃ§Ã£o com caracteres invÃ¡lidos Ã© recusada (obtido $($bogus.code))"
 
-    # Parâmetro obrigatório ausente é requisição inválida, não erro 500.
+    # ParÃ¢metro obrigatÃ³rio ausente Ã© requisiÃ§Ã£o invÃ¡lida, nÃ£o erro 500.
     $noTicket = Invoke-Api -Session $sess -Action 'update_ticket_status' -Post
     Check ($noTicket.code -eq '400') "update_ticket_status sem ticket_id responde 400 (obtido $($noTicket.code))"
     $noFollowup = Invoke-Api -Session $sess -Action 'get_followups'
     Check ($noFollowup.code -eq '400') "get_followups sem ticket_id responde 400 (obtido $($noFollowup.code))"
 
-    # Toda resposta de POST precisa devolver um token novo: o do GLPI é de uso único.
+    # Toda resposta de POST precisa devolver um token novo: o do GLPI Ã© de uso Ãºnico.
     Check ($null -ne $noTicket.json.csrf_token) 'a resposta de erro de POST traz csrf_token'
 
-    Write-Host '-- Presets de outro usuário não podem ser apagados --'
+    Write-Host '-- Presets de outro usuÃ¡rio nÃ£o podem ser apagados --'
     $other = New-Session -Version $v -Login 'kb_child'
     if (-not $other.blocked) {
         $otherList = Invoke-Api -Session $other -Action 'get_presets'

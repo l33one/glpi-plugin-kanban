@@ -1,24 +1,24 @@
-<#
+﻿<#
 .SYNOPSIS
     Testes E2E de visibilidade do plugin Kanban via web (login real) em GLPI 10 e/ou 11.
 
 .DESCRIPTION
-    Semeia usuários/grupos/gerentes/perfis e chamados (tests/e2e/seeder.php) e valida as
+    Semeia usuÃ¡rios/grupos/gerentes/perfis e chamados (tests/e2e/seeder.php) e valida as
     regras de visibilidade do quadro:
-      - Perfil sem o direito 'plugin_kanban' não acessa o quadro (HTTP 403).
-      - O usuário vê apenas chamados dos grupos aos quais pertence (subgrupos inclusos)
-        ou nos quais está como técnico (ASSIGN).
-      - Membro comum NÃO vê chamado delegado individualmente a um colega do grupo.
-      - Gerente do grupo vê todos os chamados do grupo, inclusive os delegados a outros
+      - Perfil sem o direito 'plugin_kanban' nÃ£o acessa o quadro (HTTP 403).
+      - O usuÃ¡rio vÃª apenas chamados dos grupos aos quais pertence (subgrupos inclusos)
+        ou nos quais estÃ¡ como tÃ©cnico (ASSIGN).
+      - Membro comum NÃƒO vÃª chamado delegado individualmente a um colega do grupo.
+      - Gerente do grupo vÃª todos os chamados do grupo, inclusive os delegados a outros
         membros (e a membros de subgrupos).
-      - Observador do grupo não torna o chamado visível.
-      - A restrição vale para todos os perfis, incluindo Super-Admin.
+      - Observador do grupo nÃ£o torna o chamado visÃ­vel.
+      - A restriÃ§Ã£o vale para todos os perfis, incluindo Super-Admin.
 
 .PARAMETER Versions
-    Versões do GLPI a testar (10 e/ou 11).
+    VersÃµes do GLPI a testar (10 e/ou 11).
 
 .PARAMETER Cleanup
-    Apenas remove o cenário semeado (não executa asserções).
+    Apenas remove o cenÃ¡rio semeado (nÃ£o executa asserÃ§Ãµes).
 
 .EXAMPLE
     .\test-visibility.ps1
@@ -36,6 +36,13 @@ param(
    # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
    $tmpDir = [System.IO.Path]::GetTempPath()
    
+   # $curl e o dispositivo nulo 'NUL' so existem no Windows. $IsWindows nao
+   # existe no Windows PowerShell 5.1, que tambem roda estes scripts, entao a
+   # deteccao usa $env:OS, presente nas duas plataformas.
+   $isWindows   = $env:OS -eq 'Windows_NT'
+   $curl        = if ($isWindows) { 'curl.exe' } else { 'curl' }
+   $nullDevice  = if ($isWindows) { 'NUL' } else { '/dev/null' }
+   
    $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
    $ports        = @{ 10 = 8090; 11 = 8091 }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
@@ -43,7 +50,7 @@ $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
 # O seeder nunca cria contas com senha fixa: a senha vem do ambiente.
 $WebPassword = $env:KANBAN_TEST_PASS
 if ([string]::IsNullOrWhiteSpace($WebPassword)) {
-    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explícita."
+    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explÃ­cita."
     exit 1
 }
 
@@ -93,13 +100,13 @@ function Get-LoginFields {
 
 function Get-BoardTitles {
     param([int]$Version, [string]$Login, [string]$Password = $WebPassword)
-    # Espaça os logins para não disparar o throttle anti-brute-force do GLPI.
+    # EspaÃ§a os logins para nÃ£o disparar o throttle anti-brute-force do GLPI.
     Start-Sleep -Milliseconds 900
     $base = $baseUrl[$Version]
     $jar = Join-Path $tmpDir ("kb_e2e_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
-    $loginPage = & curl.exe -s -c $jar "$base/"
+    $loginPage = & $curl -s -c $jar "$base/"
     $f = Get-LoginFields -Html $loginPage
     if (-not $f[0] -or -not $f[1]) {
         Write-Host "  (login fields nao encontrados na pagina do GLPI $Version)" -ForegroundColor Yellow
@@ -108,16 +115,16 @@ function Get-BoardTitles {
 
     $data = "$($f[0])=$Login&$($f[1])=$Password"
     if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
-    $loginStatus = & curl.exe -s -o NUL -b $jar -c $jar -d $data -w '%{http_code}' "$base$($f[2])"
+    $loginStatus = & $curl -s -o $nullDevice -b $jar -c $jar -d $data -w '%{http_code}' "$base$($f[2])"
 
     $endpoint = "$base/plugins/kanban/front/api.php"
-    $raw = & curl.exe -s -b $jar -w "`n%{http_code}" ($endpoint + '?action=get_tickets')
+    $raw = & $curl -s -b $jar -w "`n%{http_code}" ($endpoint + '?action=get_tickets')
     $code = ($raw -split "`n")[-1]
     $body = ($raw -split "`n")[0..($raw.Length - 2)] -join "`n"
     $body = $body.TrimStart()
 
-    # A API nega com 403 e corpo JSON {success:false}: "não é JSON" só detecta
-    # a página de erro do GLPI, não a recusa da API.
+    # A API nega com 403 e corpo JSON {success:false}: "nÃ£o Ã© JSON" sÃ³ detecta
+    # a pÃ¡gina de erro do GLPI, nÃ£o a recusa da API.
     if ($code -eq '403') {
         return @{ 'blocked' = $true; 'titles' = @(); 'code' = $code }
     }
@@ -140,21 +147,21 @@ function Get-BoardTitles {
 
 function Get-FilterData {
     param([int]$Version, [string]$Login, [string]$Password = $WebPassword)
-    # Mesmo login do Get-BoardTitles, porém na ação que alimenta os dropdowns.
+    # Mesmo login do Get-BoardTitles, porÃ©m na aÃ§Ã£o que alimenta os dropdowns.
     Start-Sleep -Milliseconds 900
     $base = $baseUrl[$Version]
     $jar = Join-Path $tmpDir ("kb_e2e_fd_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
-    $loginPage = & curl.exe -s -c $jar "$base/"
+    $loginPage = & $curl -s -c $jar "$base/"
     $f = Get-LoginFields -Html $loginPage
     if (-not $f[0] -or -not $f[1]) { return @{ 'blocked' = $true; 'requesters' = @() } }
 
     $data = "$($f[0])=$Login&$($f[1])=$Password"
     if ($f[3]) { $data += "&_glpi_csrf_token=$($f[3])" }
-    & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
+    & $curl -s -o $nullDevice -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
 
-    $raw = & curl.exe -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')
+    $raw = & $curl -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')
     $body = ($raw -join "`n").TrimStart()
     if (-not $body.StartsWith('{')) { return @{ 'blocked' = $true; 'requesters' = @() } }
     $json = $body | ConvertFrom-Json
@@ -193,7 +200,7 @@ foreach ($v in $Versions) {
     $noright = Get-BoardTitles -Version $v -Login 'kb_noright'
     Check ($noright.blocked) "kb_noright (perfil sem direito) bloqueado no quadro (HTTP $($noright.code))"
 
-    Write-Host '-- Regras de visibilidade por usuário --'
+    Write-Host '-- Regras de visibilidade por usuÃ¡rio --'
     foreach ($user in @('kb_manager','kb_member','kb_child','kb_outsider')) {
         $board = Get-BoardTitles -Version $v -Login $user
         if ($board.blocked) {
@@ -204,32 +211,32 @@ foreach ($v in $Versions) {
         }
         $seen = $board.titles
         foreach ($want in $expected[$user]) {
-            Check (Contains $seen $want) "$user VÊ '$want'"
+            Check (Contains $seen $want) "$user VÃŠ '$want'"
         }
         foreach ($absent in $expectedAbsent[$user]) {
-            Check (-not (Contains $seen $absent)) "$user NÃO vê '$absent'"
+            Check (-not (Contains $seen $absent)) "$user NÃƒO vÃª '$absent'"
         }
     }
 
-    Write-Host '-- Regra: restrição vale para todos os perfis (incl. Super-Admin) --'
+    Write-Host '-- Regra: restriÃ§Ã£o vale para todos os perfis (incl. Super-Admin) --'
     $admin = Get-BoardTitles -Version $v -Login 'glpi' -Password 'glpi'
     $kbSeen = $admin.titles | Where-Object { $_ -like 'KB-E2E*' }
     Check (($admin.blocked) -eq $false) 'Super-Admin acessa o quadro'
-    Check ($kbSeen.Count -eq 0) 'Super-Admin não vê chamados do cenário KB-E2E (sem participação)'
+    Check ($kbSeen.Count -eq 0) 'Super-Admin nÃ£o vÃª chamados do cenÃ¡rio KB-E2E (sem participaÃ§Ã£o)'
 
-    Write-Host '-- Regra: gerente do grupo vê delegações a outros usuários --'
+    Write-Host '-- Regra: gerente do grupo vÃª delegaÃ§Ãµes a outros usuÃ¡rios --'
     $mgr = Get-BoardTitles -Version $v -Login 'kb_manager'
-    Check (Contains $mgr.titles 'KB-E2E delegado-membro') 'kb_manager vê chamado delegado a kb_colleague (membro do grupo)'
+    Check (Contains $mgr.titles 'KB-E2E delegado-membro') 'kb_manager vÃª chamado delegado a kb_colleague (membro do grupo)'
     $mem = Get-BoardTitles -Version $v -Login 'kb_member'
-    Check (-not (Contains $mem.titles 'KB-E2E delegado-membro')) 'kb_member (não gerente) NÃO vê chamado delegado ao colega'
+    Check (-not (Contains $mem.titles 'KB-E2E delegado-membro')) 'kb_member (nÃ£o gerente) NÃƒO vÃª chamado delegado ao colega'
 
-    Write-Host '-- Regra: filtro de solicitantes só revela requisitantes de chamados visíveis --'
-    # Cada chamado do cenário tem um solicitante distinto:
+    Write-Host '-- Regra: filtro de solicitantes sÃ³ revela requisitantes de chamados visÃ­veis --'
+    # Cada chamado do cenÃ¡rio tem um solicitante distinto:
     #   grupo-pai=kb_member, delegado-membro=kb_colleague, subgrupo=kb_child,
     #   fora=kb_noright, outro-grupo=kb_extuser, observador=kb_outsider,
     #   estrangeiro=kb_noright
-    # Os nomes são comparados por substring porque getUserName() monta o nome
-    # completo (primeiro nome + sobrenome) conforme a configuração da instância.
+    # Os nomes sÃ£o comparados por substring porque getUserName() monta o nome
+    # completo (primeiro nome + sobrenome) conforme a configuraÃ§Ã£o da instÃ¢ncia.
     $req = @{}
     foreach ($user in @('kb_manager', 'kb_member', 'kb_child', 'kb_outsider')) {
         $req[$user] = @((Get-FilterData -Version $v -Login $user).requesters)
@@ -237,16 +244,16 @@ foreach ($v in $Versions) {
     function ContainsLike($list, $item) {
         return @($list | Where-Object { $_ -like "*$item*" }).Count -gt 0
     }
-    Check (ContainsLike $req['kb_manager'] 'KB kb_member') 'kb_manager VÊ solicitante do chamado grupo-pai (visível)'
-    Check (ContainsLike $req['kb_manager'] 'KB kb_colleague') 'kb_manager VÊ solicitante do chamado delegado (visível como gerente)'
-    Check (ContainsLike $req['kb_manager'] 'KB kb_child') 'kb_manager VÊ solicitante do chamado do subgrupo (visível)'
-    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_extuser')) 'kb_manager NÃO vê solicitante do chamado de outro grupo (invisível)'
-    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_noright')) 'kb_manager NÃO vê solicitante dos chamados fora do seu grupo (invisível)'
-    Check (-not (ContainsLike $req['kb_member'] 'KB kb_colleague')) 'kb_member NÃO vê solicitante do chamado delegado a colega (invisível)'
-    Check (ContainsLike $req['kb_member'] 'KB kb_child') 'kb_member VÊ solicitante do chamado do subgrupo (visível)'
-    Check (-not (ContainsLike $req['kb_member'] 'KB kb_noright')) 'kb_member NÃO vê solicitante do chamado fora (invisível)'
-    Check (ContainsLike $req['kb_outsider'] 'KB kb_noright') 'kb_outsider VÊ o solicitante do próprio chamado'
-    Check ($req['kb_outsider'].Count -eq 1) "kb_outsider vê SOMENTE 1 solicitante (obtido: $($req['kb_outsider'].Count))"
+    Check (ContainsLike $req['kb_manager'] 'KB kb_member') 'kb_manager VÃŠ solicitante do chamado grupo-pai (visÃ­vel)'
+    Check (ContainsLike $req['kb_manager'] 'KB kb_colleague') 'kb_manager VÃŠ solicitante do chamado delegado (visÃ­vel como gerente)'
+    Check (ContainsLike $req['kb_manager'] 'KB kb_child') 'kb_manager VÃŠ solicitante do chamado do subgrupo (visÃ­vel)'
+    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_extuser')) 'kb_manager NÃƒO vÃª solicitante do chamado de outro grupo (invisÃ­vel)'
+    Check (-not (ContainsLike $req['kb_manager'] 'KB kb_noright')) 'kb_manager NÃƒO vÃª solicitante dos chamados fora do seu grupo (invisÃ­vel)'
+    Check (-not (ContainsLike $req['kb_member'] 'KB kb_colleague')) 'kb_member NÃƒO vÃª solicitante do chamado delegado a colega (invisÃ­vel)'
+    Check (ContainsLike $req['kb_member'] 'KB kb_child') 'kb_member VÃŠ solicitante do chamado do subgrupo (visÃ­vel)'
+    Check (-not (ContainsLike $req['kb_member'] 'KB kb_noright')) 'kb_member NÃƒO vÃª solicitante do chamado fora (invisÃ­vel)'
+    Check (ContainsLike $req['kb_outsider'] 'KB kb_noright') 'kb_outsider VÃŠ o solicitante do prÃ³prio chamado'
+    Check ($req['kb_outsider'].Count -eq 1) "kb_outsider vÃª SOMENTE 1 solicitante (obtido: $($req['kb_outsider'].Count))"
 }
 
 Write-Host "`n===== RESUMO ====="

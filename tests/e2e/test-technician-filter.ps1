@@ -1,27 +1,27 @@
-<#
+﻿<#
 .SYNOPSIS
-    Testes E2E do filtro de técnico do plugin Kanban.
+    Testes E2E do filtro de tÃ©cnico do plugin Kanban.
 
 .DESCRIPTION
-    Verifica que o filtro de técnico exibe apenas os técnicos pertencentes aos
-    grupos do usuário logado, em ordem alfabética pelo nome exibido.
+    Verifica que o filtro de tÃ©cnico exibe apenas os tÃ©cnicos pertencentes aos
+    grupos do usuÃ¡rio logado, em ordem alfabÃ©tica pelo nome exibido.
 
-    Cenário semeado:
+    CenÃ¡rio semeado:
       Grupo 9751 'KB Pai' (+ subgrupo 9752)  -> kb_ana, kb_bruno, kb_carlos, kb_colleague
       Grupo 9753 'KB Outro'                  -> kb_extuser, kb_zebra
       Sem grupo                              -> kb_outsider
 
     Expectativas:
-      - kb_member (grupo 9751) vê apenas Alves Ana, Braga Bruno, Costa Carlos e
-        kb_colleague (técnicos do grupo 9751), em ordem alfabética.
-      - kb_extuser (grupo 9753) vê apenas Zink Zeca (e ele mesmo) - nunca os do 9751.
-      - kb_outsider (sem grupo) não vê técnico algum.
+      - kb_member (grupo 9751) vÃª apenas Alves Ana, Braga Bruno, Costa Carlos e
+        kb_colleague (tÃ©cnicos do grupo 9751), em ordem alfabÃ©tica.
+      - kb_extuser (grupo 9753) vÃª apenas Zink Zeca (e ele mesmo) - nunca os do 9751.
+      - kb_outsider (sem grupo) nÃ£o vÃª tÃ©cnico algum.
 
 .PARAMETER Versions
-    Versões do GLPI a testar (10 e/ou 11).
+    VersÃµes do GLPI a testar (10 e/ou 11).
 
 .PARAMETER Cleanup
-    Apenas remove os usuários/tickets do cenário KB TECHFILTER.
+    Apenas remove os usuÃ¡rios/tickets do cenÃ¡rio KB TECHFILTER.
 #>
 param(
     [int[]]$Versions = @(10, 11),
@@ -34,17 +34,24 @@ param(
    # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
    $tmpDir = [System.IO.Path]::GetTempPath()
    
+   # curl.exe e o dispositivo nulo 'NUL' so existem no Windows. $IsWindows nao
+   # existe no Windows PowerShell 5.1, que tambem roda estes scripts, entao a
+   # deteccao usa $env:OS, presente nas duas plataformas.
+   $isWindows   = $env:OS -eq 'Windows_NT'
+   $curl        = if ($isWindows) { 'curl.exe' } else { 'curl' }
+   $nullDevice  = if ($isWindows) { 'NUL' } else { '/dev/null' }
+   
    $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
 $WebPassword  = $env:KANBAN_TEST_PASS
 if ([string]::IsNullOrWhiteSpace($WebPassword)) {
-    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explícita."
+    Write-Error "Defina KANBAN_TEST_PASS antes de rodar (ex.: `$env:KANBAN_TEST_PASS='<senha-de-teste>'). O seeder recusa criar contas sem senha explÃ­cita."
     exit 1
 }
 
 foreach ($v in $Versions) {
     if (-not $composeFiles.ContainsKey($v)) { continue }
-    # As funções abaixo leem $Version do escopo de quem chama.
+    # As funÃ§Ãµes abaixo leem $Version do escopo de quem chama.
     $Version = $v
 
 if ($Cleanup) {
@@ -111,7 +118,7 @@ function Get-FilterData {
     $jar = Join-Path $tmpDir "kb_tf_$Version.cookies.txt"
     Remove-Item $jar -ErrorAction SilentlyContinue
 
-    $loginPage = (& curl.exe -s -c $jar "$base/") -join "`n"
+    $loginPage = (& $curl -s -c $jar "$base/") -join "`n"
     $user = $null; $pass = $null; $action = '/'; $csrf = ''
     if ($loginPage -match '<input[^>]*type="text"[^>]*name="([^"]+)"') { $user = $Matches[1] }
     if ($loginPage -match '<input[^>]*type="password"[^>]*name="([^"]+)"') { $pass = $Matches[1] }
@@ -120,9 +127,9 @@ function Get-FilterData {
 
     $data = "$user=$Login&$pass=$WebPassword"
     if ($csrf) { $data += "&_glpi_csrf_token=$csrf" }
-    & curl.exe -s -o NUL -b $jar -c $jar -d $data "$base$action"
+    & $curl -s -o $nullDevice -b $jar -c $jar -d $data "$base$action"
 
-    $raw = (& curl.exe -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')) -join "`n"
+    $raw = (& $curl -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')) -join "`n"
     if (-not $raw) { return @() }
     $json = $raw | ConvertFrom-Json
     $techs = @()
