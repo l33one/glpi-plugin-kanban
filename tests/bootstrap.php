@@ -111,7 +111,7 @@ function kanban_plugin_create_test_tickets() {
 
     $ticket_ids = [];
     foreach ($tickets as $i => $data) {
-        $id = $DB->insert('glpi_tickets', [
+        $inserted = $DB->insert('glpi_tickets', [
             'name'              => $data[0],
             'content'           => 'Test ticket for Kanban plugin',
             'status'            => $data[1],
@@ -132,7 +132,15 @@ function kanban_plugin_create_test_tickets() {
             'begin_waiting_date'=> null,
             'time_to_resolve'   => $data[3],
         ]);
-        $ticket_ids[] = (int)$id;
+        // GLPI 10's insert() returns a boolean; the new id comes from insertId().
+        // Casting the return value yielded 1 for every ticket, so all the
+        // actors pointed at ticket 1 -- harmless on an empty database where the
+        // fixtures start at id 1, but a silently empty board everywhere else.
+        if (!$inserted) {
+            throw new RuntimeException('Could not create the test ticket: ' . $data[0]);
+        }
+        $id = (int)$DB->insertId();
+        $ticket_ids[] = $id;
 
         echo sprintf("Ticket %2d - [%s] '%s' (ID=%d)\n", $i + 1, getStatusName($data[1]), $data[0], $id);
     }
