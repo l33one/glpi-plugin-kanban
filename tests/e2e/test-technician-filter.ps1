@@ -34,12 +34,14 @@ param(
    # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
    $tmpDir = [System.IO.Path]::GetTempPath()
    
-   # curl.exe e o dispositivo nulo 'NUL' so existem no Windows. $IsWindows nao
-   # existe no Windows PowerShell 5.1, que tambem roda estes scripts, entao a
-   # deteccao usa $env:OS, presente nas duas plataformas.
-   $isWindows   = $env:OS -eq 'Windows_NT'
-   $curl        = if ($isWindows) { 'curl.exe' } else { 'curl' }
-   $nullDevice  = if ($isWindows) { 'NUL' } else { '/dev/null' }
+   # curl.exe e o dispositivo nulo 'NUL' so existem no Windows. A deteccao usa
+   # $env:OS, e nao a variavel automatica $IsWindows: ela e read-only no pwsh 7
+   # (que a CI usa) e nem existe no Windows PowerShell 5.1, que tambem roda
+   # estes scripts. Como nomes em PowerShell nao distinguem maiusculas, batizar
+   # uma variavel propria de $IsWindows quebra em uma das duas plataformas.
+   $onWindows   = $env:OS -eq 'Windows_NT'
+   $curl        = if ($onWindows) { 'curl.exe' } else { 'curl' }
+   $nullDevice  = if ($onWindows) { 'NUL' } else { '/dev/null' }
    
    $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
