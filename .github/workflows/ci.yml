@@ -43,19 +43,8 @@ jobs:
           done < <(find . -path ./.git -prune -o -name '*.js' -print0)
           exit $status
 
-      - name: Plugin descriptor is well-formed
-        run: xmllint --noout kanban.xml
-
-      - name: Descriptor version matches the code and the asset name
-        run: |
-          xml_version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
-          php_version=$(php -r "define('PLUGIN_KANBAN_VERSION',''); \$c=file_get_contents('setup.php'); preg_match(\"/PLUGIN_KANBAN_VERSION',\s*'([^']+)'/\", \$c, \$m); echo \$m[1] ?? '';")
-          test -n "$xml_version" || { echo "kanban.xml has no <num>"; exit 1; }
-          test "$xml_version" = "$php_version" \
-            || { echo "kanban.xml=$xml_version but setup.php=$php_version"; exit 1; }
-          grep -q "glpi-plugin-kanban-$xml_version.tar.bz2" kanban.xml \
-            || { echo "download_url does not reference $xml_version"; exit 1; }
-          echo "version $xml_version is consistent"
+      - name: Plugin descriptor is valid and matches the code
+        run: php tools/check-descriptor.php
 
       - name: Every runtime string is in the catalogues
         run: php tools/check-locales.php
@@ -70,14 +59,17 @@ jobs:
 
       - name: Build the release archive
         run: |
-          version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
-          # tools/build-release.sh requires the version to be the tip of the tree.
+          version=$(php tools/check-descriptor.php --version 2>/dev/null)
+          # This job validates the shape of HEAD's package, not the tag's, so the
+          # tag is retagged onto HEAD. In the throwaway checkout only.
           git tag -f "$version" HEAD
-          tools/build-release.sh "$version" dist
+          # Called through bash on purpose: the script needs bash, and this keeps
+          # the job from depending on the executable bit being set in git.
+          bash tools/build-release.sh "$version" dist
 
       - name: Archive ships only runtime files
         run: |
-          version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
+          version=$(php tools/check-descriptor.php --version 2>/dev/null)
           archive="dist/glpi-plugin-kanban-$version.tar.bz2"
           listing="$(tar -tf "$archive")"
           for expected in kanban/setup.php kanban/hook.php kanban/kanban.xml \

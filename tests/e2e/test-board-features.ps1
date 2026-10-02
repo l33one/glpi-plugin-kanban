@@ -29,10 +29,14 @@ param(
     [int[]]$Versions = @(10, 11)
 )
 
-$ErrorActionPreference = 'Stop'
-
-$composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
-$baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
+   $ErrorActionPreference = 'Stop'
+   
+   # $env:TEMP nao existe no PowerShell do Linux (a CI roda em ubuntu-latest),
+   # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
+   $tmpDir = [System.IO.Path]::GetTempPath()
+   
+   $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
+   $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
 
 $WebPassword = $env:KANBAN_TEST_PASS
 if ([string]::IsNullOrWhiteSpace($WebPassword)) {
@@ -81,7 +85,7 @@ function New-Session {
     param([int]$Version, [string]$Login, [string]$Password = $WebPassword)
     Start-Sleep -Milliseconds 900
     $base = $baseUrl[$Version]
-    $jar = Join-Path $env:TEMP ("kb_feat_$($Login)_$Version.cookies.txt")
+    $jar = Join-Path $tmpDir ("kb_feat_$($Login)_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
     $loginPage = (& curl.exe -s -c $jar "$base/") -join "`n"

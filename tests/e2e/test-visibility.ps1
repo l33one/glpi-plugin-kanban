@@ -30,10 +30,14 @@ param(
     [switch]$Cleanup
 )
 
-$ErrorActionPreference = 'Stop'
-
-$composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
-$ports        = @{ 10 = 8090; 11 = 8091 }
+   $ErrorActionPreference = 'Stop'
+   
+   # $env:TEMP nao existe no PowerShell do Linux (a CI roda em ubuntu-latest),
+   # e Join-Path com $null aborta o script. GetTempPath() funciona nos dois.
+   $tmpDir = [System.IO.Path]::GetTempPath()
+   
+   $composeFiles = @{ 10 = 'docker-compose.glpi10.yml'; 11 = 'docker-compose.glpi11.yml' }
+   $ports        = @{ 10 = 8090; 11 = 8091 }
 $baseUrl      = @{ 10 = 'http://localhost:8090'; 11 = 'http://localhost:8091' }
 
 # O seeder nunca cria contas com senha fixa: a senha vem do ambiente.
@@ -92,7 +96,7 @@ function Get-BoardTitles {
     # Espaça os logins para não disparar o throttle anti-brute-force do GLPI.
     Start-Sleep -Milliseconds 900
     $base = $baseUrl[$Version]
-    $jar = Join-Path $env:TEMP ("kb_e2e_$Version.cookies.txt")
+    $jar = Join-Path $tmpDir ("kb_e2e_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
     $loginPage = & curl.exe -s -c $jar "$base/"
@@ -139,7 +143,7 @@ function Get-FilterData {
     # Mesmo login do Get-BoardTitles, porém na ação que alimenta os dropdowns.
     Start-Sleep -Milliseconds 900
     $base = $baseUrl[$Version]
-    $jar = Join-Path $env:TEMP ("kb_e2e_fd_$Version.cookies.txt")
+    $jar = Join-Path $tmpDir ("kb_e2e_fd_$Version.cookies.txt")
     Remove-Item $jar -ErrorAction SilentlyContinue
 
     $loginPage = & curl.exe -s -c $jar "$base/"
