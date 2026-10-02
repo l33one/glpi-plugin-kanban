@@ -36,7 +36,7 @@
  *  --------------------------------------------------------------------------
  */
 
-define('PLUGIN_KANBAN_VERSION', '1.2.2');
+define('PLUGIN_KANBAN_VERSION', '1.3.0');
 
 /**
  * Init the hooks of the plugin
@@ -58,8 +58,9 @@ function plugin_init_kanban() {
       $PLUGIN_HOOKS['add_css']['kanban']      = ['public/css/kanban.css'];
       $PLUGIN_HOOKS['add_javascript']['kanban'] = ['public/js/kanban.js'];
 
-      // Declare that this plugin does not use custom database tables
-      $PLUGIN_HOOKS['use_tables']['kanban'] = [];
+      // Saved board views live in their own table (created by the install
+      // migration and declared here so GLPI installs/updates it).
+      $PLUGIN_HOOKS['use_tables']['kanban'] = ['glpi_kanban_filter_presets'];
 
       // Register the config page so the "Configure" button appears on the plugins list
       $PLUGIN_HOOKS['config_page']['kanban'] = 'front/config.php';
@@ -84,6 +85,14 @@ function plugin_init_kanban() {
          // Non-fatal: config page won't work but the board will still load.
          // Log it so a genuine class-loading failure is not silently hidden.
          error_log('[kanban] Plugin::registerClass(PluginKanbanConfig) failed: ' . $e->getMessage());
+      }
+
+      // Saved board views: CommonDBTM, so GLPI can show the object itself.
+      // A read failure must not hide the board, so it is logged, not thrown.
+      try {
+         Plugin::registerClass('PluginKanbanFilterPreset');
+      } catch (\Throwable $e) {
+         error_log('[kanban] Plugin::registerClass(PluginKanbanFilterPreset) failed: ' . $e->getMessage());
       }
    }
 }

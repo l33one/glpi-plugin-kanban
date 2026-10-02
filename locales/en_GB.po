@@ -7,6 +7,24 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "A description is required to move to Pending"
+msgstr "A description is required to move to Pending"
+
+msgid "A notification lets you put the ticket back in its previous column. Undoing only restores the status: a pending reason or a solution recorded by the move stays in the ticket history."
+msgstr "A notification lets you put the ticket back in its previous column. Undoing only restores the status: a pending reason or a solution recorded by the move stays in the ticket history."
+
+msgid "A pending reason is required to move to Pending"
+msgstr "A pending reason is required to move to Pending"
+
+msgid "A solution description is required to move to Solved"
+msgstr "A solution description is required to move to Solved"
+
+msgid "A solution model is required to move to Solved"
+msgstr "A solution model is required to move to Solved"
+
+msgid "A solution type is required to move to Solved"
+msgstr "A solution type is required to move to Solved"
+
 msgid "Advanced Filters"
 msgstr "Advanced Filters"
 
@@ -25,6 +43,12 @@ msgstr "All Technicians"
 msgid "All types"
 msgstr "All types"
 
+msgid "An error occurred while loading the board"
+msgstr "An error occurred while loading the board"
+
+msgid "An error occurred while processing the request"
+msgstr "An error occurred while processing the request"
+
 msgid "Assign to me"
 msgstr "Assign to me"
 
@@ -34,11 +58,29 @@ msgstr "Assigned"
 msgid "Assigned to me"
 msgstr "Assigned to me"
 
+msgid "Auto-refresh"
+msgstr "Auto-refresh"
+
+msgid "Automatic follow-up"
+msgstr "Automatic follow-up"
+
+msgid "Automatic resolution"
+msgstr "Automatic resolution"
+
+msgid "Available refresh intervals (minutes)"
+msgstr "Available refresh intervals (minutes)"
+
 msgid "Board indicators"
 msgstr "Board indicators"
 
+msgid "Cancel"
+msgstr "Cancel"
+
 msgid "Card fields"
 msgstr "Card fields"
+
+msgid "Cards loaded per column"
+msgstr "Cards loaded per column"
 
 msgid "Category"
 msgstr "Category"
@@ -52,14 +94,47 @@ msgstr "Clear"
 msgid "Close"
 msgstr "Close"
 
+msgid "Column order"
+msgstr "Column order"
+
 msgid "Columns"
 msgstr "Columns"
+
+msgid "Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed)."
+msgstr "Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed)."
+
+msgid "Comma-separated values in minutes (1-60). These intervals will be available in the auto-refresh dropdown on the Kanban board."
+msgstr "Comma-separated values in minutes (1-60). These intervals will be available in the auto-refresh dropdown on the Kanban board."
+
+msgid "Configuration saved successfully."
+msgstr "Configuration saved successfully."
 
 msgid "Could not assign ticket"
 msgstr "Could not assign ticket"
 
+msgid "Could not delete the view"
+msgstr "Could not delete the view"
+
+msgid "Could not rename the view"
+msgstr "Could not rename the view"
+
+msgid "Could not save configuration"
+msgstr "Could not save configuration"
+
+msgid "Could not save the view"
+msgstr "Could not save the view"
+
 msgid "Could not update priority"
 msgstr "Could not update priority"
+
+msgid "Could not update status"
+msgstr "Could not update status"
+
+msgid "counts based on the cards shown"
+msgstr "counts based on the cards shown"
+
+msgid "Counts based on the cards shown: SLA and assignee figures cover the loaded cards, while the total is the number of matching tickets."
+msgstr "Counts based on the cards shown: SLA and assignee figures cover the loaded cards, while the total is the number of matching tickets."
 
 msgid "Critical today"
 msgstr "Critical today"
@@ -69,6 +144,18 @@ msgstr "Date Open (Newest first)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Date Open (Oldest first)"
+
+msgid "Delete the view"
+msgstr "Delete the view"
+
+msgid "Describe why the ticket is pending..."
+msgstr "Describe why the ticket is pending..."
+
+msgid "Description"
+msgstr "Description"
+
+msgid "Enable moving cards between columns by drag & drop"
+msgstr "Enable moving cards between columns by drag & drop"
 
 msgid "Fields"
 msgstr "Fields"
@@ -82,14 +169,17 @@ msgstr "Hide column"
 msgid "High"
 msgstr "High"
 
+msgid "How many cards a column shows before a \"load more\" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden."
+msgstr "How many cards a column shows before a \"load more\" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden."
+
 msgid "in X d"
 msgstr "in X d"
 
-msgid "An error occurred while loading the board"
-msgstr "An error occurred while loading the board"
-
 msgid "Invalid request"
 msgstr "Invalid request"
+
+msgid "Invalid view name"
+msgstr "Invalid view name"
 
 msgid "just now"
 msgstr "just now"
@@ -103,8 +193,17 @@ msgstr "Kanban Board"
 msgid "Kanban board"
 msgstr "Kanban board"
 
+msgid "Kanban Configuration"
+msgstr "Kanban Configuration"
+
+msgid "Kanban Plugin Configuration"
+msgstr "Kanban Plugin Configuration"
+
 msgid "List follow-ups"
 msgstr "List follow-ups"
+
+msgid "Load more"
+msgstr "Load more"
 
 msgid "Loading..."
 msgstr "Loading..."
@@ -115,6 +214,21 @@ msgstr "Low"
 msgid "Major"
 msgstr "Major"
 
+msgid "Maximum tickets in progress per column"
+msgstr "Maximum tickets in progress per column"
+
+msgid "Move"
+msgstr "Move"
+
+msgid "Move to"
+msgstr "Move to"
+
+msgid "Move to Pending"
+msgstr "Move to Pending"
+
+msgid "Move to Solved"
+msgstr "Move to Solved"
+
 msgid "New Ticket"
 msgstr "New Ticket"
 
@@ -124,11 +238,35 @@ msgstr "No Category"
 msgid "No follow-ups for this ticket"
 msgstr "No follow-ups for this ticket"
 
+msgid "No Group"
+msgstr "No Group"
+
+msgid "No Requester"
+msgstr "No Requester"
+
+msgid "No saved view yet"
+msgstr "No saved view yet"
+
+msgid "No Technician"
+msgstr "No Technician"
+
 msgid "No tickets"
 msgstr "No tickets"
 
+msgid "No Type"
+msgstr "No Type"
+
+msgid "No type"
+msgstr "No type"
+
 msgid "Normal"
 msgstr "Normal"
+
+msgid "Off"
+msgstr "Off"
+
+msgid "Offer to undo a card move from the board"
+msgstr "Offer to undo a card move from the board"
 
 msgid "Open"
 msgstr "Open"
@@ -142,8 +280,17 @@ msgstr "Open in GLPI"
 msgid "Opening date"
 msgstr "Opening date"
 
+msgid "Order of the board columns (status ids)"
+msgstr "Order of the board columns (status ids)"
+
+msgid "Pending reason"
+msgstr "Pending reason"
+
 msgid "Permission denied"
 msgstr "Permission denied"
+
+msgid "Please give the view a name"
+msgstr "Please give the view a name"
 
 msgid "Priority"
 msgstr "Priority"
@@ -160,17 +307,67 @@ msgstr "Quick actions"
 msgid "Refresh"
 msgstr "Refresh"
 
+msgid "Refuse moves that would exceed the limit"
+msgstr "Refuse moves that would exceed the limit"
+
 msgid "Requester"
 msgstr "Requester"
 
+msgid "Require a pending reason when moving a card to Pending"
+msgstr "Require a pending reason when moving a card to Pending"
+
+msgid "Require a solution model when moving a card to Solved"
+msgstr "Require a solution model when moving a card to Solved"
+
+msgid "Require a solution type when moving a card to Solved"
+msgstr "Require a solution type when moving a card to Solved"
+
+msgid "Required fields on column changes"
+msgstr "Required fields on column changes"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Save this view"
+msgstr "Save this view"
+
 msgid "Saved"
 msgstr "Saved"
+
+msgid "Saved board view"
+msgid_plural "Saved board views"
+msgstr[0] "Saved board view"
+msgstr[1] "Saved board views"
+
+msgid "Saved views"
+msgstr "Saved views"
 
 msgid "Search by ticket number"
 msgstr "Search by ticket number"
 
 msgid "Search: number, title, category, description..."
 msgstr "Search: number, title, category, description..."
+
+msgid "Select a model..."
+msgstr "Select a model..."
+
+msgid "Select a pending reason before moving the card."
+msgstr "Select a pending reason before moving the card."
+
+msgid "Select a reason..."
+msgstr "Select a reason..."
+
+msgid "Select a solution model before moving the card."
+msgstr "Select a solution model before moving the card."
+
+msgid "Select a solution type before moving the card."
+msgstr "Select a solution type before moving the card."
+
+msgid "Set the status to pending"
+msgstr "Set the status to pending"
+
+msgid "Share with everyone"
+msgstr "Share with everyone"
 
 msgid "Show / hide columns"
 msgstr "Show / hide columns"
@@ -180,6 +377,9 @@ msgstr "Show all columns"
 
 msgid "Show column"
 msgstr "Show column"
+
+msgid "Showing %1$d of %2$d"
+msgstr "Showing %1$d of %2$d"
 
 msgid "Skip to board"
 msgstr "Skip to board"
@@ -199,17 +399,59 @@ msgstr "SLA overdue"
 msgid "SLA paused"
 msgstr "SLA paused"
 
+msgid "Solution"
+msgstr "Solution"
+
+msgid "Solution model"
+msgstr "Solution model"
+
+msgid "Solution type"
+msgstr "Solution type"
+
 msgid "Sort by"
 msgstr "Sort by"
 
 msgid "Sort via column dropdowns"
 msgstr "Sort via column dropdowns"
 
+msgid "Status unchanged; only the follow-up was recorded"
+msgstr "Status unchanged; only the follow-up was recorded"
+
+msgid "Status updated"
+msgstr "Status updated"
+
 msgid "Technician"
 msgstr "Technician"
 
+msgid "The move is blocked until a pending reason is selected."
+msgstr "The move is blocked until a pending reason is selected."
+
+msgid "The move is blocked until a solution model is selected."
+msgstr "The move is blocked until a solution model is selected."
+
+msgid "The move is blocked until a solution type is set (either chosen or filled in automatically from the model)."
+msgstr "The move is blocked until a solution type is set (either chosen or filled in automatically from the model)."
+
 msgid "The plugin directory must be named \"kanban\""
 msgstr "The plugin directory must be named \"kanban\""
+
+msgid "The status changed, but the pending reason was not recorded (no follow-up right)."
+msgstr "The status changed, but the pending reason was not recorded (no follow-up right)."
+
+msgid "The status changed, but the solution was not recorded (the ticket can no longer be solved)."
+msgstr "The status changed, but the solution was not recorded (the ticket can no longer be solved)."
+
+msgid "The ticket was moved back"
+msgstr "The ticket was moved back"
+
+msgid "The view name is too long"
+msgstr "The view name is too long"
+
+msgid "This column is limited to %d ticket(s) in progress. Move or close one before adding another."
+msgstr "This column is limited to %d ticket(s) in progress. Move or close one before adding another."
+
+msgid "This column reached its limit of %d tickets in progress"
+msgstr "This column reached its limit of %d tickets in progress"
 
 msgid "Ticket Details"
 msgstr "Ticket Details"
@@ -241,8 +483,20 @@ msgstr "Total tickets"
 msgid "Unassigned"
 msgstr "Unassigned"
 
+msgid "Undo"
+msgstr "Undo"
+
+msgid "Undo a card move"
+msgstr "Undo a card move"
+
+msgid "Undo the move"
+msgstr "Undo the move"
+
 msgid "Unknown"
 msgstr "Unknown"
+
+msgid "Unknown action"
+msgstr "Unknown action"
 
 msgid "Unknown status"
 msgstr "Unknown status"
@@ -253,14 +507,35 @@ msgstr "Very High"
 msgid "Very Low"
 msgstr "Very Low"
 
+msgid "View deleted"
+msgstr "View deleted"
+
+msgid "View name"
+msgstr "View name"
+
+msgid "View not found"
+msgstr "View not found"
+
+msgid "View saved"
+msgstr "View saved"
+
 msgid "View the kanban board"
 msgstr "View the kanban board"
 
 msgid "Visible tickets"
 msgstr "Visible tickets"
 
+msgid "When moving to Pending the reason is stored as a follow-up; when moving to Solved a solution (description, model or type) can be recorded."
+msgstr "When moving to Pending the reason is stored as a follow-up; when moving to Solved a solution (description, model or type) can be recorded."
+
+msgid "When off, a column over the limit is only highlighted on the board. When on, the move is rejected and the check also runs on the server."
+msgstr "When off, a column over the limit is only highlighted on the board. When on, the move is rejected and the check also runs on the server."
+
 msgid "Within SLA"
 msgstr "Within SLA"
+
+msgid "Work in progress limit"
+msgstr "Work in progress limit"
 
 msgid "X d ago"
 msgstr "X d ago"
@@ -273,3 +548,6 @@ msgstr "X min ago"
 
 msgid "Yesterday"
 msgstr "Yesterday"
+
+msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
+msgstr "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."

@@ -255,6 +255,64 @@
    transition: all 0.2s ease;
 }
 
+/* Truncated column: the count is the real total, the note says how many cards
+   are on screen. Without the note the badge would look like the whole column. */
+.card-count-badge.is-truncated {
+   border-style: dashed;
+   border-color: var(--status-color);
+}
+
+.kanban-column-note {
+   padding: 0.15rem 1rem 0.35rem;
+   font-size: 0.68rem;
+   color: var(--kanban-muted);
+   background: var(--status-color-faint);
+}
+
+/* Work in progress: current/limit beside the column count, and a clear
+   warning on the column that reached it. */
+.kanban-wip-badge {
+   font-size: 0.66rem;
+   padding: 0.2rem 0.4rem;
+}
+
+.kanban-column-wip-full {
+   outline: 2px solid var(--bs-danger, #dc3545);
+   outline-offset: -2px;
+}
+
+.kanban-column-wip-full .kanban-column-header {
+   background: linear-gradient(180deg, rgba(220, 53, 69, 0.12) 0%, transparent 100%) !important;
+}
+
+/* Load more: the column is longer than the display limit, and this is the way
+   to reach the rest. */
+.kanban-load-more {
+   font-size: 0.75rem;
+   padding: 0.4rem;
+   border-style: dashed;
+}
+
+/* Partial-metric hint on the indicators bar */
+.kanban-metric-hint {
+   color: var(--kanban-muted);
+   font-size: 0.9rem;
+   cursor: help;
+}
+
+/* Saved board views */
+.kanban-views-menu {
+   min-width: 240px;
+}
+
+.kanban-views-menu .dropdown-item {
+   cursor: pointer;
+}
+
+.kanban-views-delete:hover {
+   color: var(--bs-danger, #dc3545) !important;
+}
+
 /* Sort button */
 .kanban-sort-btn {
    font-size: 0.72rem;

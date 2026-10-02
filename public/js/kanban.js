@@ -24,6 +24,14 @@ let timerInterval = null;
 let hasVisibleTimers = false;
 let ticketsByStatus = {};
 let columnSorts = {};
+// Server-counted tickets per column and whether more cards exist behind
+// "Load more". Without them a column of 200+ tickets looked like a column of
+// exactly the display limit, and the board total changed when you filtered.
+let columnTotals = {};
+let columnHasMore = {};
+let savedViews = [];
+let wipState = {};
+let metricsPartial = false;
 const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', noTechnician: 'No Technician', noRequester: 'No Requester', noGroup: 'No Group', noType: 'No Type', noCategoryFilter: 'No Category', searchByNumber: 'Search by ticket number', searchPlaceholder: 'Search...', advancedFilters: 'Advanced Filters', assignedToMe: 'Assigned to me', clearFilters: 'Clear', quickActions: 'Quick actions', assignToMe: 'Assign to me', listFollowups: 'List follow-ups', changePriority: 'Change priority', followupsTitle: 'Follow-ups', noFollowups: 'No follow-ups', metricTotal: 'Visible tickets', metricSlaOnTime: 'Within SLA', metricSlaOverdue: 'SLA overdue', metricAssignedToMe: 'Assigned to me', metricUnassigned: 'Unassigned', saved: 'Saved', assigned: 'Assigned', justNow: 'just now', minutesAgo: 'X min ago', hoursAgo: 'X h ago', daysAgo: 'X d ago', today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', inDays: 'in X d', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused', statusUpdated: 'Status updated', moveTo: 'Move to', cancel: 'Cancel', confirmMove: 'Move', pendingReason: 'Pending reason', pendingReasonPlaceholder: 'Describe why the ticket is pending...', solutionDescription: 'Solution', solutionModel: 'Solution model', solutionType: 'Solution type', noSolutionModel: 'Select a model...', noSolutionType: 'No type', moveToPending: 'Move to Pending', moveToSolved: 'Move to Solved', followupSkipped: 'The status changed, but the pending reason was not recorded (no follow-up right).', solutionSkipped: 'The status changed, but the solution was not recorded (the ticket can no longer be solved).' };
 
 // Current logged-in user (id + name), injected server-side
@@ -31,6 +39,10 @@ const currentUser = window.KANBAN_CURRENT_USER || { id: 0, name: '' };
 
 // Drag & drop support, injected server-side from the plugin configuration.
 const enableDragDrop = window.KANBAN_ENABLE_DRAG_DROP ? true : false;
+const enableUndo = window.KANBAN_ENABLE_UNDO ? true : false;
+const cardsPerColumn = parseInt(window.KANBAN_CARDS_PER_COLUMN, 10) || 50;
+const wipLimit = parseInt(window.KANBAN_WIP_LIMIT, 10) || 0;
+const wipBlock = window.KANBAN_WIP_BLOCK ? true : false;
 const requirePendingReason = window.KANBAN_REQUIRE_PENDING_REASON ? true : false;
 const requireSolutionModel = window.KANBAN_REQUIRE_SOLUTION_MODEL ? true : false;
 const requireSolutionType = window.KANBAN_REQUIRE_SOLUTION_TYPE ? true : false;
@@ -69,7 +81,7 @@ let transitionAction = null; // { ticketId, toStatus }
 
 // Build full API URL using GLPI root
 const glpiRoot = window.KANBAN_GLPI_ROOT || '';
-const apiUrl = glpiRoot + '/plugins/kanban/front/kanban.php';
+const apiUrl = glpiRoot + '/plugins/kanban/front/api.php';
 
 const priorityColors = {
    1: '#ced4da',
@@ -212,13 +224,14 @@ function renderBoardColumns() {
                    </div>
                    <div class="d-flex align-items-center gap-1">
                       <span class="badge rounded-pill fs-7 card-count card-count-badge" id="count-${id}" aria-live="polite" aria-label="${escapeHtml(status.name)} tickets count">--</span>
+                      <span class="kanban-wip-badge-slot" id="wip-${id}-slot"></span>
                       <button type="button" class="btn btn-sm kanban-hide-btn" data-status-id="${id}" title="${escapeHtml(lang.hideColumn)}" aria-label="${escapeHtml(lang.hideColumn)}">
                          <i class="ti ti-eye-off"></i>
                       </button>
                       <div class="dropdown">
                          <button class="btn btn-sm kanban-sort-btn" type="button"
                                 id="sort-btn-${id}" data-bs-toggle="dropdown" aria-expanded="false"
-                                title="${lang.sortHint}" aria-label="${lang.sortHint}">
+                                title="${escapeHtml(lang.sortHint)}" aria-label="${escapeHtml(lang.sortHint)}">
                             <i class="ti ti-arrows-sort"></i>
                          </button>
                          <ul class="dropdown-menu dropdown-menu-end kanban-sort-menu" aria-labelledby="sort-btn-${id}">
@@ -226,10 +239,11 @@ function renderBoardColumns() {
                       </div>
                    </div>
                 </div>
+                <div class="kanban-column-note d-none" id="column-note-${id}"></div>
                 <div class="kanban-cards-dropzone d-flex flex-column gap-3" id="status-column-${id}" data-status="${id}">
                    <div class="empty-column-placeholder" id="empty-${id}">
                       <i class="ti ti-inbox"></i>
-                      <span>${escapeHtml(status.name)} - ${lang.noTickets}</span>
+                      <span>${escapeHtml(status.name)} - ${escapeHtml(lang.noTickets)}</span>
                    </div>
                 </div>
              </div>
@@ -307,13 +321,14 @@ function renderBoardColumns() {
              item.classList.add('active');
           }
 
-          // Re-sort the column
-          if (ticketsByStatus[statusId]) {
-             const zone = document.getElementById('status-column-' + statusId);
-             if (zone) {
-                const sorted = sortTicketsByValue(ticketsByStatus[statusId], value);
-                zone.innerHTML = '';
-                sorted.forEach(t => zone.appendChild(createCardElement(t)));
+// Re-sort the column
+           if (ticketsByStatus[statusId]) {
+              const zone = document.getElementById('status-column-' + statusId);
+              if (zone) {
+                 const sorted = sortTicketsByValue(ticketsByStatus[statusId], value);
+                 zone.innerHTML = '';
+                 sorted.forEach(t => zone.appendChild(createCardElement(t)));
+                 renderColumnFooter(statusId);
                              }
           }
         });
@@ -483,6 +498,7 @@ const checkbox = document.createElement('input');
           if (!zone) continue;
           if (tickets.length === 0) {
              showEmptyPlaceholder(zone, statusId);
+             renderColumnFooter(statusId);
              continue;
           }
            const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
@@ -490,6 +506,7 @@ const checkbox = document.createElement('input');
            sorted.forEach(ticket => {
               zone.appendChild(createCardElement(ticket));
            });
+           renderColumnFooter(statusId);
         }
         updateCountdowns();
         startTimerIfNeeded();
@@ -726,14 +743,14 @@ const checkbox = document.createElement('input');
       zone.innerHTML = `
          <div class="empty-column-placeholder">
             <i class="ti ti-inbox"></i>
-            <span>${escapeHtml(status.name || '')} - ${lang.noTickets}</span>
+            <span>${escapeHtml(status.name || '')} - ${escapeHtml(lang.noTickets)}</span>
          </div>
       `;
    }
 
-   /**
-    * Fetch and render tickets via AJAX
-    */
+/**
+     * Fetch and render tickets via AJAX
+     */
 function loadTickets() {
         if (!getFilterForm()) return;
 
@@ -750,6 +767,7 @@ function loadTickets() {
        const params = new URLSearchParams();
        params.append('action', 'get_tickets');
        params.append('_t', Date.now());
+       params.append('limit', cardsPerColumn);
 
        for (const [key, value] of formData.entries()) {
            if (value !== '' && value !== null && value !== undefined) {
@@ -765,6 +783,8 @@ function loadTickets() {
 .then(data => {
                const statusData = data.statuses || data;
                ticketsByStatus = statusData;
+               columnTotals = data.totals || {};
+               columnHasMore = data.has_more || {};
 
                // Refresh the "gestão à vista" indicators bar
                updateMetrics(data.metrics || {});
@@ -784,19 +804,15 @@ function loadTickets() {
               const statusesWithData = new Set();
               for (const [statusId, tickets] of Object.entries(statusData)) {
                  const zone = document.getElementById('status-column-' + statusId);
-                 const countBadge = document.getElementById('count-' + statusId);
+                 appendColumnTickets(statusId, tickets, false);
 
-                 if (countBadge) {
-                    countBadge.textContent = tickets.length;
-                 }
+                 // The badge shows the real number of matching tickets, not the
+                 // number of cards that fit on screen.
+                 setColumnCount(statusId, tickets.length);
 
                  if (zone && tickets.length > 0) {
                     statusesWithData.add(statusId);
-                    const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
-                    sorted.forEach(ticket => {
-                       zone.appendChild(createCardElement(ticket));
-                    });
-                    totalTickets += tickets.length;
+                    totalTickets += columnTotalFor(statusId);
                  }
               }
 
@@ -806,6 +822,7 @@ function loadTickets() {
                  if (!statusesWithData.has(id)) {
                     const zone = document.getElementById('status-column-' + id);
                     if (zone) showEmptyPlaceholder(zone, id);
+                    setColumnCount(id, columnTotalFor(id));
                  }
               });
 
@@ -825,6 +842,7 @@ function loadTickets() {
 
                           updateCountdowns();
              startTimerIfNeeded();
+             refreshWipHighlight();
              hideLoading();
           })
           .catch(err => {
@@ -832,6 +850,189 @@ function loadTickets() {
              showToast('Failed to load tickets. Please try again.', 'danger');
              hideLoading();
           });
+    }
+
+    /**
+     * Tickets matching a column: the server total when known, so the count is
+     * the number of matching tickets rather than the number of loaded cards.
+     */
+    function columnTotalFor(statusId) {
+       const total = parseInt(columnTotals[statusId], 10);
+       if (!isNaN(total)) return total;
+
+       return (ticketsByStatus[statusId] || []).length;
+    }
+
+    /**
+     * Paint a column header: the real count, plus "showing N of M" when cards
+     * are still hidden behind "Load more".
+     */
+    function setColumnCount(statusId, loadedCount) {
+       const countBadge = document.getElementById('count-' + statusId);
+       if (!countBadge) return;
+
+       const total = columnTotalFor(statusId);
+       const truncated = total > loadedCount;
+       countBadge.textContent = total;
+       countBadge.classList.toggle('is-truncated', truncated);
+       if (truncated) {
+          countBadge.title = formatShowingOf(loadedCount, total);
+       } else {
+          countBadge.removeAttribute('title');
+       }
+
+       const note = document.getElementById('column-note-' + statusId);
+       if (note) {
+          note.textContent = truncated ? formatShowingOf(loadedCount, total) : '';
+          note.classList.toggle('d-none', !truncated);
+       }
+    }
+
+    function formatShowingOf(loaded, total) {
+       const template = lang.showingOf || 'Showing %1$d of %2$d';
+       return template
+          .replace('%1$d', loaded)
+          .replace('%2$d', total);
+    }
+
+    /**
+     * Append cards to a column, then re-render its footer (load-more button).
+     */
+    function appendColumnTickets(statusId, tickets, append) {
+       const zone = document.getElementById('status-column-' + statusId);
+       if (!zone) return;
+
+       if (!append) {
+          zone.innerHTML = '';
+          ticketsByStatus[statusId] = [];
+       }
+
+       const sorted = sortTicketsByValue(tickets, columnSorts[statusId] || 'date_DESC');
+       ticketsByStatus[statusId] = (ticketsByStatus[statusId] || []).concat(sorted);
+       sorted.forEach(ticket => zone.appendChild(createCardElement(ticket)));
+
+       renderColumnFooter(statusId);
+    }
+
+    /**
+     * Column footer: the "Load more" control when the server says there are
+     * more cards. Everything the board truncates is reachable, never hidden.
+     */
+    function renderColumnFooter(statusId) {
+       const zone = document.getElementById('status-column-' + statusId);
+       if (!zone) return;
+
+       const existing = document.getElementById('loadmore-' + statusId);
+       if (existing) existing.remove();
+
+       if (!columnHasMore[statusId]) return;
+
+       const btn = document.createElement('button');
+       btn.type = 'button';
+       btn.id = 'loadmore-' + statusId;
+       btn.className = 'btn btn-sm btn-outline-secondary kanban-load-more w-100';
+       btn.innerHTML = '<i class="ti ti-refresh me-1"></i>' + escapeHtml(lang.loadMore || 'Load more');
+       btn.addEventListener('click', () => loadMoreTickets(statusId, btn));
+       zone.appendChild(btn);
+    }
+
+    /**
+     * Fetch the next page of one column and append it, keeping the filters
+     * currently applied to the board.
+     */
+    function loadMoreTickets(statusId, btn) {
+       if (!getFilterForm()) return;
+
+       const loaded = (ticketsByStatus[statusId] || []).length;
+       if (btn) btn.disabled = true;
+
+       const formData = new FormData(getFilterForm());
+       const params = new URLSearchParams();
+       params.append('action', 'get_tickets');
+       params.append('status', statusId);
+       params.append('offset', loaded);
+       params.append('limit', cardsPerColumn);
+       params.append('_t', Date.now());
+
+       for (const [key, value] of formData.entries()) {
+          if (value !== '' && value !== null && value !== undefined) {
+             params.append(key, value);
+          }
+       }
+
+       fetch(apiUrl + '?' + params.toString())
+          .then(response => {
+             if (!response.ok) throw new Error('HTTP ' + response.status);
+             return response.json();
+          })
+          .then(data => {
+             const incoming = (data.statuses || {})[statusId] || [];
+             columnHasMore[statusId] = (data.has_more || {})[statusId] === true;
+             appendColumnTickets(statusId, incoming, true);
+             setColumnCount(statusId, loaded + incoming.length);
+
+             const totalBadge = document.getElementById('kanban-total');
+             if (totalBadge && hiddenColumns.size === 0) {
+                totalBadge.textContent = Object.keys(columnTotals).reduce(
+                   (sum, id) => sum + columnTotalFor(id), 0);
+             }
+             updateCountdowns();
+             startTimerIfNeeded();
+          })
+          .catch(() => {
+             if (btn) btn.disabled = false;
+             showToast('Failed to load more tickets. Please try again.', 'danger');
+          });
+    }
+
+    /**
+     * Ask the server how full each column is and highlight the ones at their
+     * work-in-progress limit. The count ignores the board filters: a limit on
+     * the queue is not a limit on the current view.
+     */
+    function refreshWipHighlight() {
+       if (wipLimit <= 0) {
+          wipState = {};
+          applyWipClasses();
+          return;
+       }
+
+       fetch(apiUrl + '?action=get_wip_state&_t=' + Date.now())
+          .then(response => response.json())
+          .then(data => {
+             wipState = data.wip || {};
+             applyWipClasses();
+          })
+          .catch(() => {
+             wipState = {};
+             applyWipClasses();
+          });
+    }
+
+    function applyWipClasses() {
+       document.querySelectorAll('.kanban-column').forEach(col => {
+          const id = col.getAttribute('data-status-id');
+          const state = wipState[id];
+          const full = !!(state && state.full);
+          col.classList.toggle('kanban-column-wip-full', full);
+
+          const slot = document.getElementById('wip-' + id + '-slot');
+          if (!slot) return;
+
+          if (!state || !state.limit) {
+             slot.innerHTML = '';
+             return;
+          }
+
+          const badge = document.createElement('span');
+          badge.className = 'badge rounded-pill kanban-wip-badge '
+             + (full ? 'text-bg-danger' : 'text-bg-secondary');
+          badge.textContent = state.current + '/' + state.limit;
+          badge.title = (lang.wipReached || 'Limit of %d tickets in progress')
+             .replace('%d', state.limit);
+          slot.innerHTML = '';
+          slot.appendChild(badge);
+       });
     }
 
 /**
@@ -897,6 +1098,20 @@ function loadTickets() {
        set('metric-assigned', metrics.assigned_to_me != null ? metrics.assigned_to_me : 0);
         set('metric-unassigned', metrics.unassigned != null ? metrics.unassigned : 0,
            (metrics.unassigned || 0) > 0 ? 'text-warning' : null);
+
+        // The total comes from the server counts, but SLA/assignee figures are
+        // computed from the cards that were loaded. When the board is
+        // truncated, say so instead of letting a partial figure look exact.
+        const partialHint = document.getElementById('metric-partial-hint');
+        if (partialHint) {
+           if (metrics.partial !== undefined) {
+              metricsPartial = metrics.partial === true || metrics.partial === 1 || metrics.partial === '1';
+           }
+           partialHint.classList.toggle('d-none', !metricsPartial);
+           if (metricsPartial) {
+              partialHint.title = lang.metricsPartial || 'counts based on the cards shown';
+           }
+        }
     }
 
     /**
@@ -944,6 +1159,7 @@ function loadTickets() {
           sla_overdue: slaOverdue,
           assigned_to_me: assignedToMe,
           unassigned: unassigned,
+          partial: metricsPartial,
        });
 
        const totalBadge = document.getElementById('kanban-total');
@@ -1143,8 +1359,8 @@ function createCardElement(ticket) {
                    ${topActions.join('')}
                    ${buildQuickActionsHtml(ticket)}
                    <a href="${ticketUrl}" target="_blank" class="card-open-link"
-                      onclick="event.stopPropagation()" title="${lang.open} #${ticket.id}"
-                      aria-label="${lang.open} #${ticket.id}">
+onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
+                       aria-label="${escapeHtml(lang.open)} #${ticket.id}">
                       <i class="ti ti-external-link"></i>
                    </a>
                 </div>
@@ -1178,10 +1394,13 @@ function createCardElement(ticket) {
     }
 
 
-   /**
+/**
     * Show a temporary toast notification at the top-right corner.
+    *
+    * An optional action turns the toast into an offer ("Undo") and keeps it on
+    * screen longer: 3.5s is not enough time to decide you want the move back.
     */
-   function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', action = null) {
       let container = document.getElementById('kanban-toast-container');
       if (!container) {
          container = document.createElement('div');
@@ -1194,17 +1413,36 @@ function createCardElement(ticket) {
       toast.className = 'alert alert-' + type + ' alert-dismissible shadow d-flex align-items-center gap-2 py-2 px-3';
       toast.style.cssText = 'min-width:260px;max-width:350px;animation:fadeIn 0.2s ease;';
       const iconMap = { success: 'circle-check', danger: 'alert-circle', warning: 'alert-triangle', info: 'info-circle' };
+      // The message often comes from the server (a rejected move quotes the
+      // reason) and can carry text a user typed, so it is set as text, not HTML.
       toast.innerHTML = `
          <i class="ti ti-${iconMap[type] || 'info-circle'}"></i>
-         <span>${message}</span>
+         <span></span>
          <button type="button" class="btn-close ms-auto" style="font-size:0.7rem;" onclick="this.closest('.alert').remove()"></button>
       `;
+      const msgEl = toast.querySelector('span');
+      if (msgEl) msgEl.textContent = message;
+
+      if (action && action.label && typeof action.onClick === 'function') {
+         const btn = document.createElement('button');
+         btn.type = 'button';
+         btn.className = 'btn btn-sm btn-link text-decoration-none px-1';
+         btn.textContent = action.label;
+         btn.addEventListener('click', () => {
+            if (toast.parentNode) toast.remove();
+            action.onClick();
+         });
+         const closeBtn = toast.querySelector('.btn-close');
+         if (closeBtn) toast.insertBefore(btn, closeBtn);
+         else toast.appendChild(btn);
+      }
+
       container.appendChild(toast);
 
-      // Auto-dismiss after 3.5 seconds
+      // Auto-dismiss; an actionable toast stays long enough to be useful.
       setTimeout(() => {
          if (toast.parentNode) toast.remove();
-      }, 3500);
+      }, action ? 12000 : 3500);
    }
 
    // =============================================
@@ -1252,7 +1490,22 @@ function createCardElement(ticket) {
       const toStatus = String(zone.getAttribute('data-status') || '');
       const fromStatus = String(inFlight.fromStatus || '');
       if (!inFlight.ticketId || !toStatus || fromStatus === toStatus) return;
+
+      // Client-side guard for an instant answer. The server checks the same
+      // limit again on update_ticket_status, so a stale board cannot be used to
+      // get past it.
+      const wip = wipState[toStatus];
+      if (wipBlock && wip && wip.full) {
+         showToast(formatWipReached(wip.limit), 'warning');
+         return;
+      }
+
       openStatusTransitionModal(inFlight.ticketId, fromStatus, toStatus);
+   }
+
+   function formatWipReached(limit) {
+      return (lang.wipReached || 'This column reached its limit of %d tickets in progress')
+         .replace('%d', limit);
    }
 
    function onDragEnd() {
@@ -1389,7 +1642,7 @@ function createCardElement(ticket) {
 
       // Directly transition unless the destination needs the supporting screen.
       if (toStatus !== '4' && toStatus !== '5') {
-         performStatusChange(ticketId, toStatus, null);
+         performStatusChange(ticketId, toStatus, null, fromStatus);
          return;
       }
 
@@ -1400,7 +1653,7 @@ function createCardElement(ticket) {
       if (titleEl) titleEl.textContent = (lang.moveTo || 'Move to') + ' ' + (statusName || toStatus) + '  #' + ticketId;
       if (bodyEl) bodyEl.innerHTML = buildTransitionBody(toStatus);
 
-      transitionAction = { ticketId: String(ticketId), toStatus: String(toStatus) };
+      transitionAction = { ticketId: String(ticketId), fromStatus: String(fromStatus), toStatus: String(toStatus) };
 
       // Selecting a model pre-fills the solution description.
       const modelSel = document.getElementById('kanban-move-template');
@@ -1516,7 +1769,7 @@ function createCardElement(ticket) {
          if (modal) modal.hide();
       }
 
-      performStatusChange(action.ticketId, action.toStatus, extra);
+      performStatusChange(action.ticketId, action.toStatus, extra, action.fromStatus);
    }
 
    /**
@@ -1543,10 +1796,14 @@ function createCardElement(ticket) {
       if (bodyEl) bodyEl.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
    }
 
-   /**
+/**
     * POST a status change to the Kanban API and reload the board.
+    *
+    * fromStatus is kept so the confirmation can offer an undo: putting a ticket
+    * back is the operation people miss most after a drag, and it has to happen
+    * before they start editing the wrong column.
     */
-   function performStatusChange(ticketId, toStatus, extra) {
+    function performStatusChange(ticketId, toStatus, extra, fromStatus) {
       const body = new URLSearchParams();
       body.append('action', 'update_ticket_status');
       body.append('ticket_id', ticketId);
@@ -1571,7 +1828,14 @@ function createCardElement(ticket) {
             }
             const result = res && res.result ? res.result : res;
             if (result && result.success) {
-               showToast((lang.statusUpdated || 'Status updated') + ' #' + ticketId, 'success');
+               const moved = !result.status_unchanged;
+               const undoAction = (enableUndo && moved && fromStatus && fromStatus !== toStatus)
+                  ? {
+                     label: lang.undo || 'Undo',
+                     onClick: () => undoStatusChange(ticketId, fromStatus),
+                  }
+                  : null;
+               showToast((lang.statusUpdated || 'Status updated') + ' #' + ticketId, 'success', undoAction);
                if (result.status_unchanged) showToast(lang.statusUnchanged || 'Status unchanged; only the follow-up was recorded', 'info');
                if (result.followup_skipped) showToast(lang.followupSkipped || 'Pending reason not recorded.', 'warning');
                if (result.solution_skipped) showToast(lang.solutionSkipped || 'Solution not recorded.', 'warning');
@@ -1582,7 +1846,39 @@ function createCardElement(ticket) {
             }
          })
          .catch(() => showToast('Error updating status', 'danger'));
-   }
+    }
+
+    /**
+     * Put a ticket back into the column it came from.
+     *
+     * Undoing restores the status only: a pending reason or a solution recorded
+     * by the move stays in the ticket history, because deleting it silently
+     * would lose data the user still wants.
+     */
+    function undoStatusChange(ticketId, fromStatus) {
+      const body = new URLSearchParams();
+      body.append('action', 'undo_ticket_status');
+      body.append('ticket_id', ticketId);
+      body.append('from_status', fromStatus);
+      if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
+
+      fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+         .then(r => r.json())
+         .then(res => {
+            if (res && res.csrf_token) {
+               _csrfToken = res.csrf_token;
+            }
+            const result = res && res.result ? res.result : res;
+            if (result && result.success) {
+               showToast(lang.moveUndone || 'The ticket was moved back', 'success');
+               closeCardMenus();
+               loadTickets();
+            } else {
+               showToast((result && result.error) || 'Error', 'danger');
+            }
+         })
+         .catch(() => showToast('Error undoing the move', 'danger'));
+    }
 
    // =============================================
    // Event Listeners with Debounce
@@ -1988,6 +2284,253 @@ function applyNativeTheme() {
    wrapper.classList.toggle('kanban-theme-dark', dark === '1');
 }
 
+// =============================================
+   // Saved board views
+   // =============================================
+
+   /**
+    * Read the filters currently applied, in the same shape the server stores.
+    */
+   function currentFilterValues() {
+      const get = id => {
+         const el = document.getElementById(id);
+         return el ? el.value : '';
+      };
+
+      return {
+         search: get('filter-search') || '',
+         technician: get('filter-technician') || '',
+         requester: get('filter-requester') || '',
+         group: get('filter-group') || '',
+         type: get('filter-type') || '',
+         category: get('filter-category') || '',
+      };
+   }
+
+   /**
+    * Put a preset's filters back on the form and reload the board.
+    *
+    * Only the filters the preset carries are touched, and an absent filter is
+    * cleared: applying a saved view has to produce the same board every time,
+    * which a leftover filter from the previous view would break.
+    */
+   function applySavedView(preset) {
+      const filters = (preset && preset.filters) || {};
+      const set = (id, value) => {
+         const el = document.getElementById(id);
+         if (!el) return;
+         el.value = (value === null || value === undefined) ? '' : String(value);
+         if (window.$ && window.$.fn && typeof window.$.fn.select2 === 'function') {
+            try { window.$(el).trigger('change'); } catch (e) { /* select2 refresh */ }
+         }
+      };
+
+      set('filter-search', filters.search || '');
+      set('filter-technician', filters.technician);
+      set('filter-requester', filters.requester);
+      set('filter-group', filters.group);
+      set('filter-type', filters.type);
+      set('filter-category', filters.category);
+
+      const label = document.getElementById('kanban-views-label');
+      if (label) label.textContent = preset.name || (lang.savedViews || 'Saved views');
+
+      updateAdvancedFilterCount();
+      bindGroupTechnicianFilter();
+      loadTickets();
+   }
+
+   function loadSavedViews() {
+      fetch(apiUrl + '?action=get_presets&_t=' + Date.now())
+         .then(response => response.json())
+         .then(data => {
+            savedViews = data.presets || [];
+            renderSavedViewsMenu();
+         })
+         .catch(() => {
+            // A failing preset list must not take the board down.
+            savedViews = [];
+            renderSavedViewsMenu();
+         });
+   }
+
+   function renderSavedViewsMenu() {
+      const menu = document.querySelector('.kanban-views-menu');
+      if (!menu) return;
+
+      menu.innerHTML = '';
+
+      if (savedViews.length === 0) {
+         const li = document.createElement('li');
+         li.className = 'dropdown-item-text text-muted small';
+         li.textContent = lang.noSavedViews || 'No saved view yet';
+         menu.appendChild(li);
+         return;
+      }
+
+      savedViews.forEach(preset => {
+         const li = document.createElement('li');
+         const row = document.createElement('div');
+         row.className = 'd-flex align-items-center';
+
+         const apply = document.createElement('button');
+         apply.type = 'button';
+         apply.className = 'dropdown-item flex-grow-1 text-truncate kanban-views-apply';
+         apply.textContent = preset.name;
+         apply.title = preset.is_private
+            ? preset.name
+            : (preset.name + ' — ' + (preset.user_name || ''));
+         apply.addEventListener('click', () => applySavedView(preset));
+         row.appendChild(apply);
+
+         if (preset.can_write) {
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'btn btn-sm btn-link text-danger px-1 kanban-views-delete';
+            del.title = lang.deleteView || 'Delete the view';
+            del.innerHTML = '<i class="ti ti-trash"></i>';
+            del.addEventListener('click', () => deleteSavedView(preset));
+            row.appendChild(del);
+         }
+
+         li.appendChild(row);
+         menu.appendChild(li);
+      });
+   }
+
+   function postPresetAction(action, fields) {
+      const body = new URLSearchParams();
+      body.append('action', action);
+      for (const [key, value] of Object.entries(fields || {})) {
+         if (value === null || value === undefined) continue;
+         body.append(key, value);
+      }
+      if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
+
+      return fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+         .then(r => r.json())
+         .then(res => {
+            if (res && res.csrf_token) _csrfToken = res.csrf_token;
+            return res && res.result ? res.result : res;
+         });
+   }
+
+   /**
+    * Ask for a name and store the current filters. Uses a modal instead of
+    * window.prompt(), which is blocked in some embedded contexts and cannot
+    * offer the "share with everyone" choice.
+    */
+   function openSaveViewDialog() {
+      let modalEl = document.getElementById('kanbanSaveViewModal');
+      if (!modalEl) {
+         const wrapper = document.createElement('div');
+         wrapper.innerHTML = `
+            <div class="modal fade" id="kanbanSaveViewModal" tabindex="-1" aria-hidden="true">
+               <div class="modal-dialog">
+                  <div class="modal-content">
+                     <div class="modal-header">
+                        <h5 class="modal-title">${escapeHtml(lang.saveView || 'Save this view')}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                     </div>
+                     <div class="modal-body">
+                        <div id="kanban-save-view-msg" class="d-none alert alert-danger py-2"></div>
+                        <label for="kanban-save-view-name" class="form-label fw-semibold">${escapeHtml(lang.viewName || 'View name')}</label>
+                        <input type="text" class="form-control" id="kanban-save-view-name" maxlength="100" autocomplete="off">
+                        <div class="form-check form-switch mt-3">
+                           <input class="form-check-input" type="checkbox" role="switch" id="kanban-save-view-shared">
+                           <label class="form-check-label fw-semibold" for="kanban-save-view-shared">${escapeHtml(lang.shareView || 'Share with everyone')}</label>
+                        </div>
+                     </div>
+                     <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${escapeHtml(lang.cancel || 'Cancel')}</button>
+                        <button type="button" class="btn btn-primary" id="kanban-save-view-confirm">${escapeHtml(lang.save || 'Save')}</button>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         `;
+         modalEl = wrapper.firstElementChild;
+         document.body.appendChild(modalEl);
+      }
+
+      const nameEl = document.getElementById('kanban-save-view-name');
+      const sharedEl = document.getElementById('kanban-save-view-shared');
+      const msgEl = document.getElementById('kanban-save-view-msg');
+      if (nameEl) nameEl.value = '';
+      if (sharedEl) sharedEl.checked = false;
+      if (msgEl) { msgEl.textContent = ''; msgEl.classList.add('d-none'); }
+
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.show();
+
+      const confirmBtn = document.getElementById('kanban-save-view-confirm');
+      const onConfirm = async () => {
+         const name = nameEl ? nameEl.value.trim() : '';
+         if (name === '') {
+            if (msgEl) {
+               msgEl.textContent = lang.viewName || 'View name';
+               msgEl.classList.remove('d-none');
+            }
+            if (nameEl) nameEl.classList.add('is-invalid');
+            return;
+         }
+         if (nameEl) nameEl.classList.remove('is-invalid');
+         confirmBtn.disabled = true;
+
+         const filters = currentFilterValues();
+         filters.assigned_to_me = filters.technician === String(currentUser.id) ? 1 : 0;
+
+         try {
+            const result = await postPresetAction('save_preset', {
+               name: name,
+               is_private: sharedEl && sharedEl.checked ? '0' : '1',
+               ...filters,
+            });
+            if (result && result.success) {
+               modal.hide();
+               showToast(lang.viewSaved || 'View saved', 'success');
+               loadSavedViews();
+            } else {
+               if (msgEl) {
+                  msgEl.textContent = (result && result.error) || 'Error';
+                  msgEl.classList.remove('d-none');
+               }
+            }
+         } catch (err) {
+            if (msgEl) {
+               msgEl.textContent = 'Error';
+               msgEl.classList.remove('d-none');
+            }
+         } finally {
+            confirmBtn.disabled = false;
+         }
+      };
+
+      // Replace the handler: this modal is reused for every save.
+      confirmBtn.onclick = onConfirm;
+      if (nameEl) {
+         nameEl.onkeydown = e => {
+            if (e.key === 'Enter') {
+               e.preventDefault();
+               onConfirm();
+            }
+         };
+      }
+   }
+
+   function deleteSavedView(preset) {
+      postPresetAction('delete_preset', { id: preset.id })
+         .then(result => {
+            if (result && result.success) {
+               showToast(lang.viewDeleted || 'View deleted', 'success');
+               loadSavedViews();
+            } else {
+               showToast((result && result.error) || 'Error', 'danger');
+            }
+         })
+         .catch(() => showToast('Error deleting the view', 'danger'));
+   }
+
 document.addEventListener('DOMContentLoaded', function () {
    applyNativeTheme();
    renderBoardColumns();
@@ -1996,7 +2539,14 @@ document.addEventListener('DOMContentLoaded', function () {
    applyColumnVisibility();
    bindGroupTechnicianFilter();
    updateAdvancedFilterCount();
+   loadSavedViews();
    loadTickets();
+
+   // "Save this view" opens the name dialog; the dropdown lists the views.
+   const saveViewBtn = document.getElementById('kanban-save-view-btn');
+   if (saveViewBtn) {
+      saveViewBtn.addEventListener('click', openSaveViewDialog);
+   }
 
    // Columns visibility menu (may live outside the board container).
    // The checkboxes handle their own toggling via the "change" event.

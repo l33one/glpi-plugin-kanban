@@ -7,6 +7,24 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "A description is required to move to Pending"
+msgstr "É necessária uma descrição para mover para Pendente"
+
+msgid "A notification lets you put the ticket back in its previous column. Undoing only restores the status: a pending reason or a solution recorded by the move stays in the ticket history."
+msgstr "Uma notificação permite devolver o chamado à coluna anterior. Desfazer restaura apenas o status: o motivo de pendência ou a solução registrada no movimento continua no histórico do chamado."
+
+msgid "A pending reason is required to move to Pending"
+msgstr "É necessário informar um motivo de pendência para mover para Pendente"
+
+msgid "A solution description is required to move to Solved"
+msgstr "É necessária uma descrição da solução para mover para Resolvido"
+
+msgid "A solution model is required to move to Solved"
+msgstr "É necessário informar um modelo de solução para mover para Resolvido"
+
+msgid "A solution type is required to move to Solved"
+msgstr "É necessário informar um tipo de solução para mover para Resolvido"
+
 msgid "Advanced Filters"
 msgstr "Filtros avançados"
 
@@ -25,6 +43,12 @@ msgstr "Todos os técnicos"
 msgid "All types"
 msgstr "Todos os tipos"
 
+msgid "An error occurred while loading the board"
+msgstr "Ocorreu um erro ao carregar o quadro"
+
+msgid "An error occurred while processing the request"
+msgstr "Ocorreu um erro ao processar a solicitação"
+
 msgid "Assign to me"
 msgstr "Atribuir a mim"
 
@@ -34,11 +58,29 @@ msgstr "Atribuído"
 msgid "Assigned to me"
 msgstr "Atribuídos a mim"
 
+msgid "Auto-refresh"
+msgstr "Atualização automática"
+
+msgid "Automatic follow-up"
+msgstr "Follow-up automático"
+
+msgid "Automatic resolution"
+msgstr "Resolução automática"
+
+msgid "Available refresh intervals (minutes)"
+msgstr "Intervalos de atualização disponíveis (minutos)"
+
 msgid "Board indicators"
 msgstr "Indicadores do quadro"
 
+msgid "Cancel"
+msgstr "Cancelar"
+
 msgid "Card fields"
 msgstr "Campos do cartão"
+
+msgid "Cards loaded per column"
+msgstr "Cartões carregados por coluna"
 
 msgid "Category"
 msgstr "Categoria"
@@ -52,14 +94,47 @@ msgstr "Limpar"
 msgid "Close"
 msgstr "Fechar"
 
+msgid "Column order"
+msgstr "Ordem das colunas"
+
 msgid "Columns"
 msgstr "Colunas"
+
+msgid "Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed)."
+msgstr "IDs de status do chamado separados por vírgula, na ordem em que as colunas devem aparecer. Deixe vazio para seguir a ordem nativa dos status. Normalmente: 1 (Novo), 2 (Atribuído), 3 (Planejado), 4 (Pendente), 5 (Resolvido), 6 (Fechado)."
+
+msgid "Comma-separated values in minutes (1-60). These intervals will be available in the auto-refresh dropdown on the Kanban board."
+msgstr "Valores em minutos separados por vírgula (1-60). Esses intervalos estarão disponíveis na lista de atualização automática do quadro Kanban."
+
+msgid "Configuration saved successfully."
+msgstr "Configuração salva com sucesso."
 
 msgid "Could not assign ticket"
 msgstr "Não foi possível atribuir o chamado"
 
+msgid "Could not delete the view"
+msgstr "Não foi possível excluir a visão"
+
+msgid "Could not rename the view"
+msgstr "Não foi possível renomear a visão"
+
+msgid "Could not save configuration"
+msgstr "Não foi possível salvar a configuração"
+
+msgid "Could not save the view"
+msgstr "Não foi possível salvar a visão"
+
 msgid "Could not update priority"
 msgstr "Não foi possível atualizar a prioridade"
+
+msgid "Could not update status"
+msgstr "Não foi possível atualizar o status"
+
+msgid "counts based on the cards shown"
+msgstr "contagens baseadas nos cartões exibidos"
+
+msgid "Counts based on the cards shown: SLA and assignee figures cover the loaded cards, while the total is the number of matching tickets."
+msgstr "Contagens baseadas nos cartões exibidos: SLA e responsável usam os cartões carregados, enquanto o total é a quantidade de chamados que correspondem aos filtros."
 
 msgid "Critical today"
 msgstr "Críticos hoje"
@@ -69,6 +144,18 @@ msgstr "Data de abertura (mais recente primeiro)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Data de abertura (mais antigo primeiro)"
+
+msgid "Delete the view"
+msgstr "Excluir a visão"
+
+msgid "Describe why the ticket is pending..."
+msgstr "Descreva por que o chamado está pendente..."
+
+msgid "Description"
+msgstr "Descrição"
+
+msgid "Enable moving cards between columns by drag & drop"
+msgstr "Permitir mover cartões entre colunas com arrastar e soltar"
 
 msgid "Fields"
 msgstr "Campos"
@@ -82,14 +169,17 @@ msgstr "Ocultar coluna"
 msgid "High"
 msgstr "Alta"
 
+msgid "How many cards a column shows before a \"load more\" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden."
+msgstr "Quantos cartões uma coluna exibe antes de aparecer o botão \"Carregar mais\" (1-200). Uma coluna com mais chamados do que esse limite mostra seu total real, então nada fica escondido."
+
 msgid "in X d"
 msgstr "em X d"
 
-msgid "An error occurred while loading the board"
-msgstr "Ocorreu um erro ao carregar o quadro"
-
 msgid "Invalid request"
 msgstr "Solicitação inválida"
+
+msgid "Invalid view name"
+msgstr "Nome de visão inválido"
 
 msgid "just now"
 msgstr "agora mesmo"
@@ -103,8 +193,17 @@ msgstr "Quadro Kanban"
 msgid "Kanban board"
 msgstr "Quadro kanban"
 
+msgid "Kanban Configuration"
+msgstr "Configuração do Kanban"
+
+msgid "Kanban Plugin Configuration"
+msgstr "Configuração do plugin Kanban"
+
 msgid "List follow-ups"
 msgstr "Listar acompanhamentos"
+
+msgid "Load more"
+msgstr "Carregar mais"
 
 msgid "Loading..."
 msgstr "Carregando..."
@@ -115,6 +214,21 @@ msgstr "Baixa"
 msgid "Major"
 msgstr "Crítica"
 
+msgid "Maximum tickets in progress per column"
+msgstr "Máximo de chamados em andamento por coluna"
+
+msgid "Move"
+msgstr "Mover"
+
+msgid "Move to"
+msgstr "Mover para"
+
+msgid "Move to Pending"
+msgstr "Mover para Pendente"
+
+msgid "Move to Solved"
+msgstr "Mover para Resolvido"
+
 msgid "New Ticket"
 msgstr "Novo chamado"
 
@@ -124,11 +238,35 @@ msgstr "Sem categoria"
 msgid "No follow-ups for this ticket"
 msgstr "Sem acompanhamentos para este chamado"
 
+msgid "No Group"
+msgstr "Sem grupo"
+
+msgid "No Requester"
+msgstr "Sem solicitante"
+
+msgid "No saved view yet"
+msgstr "Nenhuma visão salva ainda"
+
+msgid "No Technician"
+msgstr "Sem técnico"
+
 msgid "No tickets"
 msgstr "Nenhum chamado"
 
+msgid "No Type"
+msgstr "Sem tipo"
+
+msgid "No type"
+msgstr "Sem tipo"
+
 msgid "Normal"
 msgstr "Média"
+
+msgid "Off"
+msgstr "Desligado"
+
+msgid "Offer to undo a card move from the board"
+msgstr "Oferecer desfazer o movimento de um cartão no quadro"
 
 msgid "Open"
 msgstr "Abrir"
@@ -142,8 +280,17 @@ msgstr "Abrir no GLPI"
 msgid "Opening date"
 msgstr "Data de abertura"
 
+msgid "Order of the board columns (status ids)"
+msgstr "Ordem das colunas do quadro (IDs de status)"
+
+msgid "Pending reason"
+msgstr "Motivo da pendência"
+
 msgid "Permission denied"
 msgstr "Permissão negada"
+
+msgid "Please give the view a name"
+msgstr "Informe um nome para a visão"
 
 msgid "Priority"
 msgstr "Prioridade"
@@ -160,20 +307,67 @@ msgstr "Ações rápidas"
 msgid "Refresh"
 msgstr "Atualizar"
 
+msgid "Refuse moves that would exceed the limit"
+msgstr "Recusar movimentos que ultrapassem o limite"
+
 msgid "Requester"
 msgstr "Solicitante"
+
+msgid "Require a pending reason when moving a card to Pending"
+msgstr "Exigir motivo de pendência ao mover um cartão para Pendente"
+
+msgid "Require a solution model when moving a card to Solved"
+msgstr "Exigir modelo de solução ao mover um cartão para Resolvido"
+
+msgid "Require a solution type when moving a card to Solved"
+msgstr "Exigir tipo de solução ao mover um cartão para Resolvido"
+
+msgid "Required fields on column changes"
+msgstr "Campos obrigatórios nas mudanças de coluna"
+
+msgid "Save"
+msgstr "Salvar"
+
+msgid "Save this view"
+msgstr "Salvar esta visão"
 
 msgid "Saved"
 msgstr "Salvo"
 
-msgid "Could not save configuration"
-msgstr "Não foi possível salvar a configuração"
+msgid "Saved board view"
+msgid_plural "Saved board views"
+msgstr[0] "Visão salva do quadro"
+msgstr[1] "Visões salvas do quadro"
+
+msgid "Saved views"
+msgstr "Visões salvas"
 
 msgid "Search by ticket number"
 msgstr "Buscar por número do chamado"
 
 msgid "Search: number, title, category, description..."
 msgstr "Buscar: número, título, categoria, descrição..."
+
+msgid "Select a model..."
+msgstr "Selecione um modelo..."
+
+msgid "Select a pending reason before moving the card."
+msgstr "Selecione um motivo de pendência antes de mover o cartão."
+
+msgid "Select a reason..."
+msgstr "Selecione um motivo..."
+
+msgid "Select a solution model before moving the card."
+msgstr "Selecione um modelo de solução antes de mover o cartão."
+
+msgid "Select a solution type before moving the card."
+msgstr "Selecione um tipo de solução antes de mover o cartão."
+
+msgid "Set the status to pending"
+msgstr "Definir o status como pendente"
+
+msgid "Share with everyone"
+msgstr "Compartilhar com todos"
 
 msgid "Show / hide columns"
 msgstr "Mostrar / ocultar colunas"
@@ -183,6 +377,9 @@ msgstr "Mostrar todas as colunas"
 
 msgid "Show column"
 msgstr "Mostrar coluna"
+
+msgid "Showing %1$d of %2$d"
+msgstr "Exibindo %1$d de %2$d"
 
 msgid "Skip to board"
 msgstr "Pular para o quadro"
@@ -202,17 +399,59 @@ msgstr "SLA em atraso"
 msgid "SLA paused"
 msgstr "SLA pausado"
 
+msgid "Solution"
+msgstr "Solução"
+
+msgid "Solution model"
+msgstr "Modelo de solução"
+
+msgid "Solution type"
+msgstr "Tipo de solução"
+
 msgid "Sort by"
 msgstr "Ordenar por"
 
 msgid "Sort via column dropdowns"
 msgstr "Ordenar pelos menus das colunas"
 
+msgid "Status unchanged; only the follow-up was recorded"
+msgstr "Status inalterado; apenas o follow-up foi registrado"
+
+msgid "Status updated"
+msgstr "Status atualizado"
+
 msgid "Technician"
 msgstr "Técnico"
 
+msgid "The move is blocked until a pending reason is selected."
+msgstr "O movimento é bloqueado até que um motivo de pendência seja selecionado."
+
+msgid "The move is blocked until a solution model is selected."
+msgstr "O movimento é bloqueado até que um modelo de solução seja selecionado."
+
+msgid "The move is blocked until a solution type is set (either chosen or filled in automatically from the model)."
+msgstr "O movimento é bloqueado até que um tipo de solução seja definido (escolhido ou preenchido automaticamente a partir do modelo)."
+
 msgid "The plugin directory must be named \"kanban\""
 msgstr "O diretório do plugin deve se chamar \"kanban\""
+
+msgid "The status changed, but the pending reason was not recorded (no follow-up right)."
+msgstr "O status foi alterado, mas o motivo de pendência não foi registrado (sem direito de follow-up)."
+
+msgid "The status changed, but the solution was not recorded (the ticket can no longer be solved)."
+msgstr "O status foi alterado, mas a solução não foi registrada (o chamado não pode mais ser resolvido)."
+
+msgid "The ticket was moved back"
+msgstr "O chamado foi devolvido"
+
+msgid "The view name is too long"
+msgstr "O nome da visão é longo demais"
+
+msgid "This column is limited to %d ticket(s) in progress. Move or close one before adding another."
+msgstr "Esta coluna está limitada a %d chamado(s) em andamento. Mova ou feche um antes de adicionar outro."
+
+msgid "This column reached its limit of %d tickets in progress"
+msgstr "Esta coluna atingiu o limite de %d chamados em andamento"
 
 msgid "Ticket Details"
 msgstr "Detalhes do chamado"
@@ -244,8 +483,20 @@ msgstr "Total de chamados"
 msgid "Unassigned"
 msgstr "Sem técnico"
 
+msgid "Undo"
+msgstr "Desfazer"
+
+msgid "Undo a card move"
+msgstr "Desfazer o movimento de um cartão"
+
+msgid "Undo the move"
+msgstr "Desfazer o movimento"
+
 msgid "Unknown"
 msgstr "Desconhecido"
+
+msgid "Unknown action"
+msgstr "Ação desconhecida"
 
 msgid "Unknown status"
 msgstr "Status desconhecido"
@@ -256,14 +507,35 @@ msgstr "Muito alta"
 msgid "Very Low"
 msgstr "Muito baixa"
 
+msgid "View deleted"
+msgstr "Visão excluída"
+
+msgid "View name"
+msgstr "Nome da visão"
+
+msgid "View not found"
+msgstr "Visão não encontrada"
+
+msgid "View saved"
+msgstr "Visão salva"
+
 msgid "View the kanban board"
 msgstr "Visualizar o quadro kanban"
 
 msgid "Visible tickets"
 msgstr "Chamados visíveis"
 
+msgid "When moving to Pending the reason is stored as a follow-up; when moving to Solved a solution (description, model or type) can be recorded."
+msgstr "Ao mover para Pendente o motivo é registrado como follow-up; ao mover para Resolvido pode-se registrar uma solução (descrição, modelo ou tipo)."
+
+msgid "When off, a column over the limit is only highlighted on the board. When on, the move is rejected and the check also runs on the server."
+msgstr "Desligado, uma coluna acima do limite é apenas destacada no quadro. Ligado, o movimento é recusado e a verificação também acontece no servidor."
+
 msgid "Within SLA"
 msgstr "Dentro do SLA"
+
+msgid "Work in progress limit"
+msgstr "Limite de trabalho em andamento"
 
 msgid "X d ago"
 msgstr "há X d"
@@ -276,3 +548,6 @@ msgstr "há X min"
 
 msgid "Yesterday"
 msgstr "Ontem"
+
+msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
+msgstr "Zero desativa o limite. A contagem considera os chamados que você consegue ver na coluna, ignorando os filtros ativos, porque o limite se aplica à fila e não à visão atual."

@@ -37,57 +37,206 @@ class PluginKanbanKanban extends CommonGLPI {
       ];
    }
 
-    /**
-     * Retrieve tickets formatted and filtered for the Kanban board.
-     *
-     * @param array $filters Filters (groups, technicians, requesters, category, ...)
-     * @param array $sort Sorting criteria (priority, date, status_duration)
-     * @param int $limit Max tickets per status (0 = use default MAX_TICKETS_PER_STATUS)
-     * @return array Tickets grouped by status ID
-     */
+   /**
+    * Retrieve tickets formatted and filtered for the Kanban board.
+    *
+    * @param array $filters Filters (groups, technicians, requesters, category, ...)
+    * @param array $sort Sorting criteria (priority, date, status_duration)
+    * @param int $limit Max tickets per status (0 = use default MAX_TICKETS_PER_STATUS)
+    * @return array Tickets grouped by status ID
+    */
    public static function getTicketsForKanban(array $filters = [], array $sort = [], int $limit = 0) {
+      $board = self::getBoardData($filters, $sort, $limit);
+      return $board['statuses'];
+   }
+
+   /**
+    * Build the board payload for the active filters.
+    *
+    * Each column is queried on its own (one COUNT + one page) so the response
+    * carries three numbers per column:
+    *  - the cards to display (at most $limit, from $offset);
+    *  - `totals`, the number of tickets that really matched the filter, which
+    *    can be greater than the number of cards returned;
+    *  - `has_more`, whether another page can be fetched for that column.
+    *
+    * A single query for the whole board cannot express a per-column limit, and
+    * silently dropping the extra tickets used to hide the truncation from the
+    * user: the column counter simply showed fewer tickets than existed.
+    *
+    * @param array $filters
+    * @param array $sort
+    * @param int   $limit       Cards per column (0 = MAX_TICKETS_PER_STATUS).
+    * @param int   $offset      Cards already displayed in each column.
+    * @param int   $only_status Restrict to one status (0 = every status).
+    * @return array ['statuses' => [status => Ticket[]], 'totals' => [status => int],
+    *                'has_more' => [status => bool]]
+    */
+   public static function getBoardData(array $filters = [], array $sort = [], int $limit = 0, int $offset = 0, int $only_status = 0): array {
+      if (!self::canView() || !Ticket::canView()) {
+         return ['statuses' => [], 'totals' => [], 'has_more' => []];
+      }
+
+      $limit      = $limit > 0 ? $limit : self::MAX_TICKETS_PER_STATUS;
+      $offset     = max(0, $offset);
+      $criteria   = self::buildBoardCriteria($filters, $sort);
+      $all_statuses = Ticket::getAllStatusArray();
+
+      $targets = array_keys($all_statuses);
+      if ($only_status > 0 && isset($all_statuses[$only_status])) {
+         $targets = [$only_status];
+      }
+
+      $statuses = [];
+      $totals   = [];
+      $has_more = [];
+
+      foreach ($targets as $status) {
+         $totals[$status] = self::countBoardTickets($criteria, $status);
+
+         if ($totals[$status] <= $offset) {
+            $statuses[$status] = [];
+            $has_more[$status] = false;
+            continue;
+         }
+
+         $page                      = $criteria;
+         $page['WHERE']['t.status'] = $status;
+         $page['LIMIT']             = $limit;
+         $page['OFFSET']            = $offset;
+
+         $statuses[$status] = self::formatBoardTickets($page, $all_statuses);
+         $has_more[$status] = ($offset + count($statuses[$status])) < $totals[$status];
+      }
+
+      return [
+         'statuses' => $statuses,
+         'totals'   => $totals,
+         'has_more' => $has_more,
+      ];
+   }
+
+    /**
+     * Number of tickets the board criteria match in a single status.
+     *
+     * COUNT(DISTINCT t.id) is required because the technician/requester/group
+     * filters join glpi_tickets_users and glpi_groups_tickets, which return one
+     * row per matching row and would otherwise inflate the count.
+     *
+     * @param array $criteria Criteria from buildBoardCriteria().
+     * @param int   $status
+     * @return int
+     */
+    private static function countBoardTickets(array $criteria, int $status): int {
       global $DB;
 
+      if (empty($criteria)) {
+         return 0;
+      }
+
+      $count = $criteria;
+      unset($count['LIMIT'], $count['OFFSET'], $count['ORDER']);
+      $count['WHERE']['t.status'] = $status;
+      $count['SELECT']            = [new \QueryExpression('COUNT(DISTINCT t.id) AS c')];
+
+      $row = $DB->request($count)->current();
+
+      return (int)($row['c'] ?? 0);
+    }
+
+   /**
+    * Run a board query and decorate every ticket for the card renderer.
+    *
+    * @param array $criteria
+    * @param array $all_statuses Status id => translated name
+    * @return array
+    */
+   private static function formatBoardTickets(array $criteria, array $all_statuses): array {
+      global $DB;
+
+      $tickets = [];
+      foreach ($DB->request($criteria) as $ticket) {
+         $ticket['status_name'] = $all_statuses[(int)$ticket['status']] ?? __('Unknown status', 'kanban');
+
+         // Decode GLPI-10-encoded plain-text fields (GLPI 11 stores raw
+         // values) and sanitize the rich-text content on the server so the
+         // browser never parses untrusted stored markup.
+         $ticket['title']    = self::decodeStoredValue($ticket['title']);
+         $ticket['content']  = self::safeRichText($ticket['content']);
+         $ticket['category'] = self::decodeStoredValue($ticket['category']);
+
+         $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
+         $ticket['assigned_techs'] = self::getAssignedTechnicians($ticket['id']);
+         $ticket['sla_progress']   = self::calculateSlaProgress($ticket);
+
+         $tickets[] = $ticket;
+      }
+
+      return $tickets;
+   }
+
+   /**
+    * Tickets visible to the current user in a status, ignoring the board
+    * filters: the number of cards in a column that only contains the tickets
+    * matching the active filter would not say anything about the occupancy of
+    * the queue, which is what a work-in-progress limit is about.
+    *
+    * @param int $status
+    * @return int
+    */
+   public static function countVisibleTicketsInStatus(int $status): int {
+      if (!self::canView() || !Ticket::canView() || $status <= 0) {
+         return 0;
+      }
+
+      return self::countBoardTickets(self::buildBoardCriteria([], ['by' => 'date', 'order' => 'DESC']), $status);
+   }
+
+   /**
+    * Build the query criteria of the board for the given filters and sort.
+    *
+    * No LIMIT is set here: each column is paginated on its own
+    * (see getBoardData()).
+    *
+    * @param array $filters
+    * @param array $sort
+    * @return array
+    */
+   private static function buildBoardCriteria(array $filters, array $sort): array {
       // Basic visibility check: user must have the plugin right and be able to view tickets
       if (!self::canView() || !Ticket::canView()) {
          return [];
       }
 
-      if ($limit <= 0) {
-         $limit = self::MAX_TICKETS_PER_STATUS;
-      }
-
-// Build criteria
-       $criteria = [
-          'SELECT' => [
-             't.id',
-             't.name AS title',
-          't.status',
-          't.priority',
-          't.type',
-          't.date AS date',
-          't.date_creation',
-           't.date_mod',
-           't.time_to_resolve',
-           't.solvedate',
-           't.begin_waiting_date',
-           't.content',
-           'cat.name AS category'
-      ],
-          'FROM' => 'glpi_tickets AS t',
-          'LEFT JOIN' => [
-             'glpi_itilcategories AS cat' => [
-                'ON' => [
-                   't'   => 'itilcategories_id',
-                   'cat' => 'id'
-                ]
-             ]
-          ],
-          'WHERE' => [
-             't.is_deleted' => 0
-          ],
-          'LIMIT' => $limit * 6 // Multiply by number of status columns for fair distribution
-       ];
+      $criteria = [
+         'SELECT' => [
+            't.id',
+            't.name AS title',
+            't.status',
+            't.priority',
+            't.type',
+            't.date AS date',
+            't.date_creation',
+            't.date_mod',
+            't.time_to_resolve',
+            't.solvedate',
+            't.begin_waiting_date',
+            't.content',
+            'cat.name AS category'
+         ],
+         'FROM' => 'glpi_tickets AS t',
+         'LEFT JOIN' => [
+            'glpi_itilcategories AS cat' => [
+               'ON' => [
+                  't'   => 'itilcategories_id',
+                  'cat' => 'id'
+               ]
+            ]
+         ],
+         'WHERE' => [
+            't.is_deleted' => 0
+         ],
+      ];
 
       // Enforce active entity restrictions
       // Do not use recursive criteria here: glpiactiveentities already contains the active entity
@@ -266,65 +415,24 @@ class PluginKanbanKanban extends CommonGLPI {
          case 'priority':
             $criteria['ORDER'] = "t.priority $sort_order";
             break;
-          case 'status_duration':
-             // Approximate duration in status using modified date
-             $criteria['ORDER'] = "t.date_mod $sort_order";
-             break;
-          case 'sla':
-             // Approximate SLA urgency by resolution deadline. The client
-             // sorts by elapsed percent (DESC = most elapsed / closest to
-             // expiry first), so the deadline order is inverted here: DESC
-             // fetches the earliest deadlines first.
-             $criteria['ORDER'] = "t.time_to_resolve " . ($sort_order === 'ASC' ? 'DESC' : 'ASC');
-             break;
-          case 'date':
+         case 'status_duration':
+            // Approximate duration in status using modified date
+            $criteria['ORDER'] = "t.date_mod $sort_order";
+            break;
+         case 'sla':
+            // Approximate SLA urgency by resolution deadline. The client
+            // sorts by elapsed percent (DESC = most elapsed / closest to
+            // expiry first), so the deadline order is inverted here: DESC
+            // fetches the earliest deadlines first.
+            $criteria['ORDER'] = "t.time_to_resolve " . ($sort_order === 'ASC' ? 'DESC' : 'ASC');
+            break;
+         case 'date':
          default:
             $criteria['ORDER'] = "t.date $sort_order";
             break;
       }
 
-      $iterator = $DB->request($criteria);
-
-// Group tickets by status, enforcing per-status limit
-       $statuses = [];
-       $counts = [];
-       $all_statuses = Ticket::getAllStatusArray();
-       foreach ($iterator as $ticket) {
-          $status = (int)$ticket['status'];
-          if (!isset($statuses[$status])) {
-             $statuses[$status] = [];
-             $counts[$status] = 0;
-          }
-
-          // Enforce per-status limit
-          if ($counts[$status] >= $limit) {
-             continue;
-          }
-
-           // Add status name for display
-           $ticket['status_name'] = $all_statuses[$status] ?? __('Unknown status', 'kanban');
-
-           // Decode GLPI-10-encoded plain-text fields (GLPI 11 stores raw
-           // values) and sanitize the rich-text content on the server so the
-           // browser never parses untrusted stored markup.
-           $ticket['title']    = self::decodeStoredValue($ticket['title']);
-           $ticket['content']  = self::safeRichText($ticket['content']);
-           $ticket['category'] = self::decodeStoredValue($ticket['category']);
-
-           // Add requester name
-           $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
-
-          // Fetch assigned technicians details for metadata
-          $ticket['assigned_techs'] = self::getAssignedTechnicians($ticket['id']);
-
-          // Calculate SLA progress
-          $ticket['sla_progress'] = self::calculateSlaProgress($ticket);
-
-          $statuses[$status][] = $ticket;
-          $counts[$status]++;
-       }
-
-       return $statuses;
+      return $criteria;
    }
 
    /**
@@ -1168,16 +1276,22 @@ class PluginKanbanKanban extends CommonGLPI {
        ];
     }
 
-    /**
-     * Compute key indicators ("gestão à vista") from the tickets currently
-     * displayed on the board (already filtered by the active filters).
-     *
-     * @param array $statuses Tickets grouped by status (getTicketsForKanban output)
-     * @return array ['total', 'with_sla', 'sla_on_time', 'sla_overdue',
-     *                'sla_percent', 'assigned_to_me', 'unassigned']
-     */
-   public static function computeMetrics(array $statuses): array {
-      $total = 0;
+   /**
+    * Compute key indicators ("gestão à vista") from the tickets currently
+    * displayed on the board (already filtered by the active filters).
+    *
+    * `total` comes from the per-column totals (see getBoardData()), so it
+    * reflects every ticket matching the filters and not only the cards that fit
+    * in the columns; the SLA/assignee figures are computed from the cards that
+    * were actually loaded.
+    *
+    * @param array $statuses Tickets grouped by status (getTicketsForKanban output)
+    * @param array $totals  Real number of tickets per status, when known
+    * @return array ['total', 'cards', 'partial', 'with_sla', 'sla_on_time',
+    *                'sla_overdue', 'sla_percent', 'assigned_to_me', 'unassigned']
+    */
+    public static function computeMetrics(array $statuses, array $totals = []): array {
+      $cards = 0;
       $with_sla = 0;
       $sla_on_time = 0;
       $sla_overdue = 0;
@@ -1187,7 +1301,7 @@ class PluginKanbanKanban extends CommonGLPI {
 
       foreach ($statuses as $tickets) {
          foreach ($tickets as $ticket) {
-            $total++;
+            $cards++;
             $sla = $ticket['sla_progress'] ?? null;
             if (!empty($sla) && ($sla['status'] ?? 'no_sla') !== 'no_sla') {
                $with_sla++;
@@ -1216,8 +1330,15 @@ class PluginKanbanKanban extends CommonGLPI {
 
       $sla_percent = $with_sla > 0 ? (int)round(($sla_on_time / $with_sla) * 100) : 100;
 
+      // When the columns were truncated, the totals are the honest figure and
+      // the card-based ones cover only what is on screen. Say so instead of
+      // passing the loaded count off as the number of matching tickets.
+      $total = $totals !== [] ? array_sum(array_map('intval', $totals)) : $cards;
+
       return [
          'total'           => $total,
+         'cards'           => $cards,
+         'partial'         => $total > $cards,
          'with_sla'        => $with_sla,
          'sla_on_time'     => $sla_on_time,
          'sla_overdue'     => $sla_overdue,
@@ -1225,7 +1346,7 @@ class PluginKanbanKanban extends CommonGLPI {
          'assigned_to_me'  => $assigned_to_me,
          'unassigned'      => $unassigned,
       ];
-   }
+    }
 
    /**
      * Assign the current user as technician (ASSIGN) to a ticket.
@@ -1328,12 +1449,76 @@ class PluginKanbanKanban extends CommonGLPI {
    }
 
    /**
-     * Change the priority of a ticket.
-     *
-     * @param int $ticket_id
-     * @param int $priority
-     * @return array ['success' => bool, 'error' => string|null]
-     */
+    * Put a ticket back to a previous status, after a move made from the board.
+    *
+    * This is the same write as updateTicketStatus() without the follow-up and
+    * the solution: undoing a move must not also delete what it recorded, and it
+    * must not be a way around the transition requirements either, so the gates
+    * and the work-in-progress check are identical. Anything the previous move
+    * wrote (pending reason, solution) stays in the ticket history.
+    *
+    * @param int $ticket_id
+    * @param int $previous_status
+    * @return array ['success' => bool, 'error' => string|null]
+    */
+   public static function undoStatusChange(int $ticket_id, int $previous_status): array {
+      $ticket_id       = (int)$ticket_id;
+      $previous_status = (int)$previous_status;
+      if ($ticket_id <= 0 || $previous_status <= 0 || !Ticket::isStatusExists($previous_status)) {
+         return ['success' => false, 'error' => __('Invalid request', 'kanban')];
+      }
+
+      $ticket = new Ticket();
+      if (!$ticket->getFromDB($ticket_id)) {
+         return ['success' => false, 'error' => __('Ticket not found', 'kanban')];
+      }
+      if (!Session::haveRight(Ticket::$rightname, UPDATE) || !$ticket->canUpdateItem()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      if (!self::isTicketVisible($ticket_id)) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+
+      $wip = self::checkWipLimit($previous_status);
+      if ($wip !== null) {
+         return ['success' => false, 'error' => $wip];
+      }
+
+      $ok = $ticket->update(['id' => $ticket_id, 'status' => $previous_status]);
+
+      return ['success' => (bool)$ok, 'error' => $ok ? null : __('Could not update status', 'kanban')];
+   }
+
+   /**
+    * Reject a move into a column that reached its work-in-progress limit.
+    *
+    * @param int $status Destination status.
+    * @return string|null Error message, or null when the move is allowed.
+    */
+   public static function checkWipLimit(int $status): ?string {
+      $limit = PluginKanbanConfig::getWipLimit();
+      if ($limit <= 0 || PluginKanbanConfig::getWipBlockExceed() !== true) {
+         return null;
+      }
+
+      $current = self::countVisibleTicketsInStatus($status);
+      if ($current < $limit) {
+         return null;
+      }
+
+      return sprintf(
+         __('This column is limited to %d ticket(s) in progress. Move or close one before adding another.', 'kanban'),
+         $limit
+      );
+   }
+
+   /**
+    * Change the priority of a ticket.
+    *
+    * @param int $ticket_id
+    * @param int $priority
+    * @return array ['success' => bool, 'error' => string|null]
+    */
    public static function changePriority(int $ticket_id, int $priority): array {
       $ticket_id = (int)$ticket_id;
       $priority = (int)$priority;
@@ -1407,6 +1592,11 @@ class PluginKanbanKanban extends CommonGLPI {
       // The ticket must be one the board would have shown to this user.
       if (!self::isTicketVisible($ticket_id)) {
          return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+
+      $wip = self::checkWipLimit($new_status);
+      if ($wip !== null) {
+         return ['success' => false, 'error' => $wip];
       }
 
       $user_id = (int)Session::getLoginUserID();

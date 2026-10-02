@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /**
  * -------------------------------------------------------------------------
@@ -27,143 +27,9 @@ if (!PluginKanbanKanban::canView() || !Ticket::canView()) {
    Html::displayRightError();
 }
 
-// Handle AJAX actions
-if (isset($_POST['action']) || isset($_GET['action'])) {
-    $action = $_POST['action'] ?? $_GET['action'];
-
-// CSRF protection for POSTs is enforced by GLPI itself before this script runs:
-//   - GLPI 10:  inc/includes.php runs Session::checkCSRF($_POST) on every POST.
-//   - GLPI 11:  the HTTP kernel's CheckCsrfListener validates every body request.
-// Those checks consume the single-use CSRF token (GLPI >= 10.0.8), so calling
-// Session::checkCSRF() again here would always fail with "action not allowed".
-// The ticket visibility / rights gates inside each action below are the
-// authorization layer on top of GLPI's own CSRF validation.
-switch ($action) {
-       case 'get_tickets':
-            $filters = [
-               'search'     => isset($_GET['search']) ? trim($_GET['search']) : null,
-               'technician' => isset($_GET['technician']) && $_GET['technician'] !== '' ? (int)$_GET['technician'] : null,
-               'requester'  => isset($_GET['requester']) && $_GET['requester'] !== '' ? (int)$_GET['requester'] : null,
-               'group'      => isset($_GET['group']) && $_GET['group'] !== '' ? (int)$_GET['group'] : null,
-                'ticket_id'  => isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : null,
-               'type'       => isset($_GET['type']) && $_GET['type'] !== '' ? (int)$_GET['type'] : null,
-               'category'   => isset($_GET['category']) && $_GET['category'] !== '' ? (int)$_GET['category'] : null,
-            ];
-          $sort = [
-             'by'    => $_GET['sort_by'] ?? 'date',
-             'order' => $_GET['sort_order'] ?? 'DESC'
-          ];
-
-          try {
-             $tickets = PluginKanbanKanban::getTicketsForKanban($filters, $sort);
-          } catch (\Throwable $e) {
-             // The message can carry SQL on a database error: log it server-side
-             // and return a generic error to the browser.
-             Toolbox::logInFile('kanban', 'get_tickets failed: ' . $e->getMessage());
-             http_response_code(500);
-             header("Content-Type: application/json; charset=UTF-8");
-             echo json_encode(['error' => __('An error occurred while loading the board', 'kanban')]);
-             exit;
-          }
-
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'statuses' => $tickets,
-             'metrics'  => PluginKanbanKanban::computeMetrics($tickets)
-          ]);
-          exit;
-
-       case 'get_ticket_detail':
-          $ticket_id = isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : 0;
-          $detail = PluginKanbanKanban::getTicketDetail($ticket_id);
-
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode($detail);
-          exit;
-
-        case 'get_filter_data':
-           header("Content-Type: application/json; charset=UTF-8");
-           echo json_encode([
-              'technicians' => PluginKanbanKanban::getTechniciansForFilter(),
-              'requesters'  => PluginKanbanKanban::getRequestersForFilter(),
-              'groups'      => PluginKanbanKanban::getGroupsForFilter(),
-              'categories'  => PluginKanbanKanban::getCategoriesForFilter()
-           ]);
-           exit;
-
-       case 'get_group_technicians':
-          $group_id = isset($_GET['group']) ? (int)$_GET['group'] : 0;
-          if ($group_id > 0) {
-             // Only allow enumerating groups the caller can see on the board
-             // (their own groups expanded with subgroups), so the membership
-             // of unrelated groups is never disclosed.
-             $allowed = PluginKanbanKanban::expandGroupIds(
-                array_column(PluginKanbanKanban::getGroupsForFilter(), 'id')
-             );
-             if (!in_array($group_id, $allowed, true)) {
-                $group_id = 0;
-             }
-          }
-          $technicians = $group_id > 0
-             ? PluginKanbanKanban::getTechniciansForGroup($group_id)
-             : PluginKanbanKanban::getTechniciansForFilter();
-
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode(['technicians' => $technicians]);
-          exit;
-
-       case 'assign_to_me':
-           $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'result'     => PluginKanbanKanban::assignToMe($ticket_id),
-             'csrf_token' => Session::getNewCSRFToken(),
-          ]);
-          exit;
-
-       case 'get_followups':
-          $ticket_id = isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : 0;
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'followups' => PluginKanbanKanban::getFollowups($ticket_id)
-          ]);
-          exit;
-
-       case 'change_priority':
-           $ticket_id = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
-          $priority  = isset($_POST['priority']) ? (int)$_POST['priority'] : 0;
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'result'     => PluginKanbanKanban::changePriority($ticket_id, $priority),
-             'csrf_token' => Session::getNewCSRFToken(),
-          ]);
-          exit;
-
-case 'update_ticket_status':
-           $ticket_id  = isset($_POST['ticket_id']) ? (int)$_POST['ticket_id'] : 0;
-          $new_status = isset($_POST['status']) ? (int)$_POST['status'] : 0;
-$extra = [
-            'pending_reason'              => isset($_POST['pending_reason']) ? trim((string)$_POST['pending_reason']) : '',
-            'pending'                     => isset($_POST['pending']) ? trim((string)$_POST['pending']) : '',
-            'pendingreasons_id'           => isset($_POST['pendingreasons_id']) ? (int)$_POST['pendingreasons_id'] : 0,
-            'followup_frequency'          => isset($_POST['followup_frequency']) ? (int)$_POST['followup_frequency'] : 0,
-            'followups_before_resolution' => isset($_POST['followups_before_resolution']) ? (int)$_POST['followups_before_resolution'] : 0,
-            'solution'                    => isset($_POST['solution']) ? trim((string)$_POST['solution']) : '',
-            'solution_type_id'            => isset($_POST['solution_type_id']) ? (int)$_POST['solution_type_id'] : 0,
-            'solution_template_id'        => isset($_POST['solution_template_id']) ? (int)$_POST['solution_template_id'] : 0,
-         ];
-
-          header("Content-Type: application/json; charset=UTF-8");
-          echo json_encode([
-             'result'     => PluginKanbanKanban::updateTicketStatus($ticket_id, $new_status, $extra),
-             // Issue #1: the single-use CSRF token is consumed on every POST, so a
-             // fresh token must accompany every response or the next action in the
-             // same page session would fail.
-             'csrf_token' => Session::getNewCSRFToken(),
-          ]);
-          exit;
-    }
-}
+// This page only renders the board. The JSON endpoints live in front/api.php,
+// dispatched by PluginKanbanApi, so the markup and the data contracts are
+// separate files instead of one switch statement.
 
 // Render Page Header
 Html::header(
@@ -226,6 +92,10 @@ echo "<script>var KANBAN_CURRENT_USER = " . json_encode([
 echo "<script>var KANBAN_TIMEZONE_OFFSET = " . json_encode(date('P'), $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_SORT_OPTIONS = " . json_encode(PluginKanbanKanban::getSortOptions(), $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_ENABLE_DRAG_DROP = " . json_encode(PluginKanbanConfig::getEnableDragDrop() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_ENABLE_UNDO = " . json_encode(PluginKanbanConfig::getEnableUndo() ? 1 : 0, $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_CARDS_PER_COLUMN = " . json_encode(PluginKanbanConfig::getCardsPerColumn(), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_WIP_LIMIT = " . json_encode(PluginKanbanConfig::getWipLimit(), $kanban_json_flags) . ";</script>";
+echo "<script>var KANBAN_WIP_BLOCK = " . json_encode(PluginKanbanConfig::getWipBlockExceed() ? 1 : 0, $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_REQUIRE_PENDING_REASON = " . json_encode(PluginKanbanConfig::getRequirePendingReason() ? 1 : 0, $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_REQUIRE_SOLUTION_MODEL = " . json_encode(PluginKanbanConfig::getRequireSolutionModel() ? 1 : 0, $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_REQUIRE_SOLUTION_TYPE = " . json_encode(PluginKanbanConfig::getRequireSolutionType() ? 1 : 0, $kanban_json_flags) . ";</script>";
@@ -271,6 +141,8 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "autoRefresh" => __("Auto-refresh", "kanban"),
     "autoRefreshOff" => __("Off", "kanban"),
     "saved" => __("Saved", "kanban"),
+    "save" => __("Save", "kanban"),
+    "close" => __("Close", "kanban"),
     "assigned" => __("Assigned", "kanban"),
     "justNow" => __("just now", "kanban"),
     "minutesAgo" => __("X min ago", "kanban"),
@@ -289,6 +161,23 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "ticketDuration" => __("Open duration", "kanban"),
     "slaFrozenHint" => __("SLA paused", "kanban"),
     "statusUpdated" => __("Status updated", "kanban"),
+    "moveUndone" => __("The ticket was moved back", "kanban"),
+    "undo" => __("Undo", "kanban"),
+    "undoMove" => __("Undo the move", "kanban"),
+    "loadMore" => __("Load more", "kanban"),
+    // sprintf placeholders (%d, %1$d) must stay in single quotes: inside a double
+   // quoted string PHP reads "$d" as a variable and warns on an undefined one.
+    "showingOf" => __('Showing %1$d of %2$d', 'kanban'),
+    "wipReached" => __('This column reached its limit of %d tickets in progress', 'kanban'),
+    "saveView" => __("Save this view", "kanban"),
+    "viewName" => __("View name", "kanban"),
+    "savedViews" => __("Saved views", "kanban"),
+    "shareView" => __("Share with everyone", "kanban"),
+    "noSavedViews" => __("No saved view yet", "kanban"),
+    "deleteView" => __("Delete the view", "kanban"),
+    "viewSaved" => __("View saved", "kanban"),
+    "viewDeleted" => __("View deleted", "kanban"),
+    "metricsPartial" => __("counts based on the cards shown", "kanban"),
     "moveTo" => __("Move to", "kanban"),
     "cancel" => __("Cancel", "kanban"),
     "confirmMove" => __("Move", "kanban"),
@@ -435,6 +324,25 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                </button>
             </div>
 
+            <!-- Saved board views: dropdown + "save this view" button. Populated by JS -->
+            <div class="col-auto d-flex align-items-center gap-2">
+               <div class="dropdown">
+                  <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                          id="kanban-views-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                          title="<?php echo __('Saved views', 'kanban'); ?>">
+                     <i class="ti ti-bookmarks"></i>
+                     <span class="d-none d-lg-inline" id="kanban-views-label"><?php echo __('Saved views', 'kanban'); ?></span>
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end kanban-views-menu" aria-labelledby="kanban-views-btn">
+                  </ul>
+               </div>
+               <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                       id="kanban-save-view-btn" title="<?php echo __('Save this view', 'kanban'); ?>">
+                  <i class="ti ti-bookmark-plus"></i>
+                  <span class="d-none d-xl-inline"><?php echo __('Save this view', 'kanban'); ?></span>
+               </button>
+            </div>
+
             <!-- Advanced filters toggle -->
             <div class="col-auto d-flex align-items-center">
                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
@@ -516,7 +424,7 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
       </div>
    </div>
 
-   <!-- Metrics bar (gestão à vista) -->
+   <!-- Metrics bar (gestÃ£o Ã  vista) -->
    <div id="kanban-metrics" class="row g-2 mb-3" aria-label="<?php echo __('Board indicators', 'kanban'); ?>">
       <div class="col-6 col-lg">
          <div class="kanban-metric">
@@ -525,6 +433,8 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                <div class="kanban-metric-value" id="metric-total">0</div>
                <div class="kanban-metric-label"><?php echo __('Visible tickets', 'kanban'); ?></div>
             </div>
+            <i class="ti ti-info-circle kanban-metric-hint d-none" id="metric-partial-hint"
+               title="<?php echo __('Counts based on the cards shown: SLA and assignee figures cover the loaded cards, while the total is the number of matching tickets.', 'kanban'); ?>"></i>
          </div>
       </div>
       <div class="col-6 col-lg">

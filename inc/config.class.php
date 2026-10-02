@@ -23,19 +23,23 @@ class PluginKanbanConfig extends CommonGLPI {
          'require_pending_reason'   => false,
          'require_solution_model'   => false,
          'require_solution_type'    => false,
+         'cards_per_column'         => 50,
+         'wip_limit'                => 0,
+         'wip_block_exceed'         => false,
+         'enable_undo'              => true,
       ];
       $stored = \Config::getConfigurationValues(self::CONFIG_CONTEXT);
       $cfg = [];
       foreach (array_keys($defaults) as $key) {
-if (isset($stored[$key])) {
-         // GLPI stores config values as strings; arrays are serialized
-         // (exportArrayToDB). Scalars (like the drag & drop flag) stay plain.
-         $value = $stored[$key];
-         $cfg[$key] = (is_array($value)
-            || (is_string($value) && (str_starts_with($value, '[') || str_starts_with($value, 'a:'))))
-            ? importArrayFromDB($value)
-            : $value;
-      }
+         if (isset($stored[$key])) {
+            // GLPI stores config values as strings; arrays are serialized
+            // (exportArrayToDB). Scalars (like the drag & drop flag) stay plain.
+            $value = $stored[$key];
+            $cfg[$key] = (is_array($value)
+               || (is_string($value) && (str_starts_with($value, '[') || str_starts_with($value, 'a:'))))
+               ? importArrayFromDB($value)
+               : $value;
+         }
       }
       return array_merge($defaults, $cfg);
    }
@@ -109,12 +113,57 @@ if (isset($stored[$key])) {
       return !empty($cfg['require_solution_type']);
    }
 
+   /**
+    * How many cards a column loads before a "load more" is needed (1-200).
+    */
+   public static function getCardsPerColumn(): int {
+      $cfg = self::load();
+      $value = (int)($cfg['cards_per_column'] ?? 50);
+      if ($value < 1) {
+         return 1;
+      }
+      return min(200, $value);
+   }
+
+   /**
+    * Work-in-progress limit per column (0 = no limit).
+    */
+   public static function getWipLimit(): int {
+      $cfg = self::load();
+      $value = (int)($cfg['wip_limit'] ?? 0);
+      return $value > 0 ? min(10000, $value) : 0;
+   }
+
+   /**
+    * Whether reaching the work-in-progress limit only warns (false) or refuses
+    * the move (true).
+    */
+   public static function getWipBlockExceed(): bool {
+      $cfg = self::load();
+      return !empty($cfg['wip_block_exceed']);
+   }
+
+   /**
+    * Whether the board offers to undo a card move.
+    */
+   public static function getEnableUndo(): bool {
+      $cfg = self::load();
+      return !empty($cfg['enable_undo']);
+   }
+
    public static function getTypeName($nb = 0) {
       return __('Kanban Configuration', 'kanban');
    }
 
    public static function getIcon() {
       return 'ti ti-settings';
+   }
+
+   /**
+    * Read a boolean switch coming from the configuration form.
+    */
+   private static function readSwitch(string $key): bool {
+      return isset($_POST[$key]) && in_array($_POST[$key], ['1', 'on', 'true'], true);
    }
 
    public function display($options = []) {
@@ -152,23 +201,25 @@ if (isset($stored[$key])) {
             return $v > 0;
          })));
 
-         // Checkbox present (checked => "on") or hidden pre-filled value.
-         $drag = isset($_POST['enable_drag_drop'])
-            && in_array($_POST['enable_drag_drop'], ['1', 'on', 'true'], true);
-         $require_pending = isset($_POST['require_pending_reason'])
-            && in_array($_POST['require_pending_reason'], ['1', 'on', 'true'], true);
-         $require_model = isset($_POST['require_solution_model'])
-            && in_array($_POST['require_solution_model'], ['1', 'on', 'true'], true);
-         $require_type = isset($_POST['require_solution_type'])
-            && in_array($_POST['require_solution_type'], ['1', 'on', 'true'], true);
+         // Clamped here as well as on read: a hand-built POST cannot store an
+         // out-of-range value that the board would then have to defend against.
+         $cards_per_column = (int)($_POST['cards_per_column'] ?? 50);
+         $cards_per_column = min(200, max(1, $cards_per_column));
+
+         $wip_limit = (int)($_POST['wip_limit'] ?? 0);
+         $wip_limit = $wip_limit > 0 ? min(10000, $wip_limit) : 0;
 
          $success = self::save([
             'refresh_options'        => array_values($refresh_values),
             'status_order'           => $order_values,
-            'enable_drag_drop'       => $drag ? 1 : 0,
-            'require_pending_reason' => $require_pending ? 1 : 0,
-            'require_solution_model' => $require_model ? 1 : 0,
-            'require_solution_type'  => $require_type ? 1 : 0,
+            'enable_drag_drop'       => self::readSwitch('enable_drag_drop') ? 1 : 0,
+            'require_pending_reason' => self::readSwitch('require_pending_reason') ? 1 : 0,
+            'require_solution_model' => self::readSwitch('require_solution_model') ? 1 : 0,
+            'require_solution_type'  => self::readSwitch('require_solution_type') ? 1 : 0,
+            'cards_per_column'       => $cards_per_column,
+            'wip_limit'              => $wip_limit,
+            'wip_block_exceed'       => self::readSwitch('wip_block_exceed') ? 1 : 0,
+            'enable_undo'            => self::readSwitch('enable_undo') ? 1 : 0,
          ]);
          if (!$success) {
             $error = __('Could not save configuration', 'kanban');
@@ -182,6 +233,12 @@ if (isset($stored[$key])) {
       $require_pending = !empty($cfg['require_pending_reason']);
       $require_model   = !empty($cfg['require_solution_model']);
       $require_type    = !empty($cfg['require_solution_type']);
+      $cards_per_column = self::getCardsPerColumn();
+      $wip_limit        = self::getWipLimit();
+      $wip_block        = !empty($cfg['wip_block_exceed']);
+      $undo_enabled     = !empty($cfg['enable_undo']);
+
+      $self_url = htmlspecialchars($_SERVER['REQUEST_URI']);
       ?>
 
       <div class="container-fluid py-4" style="max-width: 720px;">
@@ -206,21 +263,23 @@ if (isset($stored[$key])) {
             </div>
          <?php endif; ?>
 
-         <div class="card">
-            <div class="card-header">
-               <i class="ti ti-clock-play me-1"></i>
-               <?php echo __('Auto-refresh', 'kanban'); ?>
-            </div>
-            <div class="card-body">
-               <form method="post" action="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-                  <?php echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]); ?>
-                  <input type="hidden" name="kanban_config" value="1">
-                  <?php echo Html::hidden('enable_drag_drop', ['value' => $drag_enabled ? 1 : 0]); ?>
-                  <?php echo Html::hidden('status_order', ['value' => $order_str]); ?>
-                  <?php echo Html::hidden('require_pending_reason', ['value' => $require_pending ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_model', ['value' => $require_model ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_type', ['value' => $require_type ? 1 : 0]); ?>
+         <?php
+         // One form for the whole configuration: the settings used to live in
+         // four separate forms, each repeating every other setting as a hidden
+         // field, so adding one meant editing four places and a forgotten
+         // hidden field silently reset the setting. A checkbox that is not
+         // submitted means "off", which a single form gets right by itself.
+         ?>
+         <form method="post" action="<?php echo $self_url; ?>">
+            <?php echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]); ?>
+            <input type="hidden" name="kanban_config" value="1">
 
+            <div class="card">
+               <div class="card-header">
+                  <i class="ti ti-clock-play me-1"></i>
+                  <?php echo __('Auto-refresh', 'kanban'); ?>
+               </div>
+               <div class="card-body">
                   <div class="mb-3">
                      <label for="refresh_options" class="form-label fw-semibold">
                         <?php echo __('Available refresh intervals (minutes)', 'kanban'); ?>
@@ -236,75 +295,30 @@ if (isset($stored[$key])) {
                      </div>
                   </div>
 
-                  <button type="submit" class="btn btn-primary">
-                     <i class="ti ti-device-floppy me-1"></i>
-                     <?php echo __('Save', 'kanban'); ?>
-                  </button>
-               </form>
-            </div>
-         </div>
-
-         <div class="card mt-3">
-            <div class="card-header">
-               <i class="ti ti-columns-3 me-1"></i>
-               <?php echo __('Column order', 'kanban'); ?>
-            </div>
-            <div class="card-body">
-               <form method="post" action="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-                  <?php echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]); ?>
-                  <input type="hidden" name="kanban_config" value="1">
-                  <?php echo Html::hidden('enable_drag_drop', ['value' => $drag_enabled ? 1 : 0]); ?>
-                  <?php echo Html::hidden('refresh_options', ['value' => $refresh_str]); ?>
-                  <?php echo Html::hidden('require_pending_reason', ['value' => $require_pending ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_model', ['value' => $require_model ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_type', ['value' => $require_type ? 1 : 0]); ?>
-
                   <div class="mb-3">
-                     <label for="status_order" class="form-label fw-semibold">
-                        <?php echo __('Order of the board columns (status ids)', 'kanban'); ?>
+                     <label for="cards_per_column" class="form-label fw-semibold">
+                        <?php echo __('Cards loaded per column', 'kanban'); ?>
                      </label>
-                     <input type="text"
+                     <input type="number"
                             class="form-control"
-                            id="status_order"
-                            name="status_order"
-                            value="<?php echo htmlspecialchars($order_str); ?>"
-                            placeholder="1, 2, 3, 4, 5, 6">
+                            id="cards_per_column"
+                            name="cards_per_column"
+                            min="1"
+                            max="200"
+                            value="<?php echo $cards_per_column; ?>">
                      <div class="form-text">
-                        <?php echo __('Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed).', 'kanban'); ?>
+                        <?php echo __('How many cards a column shows before a "load more" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden.', 'kanban'); ?>
                      </div>
                   </div>
 
-                  <button type="submit" class="btn btn-primary">
-                     <i class="ti ti-device-floppy me-1"></i>
-                     <?php echo __('Save', 'kanban'); ?>
-                  </button>
-               </form>
-            </div>
-         </div>
-
-         <div class="card mt-3">
-            <div class="card-header">
-               <i class="ti ti-hand-grab me-1"></i>
-               <?php echo __('Drag & drop', 'kanban'); ?>
-            </div>
-            <div class="card-body">
-               <form method="post" action="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-                  <?php echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]); ?>
-                  <input type="hidden" name="kanban_config" value="1">
-                  <?php echo Html::hidden('refresh_options', ['value' => $refresh_str]); ?>
-                  <?php echo Html::hidden('status_order', ['value' => $order_str]); ?>
-                  <?php echo Html::hidden('require_pending_reason', ['value' => $require_pending ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_model', ['value' => $require_model ? 1 : 0]); ?>
-                  <?php echo Html::hidden('require_solution_type', ['value' => $require_type ? 1 : 0]); ?>
-
-<div class="form-check form-switch mb-3">
-                      <input class="form-check-input"
-                             type="checkbox"
-                             role="switch"
-                             id="enable_drag_drop"
-                             name="enable_drag_drop"
-                             value="1"
-                             <?php echo $drag_enabled ? 'checked' : ''; ?>>
+                  <div class="form-check form-switch mb-3">
+                     <input class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="enable_drag_drop"
+                            name="enable_drag_drop"
+                            value="1"
+                            <?php echo $drag_enabled ? 'checked' : ''; ?>>
                      <label class="form-check-label fw-semibold" for="enable_drag_drop">
                         <?php echo __('Enable moving cards between columns by drag & drop', 'kanban'); ?>
                      </label>
@@ -312,28 +326,36 @@ if (isset($stored[$key])) {
                         <?php echo __('When moving to Pending the reason is stored as a follow-up; when moving to Solved a solution (description, model or type) can be recorded.', 'kanban'); ?>
                      </div>
                   </div>
-
-                  <button type="submit" class="btn btn-primary">
-                     <i class="ti ti-device-floppy me-1"></i>
-                     <?php echo __('Save', 'kanban'); ?>
-                  </button>
-               </form>
+               </div>
             </div>
-         </div>
 
-         <div class="card mt-3">
-            <div class="card-header">
-               <i class="ti ti-asterisk me-1"></i>
-               <?php echo __('Required fields on column changes', 'kanban'); ?>
+            <div class="card mt-3">
+               <div class="card-header">
+                  <i class="ti ti-columns-3 me-1"></i>
+                  <?php echo __('Column order', 'kanban'); ?>
+               </div>
+               <div class="card-body">
+                  <label for="status_order" class="form-label fw-semibold">
+                     <?php echo __('Order of the board columns (status ids)', 'kanban'); ?>
+                  </label>
+                  <input type="text"
+                         class="form-control"
+                         id="status_order"
+                         name="status_order"
+                         value="<?php echo htmlspecialchars($order_str); ?>"
+                         placeholder="1, 2, 3, 4, 5, 6">
+                  <div class="form-text">
+                     <?php echo __('Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed).', 'kanban'); ?>
+                  </div>
+               </div>
             </div>
-            <div class="card-body">
-               <form method="post" action="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>">
-                  <?php echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]); ?>
-                  <input type="hidden" name="kanban_config" value="1">
-                  <?php echo Html::hidden('refresh_options', ['value' => $refresh_str]); ?>
-                  <?php echo Html::hidden('status_order', ['value' => $order_str]); ?>
-                  <?php echo Html::hidden('enable_drag_drop', ['value' => $drag_enabled ? 1 : 0]); ?>
 
+            <div class="card mt-3">
+               <div class="card-header">
+                  <i class="ti ti-asterisk me-1"></i>
+                  <?php echo __('Required fields on column changes', 'kanban'); ?>
+               </div>
+               <div class="card-body">
                   <div class="form-check form-switch mb-3">
                      <input class="form-check-input"
                             type="checkbox"
@@ -381,14 +403,80 @@ if (isset($stored[$key])) {
                         <?php echo __('The move is blocked until a solution type is set (either chosen or filled in automatically from the model).', 'kanban'); ?>
                      </div>
                   </div>
-
-                  <button type="submit" class="btn btn-primary">
-                     <i class="ti ti-device-floppy me-1"></i>
-                     <?php echo __('Save', 'kanban'); ?>
-                  </button>
-               </form>
+               </div>
             </div>
-         </div>
+
+            <div class="card mt-3">
+               <div class="card-header">
+                  <i class="ti ti-gauge me-1"></i>
+                  <?php echo __('Work in progress limit', 'kanban'); ?>
+               </div>
+               <div class="card-body">
+                  <div class="mb-3">
+                     <label for="wip_limit" class="form-label fw-semibold">
+                        <?php echo __('Maximum tickets in progress per column', 'kanban'); ?>
+                     </label>
+                     <input type="number"
+                            class="form-control"
+                            id="wip_limit"
+                            name="wip_limit"
+                            min="0"
+                            max="10000"
+                            value="<?php echo $wip_limit; ?>">
+                     <div class="form-text">
+                        <?php echo __('Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view.', 'kanban'); ?>
+                     </div>
+                  </div>
+
+                  <div class="form-check form-switch mb-3">
+                     <input class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="wip_block_exceed"
+                            name="wip_block_exceed"
+                            value="1"
+                            <?php echo $wip_block ? 'checked' : ''; ?>>
+                     <label class="form-check-label fw-semibold" for="wip_block_exceed">
+                        <?php echo __('Refuse moves that would exceed the limit', 'kanban'); ?>
+                     </label>
+                     <div class="form-text">
+                        <?php echo __('When off, a column over the limit is only highlighted on the board. When on, the move is rejected and the check also runs on the server.', 'kanban'); ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div class="card mt-3">
+               <div class="card-header">
+                  <i class="ti ti-arrow-back-up me-1"></i>
+                  <?php echo __('Undo a card move', 'kanban'); ?>
+               </div>
+               <div class="card-body">
+                  <div class="form-check form-switch mb-3">
+                     <input class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="enable_undo"
+                            name="enable_undo"
+                            value="1"
+                            <?php echo $undo_enabled ? 'checked' : ''; ?>>
+                     <label class="form-check-label fw-semibold" for="enable_undo">
+                        <?php echo __('Offer to undo a card move from the board', 'kanban'); ?>
+                     </label>
+                     <div class="form-text">
+                        <?php echo __('A notification lets you put the ticket back in its previous column. Undoing only restores the status: a pending reason or a solution recorded by the move stays in the ticket history.', 'kanban'); ?>
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div class="mt-3">
+               <button type="submit" class="btn btn-primary">
+                  <i class="ti ti-device-floppy me-1"></i>
+                  <?php echo __('Save', 'kanban'); ?>
+               </button>
+            </div>
+         </form>
       </div>
       <?php
       return true;
