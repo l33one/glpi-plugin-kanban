@@ -111,61 +111,47 @@ function kanban_plugin_create_test_tickets() {
 
     $ticket_ids = [];
     foreach ($tickets as $i => $data) {
-        $name     = $DB->escape($data[0]);
-        $status   = (int)$data[1];
-        $priority = (int)$data[2];
-        $sla      = $DB->escape($data[3]);
-
-        $id = $DB->insert([
-            ' INTO' => 'glpi_tickets',
-            'fields' => [
-                'name'              => $data[0],
-                'content'           => 'Test ticket for Kanban plugin',
-                'status'            => $status,
-                'priority'          => $priority,
-                'urgency'           => 2,
-                'impact'            => 2,
-                'type'              => 1,
-                'date'              => $now,
-                'date_creation'     => $now,
-                'date_mod'          => $now,
-                'entities_id'       => 0,
-                'is_deleted'        => 0,
-                'itilcategories_id' => 0,
-                'requesttypes_id'   => 0,
-                'users_id_lastupdater' => 2,
-                'users_id_recipient' => 2,
-                'actiontime'        => 0,
-                'begin_waiting_date'=> null,
-                'time_to_resolve'   => $sla
-            ]
+        $id = $DB->insert('glpi_tickets', [
+            'name'              => $data[0],
+            'content'           => 'Test ticket for Kanban plugin',
+            'status'            => $data[1],
+            'priority'          => $data[2],
+            'urgency'           => 2,
+            'impact'            => 2,
+            'type'              => 1,
+            'date'              => $now,
+            'date_creation'     => $now,
+            'date_mod'          => $now,
+            'entities_id'       => 0,
+            'is_deleted'        => 0,
+            'itilcategories_id' => 0,
+            'requesttypes_id'   => 0,
+            'users_id_lastupdater' => 2,
+            'users_id_recipient' => 2,
+            'actiontime'        => 0,
+            'begin_waiting_date'=> null,
+            'time_to_resolve'   => $data[3],
         ]);
-        $ticket_ids[] = $id;
+        $ticket_ids[] = (int)$id;
 
-        echo sprintf("Ticket %2d - [%s] '%s' (ID=%d)\n", $i + 1, getStatusName($status), $data[0], $id);
+        echo sprintf("Ticket %2d - [%s] '%s' (ID=%d)\n", $i + 1, getStatusName($data[1]), $data[0], $id);
     }
 
     // Assign all created tickets to user 2 as technician (ASSIGN)
     foreach ($ticket_ids as $tid) {
-        $DB->insert([
-            ' INTO' => 'glpi_tickets_users',
-            'fields' => [
-                'tickets_id' => $tid,
-                'users_id'   => 2,
-                'type'       => CommonITILActor::ASSIGN,
-            ]
+        $DB->insert('glpi_tickets_users', [
+            'tickets_id' => $tid,
+            'users_id'   => 2,
+            'type'       => CommonITILActor::ASSIGN,
         ]);
     }
 
     // Assign tickets 1, 4, 7 (first, fourth and seventh created) to user 2 as requester (REQUESTER)
     foreach ([0, 3, 6] as $idx) {
-        $DB->insert([
-            ' INTO' => 'glpi_tickets_users',
-            'fields' => [
-                'tickets_id' => $ticket_ids[$idx],
-                'users_id'   => 2,
-                'type'       => CommonITILActor::REQUESTER,
-            ]
+        $DB->insert('glpi_tickets_users', [
+            'tickets_id' => $ticket_ids[$idx],
+            'users_id'   => 2,
+            'type'       => CommonITILActor::REQUESTER,
         ]);
     }
 

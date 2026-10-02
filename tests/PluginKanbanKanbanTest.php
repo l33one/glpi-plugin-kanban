@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use PHPUnit\Framework\TestCase;
 
@@ -20,6 +20,21 @@ class PluginKanbanKanbanTest extends TestCase
         }
         // Ensure the plugin right is granted for the default test session.
         $_SESSION['glpiactiveprofile']['plugin_kanban'] = READ;
+
+        // The suite needs its own tickets. Without this it silently depends on
+        // whatever happens to be in the database: locally it passed on leftovers
+        // from earlier manual runs, while CI starts from an empty database where
+        // the E2E-seeded tickets are invisible to the super-admin, because from
+        // 1.3.0 a ticket is only shown to members of its groups -- super-admin
+        // included. Every getTicketsForKanban() assertion then saw an empty board.
+        global $DB;
+        $existing = $DB->request([
+            'FROM'  => 'glpi_tickets',
+            'WHERE' => ['name' => 'Erro de login - Portal cliente (Novo)'],
+        ])->count();
+        if ($existing === 0) {
+            kanban_plugin_create_test_tickets();
+        }
     }
 
     public function testRightNameIsPluginKanban(): void
@@ -1424,6 +1439,14 @@ class PluginKanbanKanbanTest extends TestCase
                 $tickets[] = $id;
                 if ($id > 0) {
                     $DB->update('glpi_tickets', ['status' => Ticket::PLANNED], ['id' => $id]);
+                    // Same gate as the undo test: the board only shows tickets
+                    // the user is responsible for, so the ticket has to be
+                    // assigned or the column totals come out empty.
+                    $DB->insert('glpi_tickets_users', [
+                        'tickets_id' => $id,
+                        'users_id'   => (int)Session::getLoginUserID(),
+                        'type'       => CommonITILActor::ASSIGN,
+                    ]);
                 }
             }
 
@@ -1439,6 +1462,7 @@ class PluginKanbanKanbanTest extends TestCase
         } finally {
             foreach ($tickets as $id) {
                 if ($id > 0) {
+                    $DB->delete('glpi_tickets_users', ['tickets_id' => $id]);
                     $DB->delete('glpi_tickets', ['id' => $id]);
                 }
             }
@@ -1486,27 +1510,73 @@ class PluginKanbanKanbanTest extends TestCase
 
     public function testCheckWipLimitBlocksOnlyWhenConfiguredToBlock(): void
     {
+        global $DB;
+
         $saved = \Config::getConfigurationValues('plugin:kanban');
+        $ticket_id = self::insertKanbanTestTicket('Kanban wip limit ticket');
+        $this->assertGreaterThan(0, $ticket_id);
+
         try {
-            \Config::setConfigurationValues('plugin:kanban', ['wip_limit' => 1, 'wip_block_exceed' => 1]);
+            $DB->update('glpi_tickets', ['status' => Ticket::PLANNED], ['id' => $ticket_id]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => (int)Session::getLoginUserID(),
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
 
-            $this->assertSame(1, PluginKanbanConfig::getWipLimit());
+            // checkWipLimit returns null to allow the move and a message to
+            // block it. The test owns the ticket in the column, so the limits can
+            // be derived from the real count: hardcoding 1 only ever worked by
+            // accident, and an assertNotNull on a column described as empty was
+            // really asserting the blocked branch.
+            $in_column = PluginKanbanKanban::countVisibleTicketsInStatus(Ticket::PLANNED);
+            $this->assertGreaterThanOrEqual(
+                1,
+                $in_column,
+                'The column must hold the ticket this test just created'
+            );
+
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'       => $in_column + 1,
+                'wip_block_exceed' => 1,
+            ]);
+            $this->assertSame($in_column + 1, PluginKanbanConfig::getWipLimit());
             $this->assertTrue(PluginKanbanConfig::getWipBlockExceed());
+            $this->assertNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::PLANNED),
+                'Below the limit the move is allowed'
+            );
 
-            // A closed status nobody uses is full once the limit is 1.
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'       => $in_column,
+                'wip_block_exceed' => 1,
+            ]);
             $this->assertNotNull(
-                PluginKanbanKanban::checkWipLimit(Ticket::CLOSED),
-                'With a limit of 1 and an empty column the first move is allowed'
+                PluginKanbanKanban::checkWipLimit(Ticket::PLANNED),
+                'At the limit the move is blocked'
             );
 
             \Config::setConfigurationValues('plugin:kanban', ['wip_limit' => 0, 'wip_block_exceed' => 1]);
             $this->assertSame(0, PluginKanbanConfig::getWipLimit());
-            $this->assertNull(PluginKanbanKanban::checkWipLimit(Ticket::CLOSED), 'Zero disables the limit');
+            $this->assertNull(PluginKanbanKanban::checkWipLimit(Ticket::PLANNED), 'Zero disables the limit');
+
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'       => $in_column,
+                'wip_block_exceed' => 0,
+            ]);
+            $this->assertNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::PLANNED),
+                'With blocking turned off a full column is still fine'
+            );
         } finally {
             \Config::setConfigurationValues('plugin:kanban', [
                 'wip_limit' => $saved['wip_limit'] ?? 0,
                 'wip_block_exceed' => $saved['wip_block_exceed'] ?? 0,
             ]);
+            if ($ticket_id > 0) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_id]);
+                $DB->delete('glpi_tickets', ['id' => $ticket_id]);
+            }
         }
     }
 

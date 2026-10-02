@@ -139,6 +139,8 @@ jobs:
         if: always()
         run: pwsh ./tests/e2e/test-visibility.ps1 -Versions ${{ matrix.glpi }} -Cleanup
 
+      # Depois do cleanup, e de proposito: a suite cria os proprios chamados e
+      # nao deve depender do cenario dos E2E.
       - name: PHPUnit suite
         if: matrix.glpi == 10
         run: |
