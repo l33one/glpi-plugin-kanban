@@ -136,9 +136,17 @@ function Invoke-Api {
     $code = ($raw -split "`n")[-1]
     $body = ($raw -split "`n")[0..($raw.Length - 2)] -join "`n"
 
+    # O GLPI prepende um BOM UTF-8 nas respostas de POST. O navegador nao sente
+    # nada (a decodificacao de UTF-8 descarta BOM) e o PowerShell 5.1 tambem,
+    # mas o pwsh 7 no Linux preserva o U+FEFF no texto capturado. Sem tirar
+    # aqui, o JSON nao e reconhecido, o csrf_token nao e renovado e o POST
+    # seguinte volta "Access denied" em HTML.
+    # TrimStart e usado em vez de regex porque "\uFEFF" so existe no PS 6+.
+    $body = $body.TrimStart([char]0xFEFF, [char]0x20, [char]0x09, [char]0x0D, [char]0x0A)
+
     $json = $null
-    if ($body -and ($body.TrimStart().StartsWith('{'))) {
-        try { $json = $body | ConvertFrom-Json } catch { $json = $null }
+    if ($body -and $body.StartsWith('{')) {
+        try { $json = $body | ConvertFrom-Json } catch { $json = null }
     }
 
     # A resposta traz um token novo para o proximo POST.

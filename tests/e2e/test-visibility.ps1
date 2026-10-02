@@ -123,7 +123,10 @@ function Get-BoardTitles {
     $raw = & $curl -s -b $jar -w "`n%{http_code}" ($endpoint + '?action=get_tickets')
     $code = ($raw -split "`n")[-1]
     $body = ($raw -split "`n")[0..($raw.Length - 2)] -join "`n"
-    $body = $body.TrimStart()
+    # TrimStart sem argumentos nao tira o BOM UTF-8, que o GLPI prepende nas
+    # respostas de POST e que o pwsh 7 no Linux preserva. Sem isso, o corpo nao
+    # comecaria com '{' e a resposta valida seria lida como pagina de erro.
+    $body = $body.TrimStart([char]0xFEFF, [char]0x20, [char]0x09, [char]0x0D, [char]0x0A)
 
     # A API nega com 403 e corpo JSON {success:false}: "nÃ£o Ã© JSON" sÃ³ detecta
     # a pÃ¡gina de erro do GLPI, nÃ£o a recusa da API.
@@ -164,7 +167,7 @@ function Get-FilterData {
     & $curl -s -o $nullDevice -b $jar -c $jar -d $data "$base$($f[2])" | Out-Null
 
     $raw = & $curl -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')
-    $body = ($raw -join "`n").TrimStart()
+    $body = ($raw -join "`n").TrimStart([char]0xFEFF, [char]0x20, [char]0x09, [char]0x0D, [char]0x0A)
     if (-not $body.StartsWith('{')) { return @{ 'blocked' = $true; 'requesters' = @() } }
     $json = $body | ConvertFrom-Json
     $names = @()
