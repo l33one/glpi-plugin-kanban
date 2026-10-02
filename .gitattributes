@@ -6,6 +6,7 @@
 /tools/                          export-ignore
 /docker/                         export-ignore
 /dist/                           export-ignore
+/.github/                        export-ignore
 /.env.example                    export-ignore
 /.gitattributes                  export-ignore
 /.gitignore                      export-ignore
@@ -16,6 +17,11 @@
 /test-plugin.ps1                 export-ignore
 /phpunit.xml.dist                export-ignore
 /prompt.md                       export-ignore
+/PLAN-*.md                   export-ignore
 
 # Binary assets are never rewritten by the export filter.
 /kanban.png       binary
+
+# Keep the catalogues LF everywhere: they are text formats compared line by
+# line, and core.autocrlf would otherwise rewrite them on Windows.
+/locales/*.po    text eol=lf

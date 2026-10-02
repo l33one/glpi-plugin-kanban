@@ -10,8 +10,8 @@
 #
 # The archive is produced with `git archive`, so the `export-ignore` rules in
 # .gitattributes decide what ships: tests/, tools/, docker/, docker-compose files,
-# .env.example, phpunit.xml.dist, test-plugin.ps1 and prompt.md are never
-# included. That is what keeps the CLI-only seeders and the local docker
+# .env.example, phpunit.xml.dist, test-plugin.ps1, prompt.md and PLAN-*.md are
+# never included. That is what keeps the CLI-only seeders and the local docker
 # credentials out of the published package.
 #
 # Output: <output-dir>/glpi-plugin-kanban-<version>.tar.bz2
@@ -83,7 +83,7 @@ if ! printf '%s\n' "$listing" | sed -n '1p' | grep -q '^kanban/$'; then
 fi
 
 if printf '%s\n' "$listing" \
-    | grep -Eq '^kanban/(tests/|tools/|docker/|docker-compose|create_test_tickets\.php|\.env\.example|phpunit\.xml\.dist|test-plugin\.ps1|prompt\.md)'; then
+    | grep -Eq '^kanban/(\.git|tests/|tools/|docker/|dist/|\.github/|docker-compose|create_test_tickets\.php|\.env\.example|phpunit\.xml\.dist|test-plugin\.ps1|prompt\.md|PLAN-.*\.md)'; then
     echo "erro: arquivos de desenvolvimento no pacote de release." >&2
     exit 1
 fi

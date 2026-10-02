@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: PHP syntax check
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            if ! php -l "$file" > /dev/null; then
+              php -l "$file"
+              status=1
+            fi
+          done < <(find . -path ./.git -prune -o -name '*.php' -print0)
+          exit $status
+
+      - name: JavaScript syntax check
+        run: |
+          status=0
+          while IFS= read -r -d '' file; do
+            if ! node --check "$file"; then
+              status=1
+            fi
+          done < <(find . -path ./.git -prune -o -name '*.js' -print0)
+          exit $status
+
+      - name: Plugin descriptor is well-formed
+        run: xmllint --noout kanban.xml
+
+      - name: Descriptor version matches the code and the asset name
+        run: |
+          xml_version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
+          php_version=$(php -r "define('PLUGIN_KANBAN_VERSION',''); \$c=file_get_contents('setup.php'); preg_match(\"/PLUGIN_KANBAN_VERSION',\s*'([^']+)'/\", \$c, \$m); echo \$m[1] ?? '';")
+          test -n "$xml_version" || { echo "kanban.xml has no <num>"; exit 1; }
+          test "$xml_version" = "$php_version" \
+            || { echo "kanban.xml=$xml_version but setup.php=$php_version"; exit 1; }
+          grep -q "glpi-plugin-kanban-$xml_version.tar.bz2" kanban.xml \
+            || { echo "download_url does not reference $xml_version"; exit 1; }
+          echo "version $xml_version is consistent"
+
+      - name: Every runtime string is in the catalogues
+        run: php tools/check-locales.php
+
+  package:
+    name: Release package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build the release archive
+        run: |
+          version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
+          # tools/build-release.sh requires the version to be the tip of the tree.
+          git tag -f "$version" HEAD
+          tools/build-release.sh "$version" dist
+
+      - name: Archive ships only runtime files
+        run: |
+          version=$(sed -n 's|.*<num>\(.*\)</num>.*|\1|p' kanban.xml | head -n 1)
+          archive="dist/glpi-plugin-kanban-$version.tar.bz2"
+          listing="$(tar -tf "$archive")"
+          for expected in kanban/setup.php kanban/hook.php kanban/kanban.xml \
+                          kanban/front/kanban.php kanban/front/api.php \
+                          kanban/inc/kanban.class.php kanban/inc/api.class.php \
+                          kanban/inc/filterpreset.class.php \
+                          kanban/locales/en_GB.po kanban/locales/pt_BR.po; do
+            printf '%s\n' "$listing" | grep -qx "$expected" \
+              || { echo "missing from the archive: $expected"; exit 1; }
+          done
+          if printf '%s\n' "$listing" \
+             | grep -Eq '^kanban/(tests/|tools/|docker/|dist/|\.github/|docker-compose|create_test_tickets\.php|\.env\.example|phpunit\.xml\.dist|test-plugin\.ps1|prompt\.md|PLAN-.*\.md)'; then
+            echo "development files found in the archive"
+            printf '%s\n' "$listing" | grep -E '^kanban/(tests/|tools/|docker/|\.github/)' || true
+            exit 1
+          fi
+          echo "archive is clean"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glpi-plugin-kanban-package
+          path: dist/*.tar.bz2
+
+  e2e:
+    name: E2E on GLPI ${{ matrix.glpi }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        glpi: [10, 11]
+    env:
+      KANBAN_TEST_PASS: kanban-ci-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the GLPI stack
+        run: docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml up -d --wait
+
+      - name: Wait for the GLPI installer
+        run: |
+          port=${{ matrix.glpi == 10 && 8090 || 8091 }}
+          for _ in $(seq 1 100); do
+            code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 5 "http://localhost:$port/" || true)
+            if [ "$code" = "200" ]; then echo "GLPI is up"; exit 0; fi
+            sleep 3
+          done
+          echo "GLPI did not become ready"
+          docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml logs --tail 100
+          exit 1
+
+      - name: Install and activate the plugin
+        run: |
+          docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml exec -T glpi \
+            php bin/console glpi:plugin:install kanban -u glpi
+          docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml exec -T glpi \
+            php bin/console glpi:plugin:activate kanban
+
+      - name: Board visibility and technician filter
+        run: |
+          pwsh ./tests/e2e/test-visibility.ps1 -Versions ${{ matrix.glpi }}
+          pwsh ./tests/e2e/test-technician-filter.ps1 -Versions ${{ matrix.glpi }}
+
+      - name: Board pagination, undo, WIP limits and saved views
+        run: pwsh ./tests/e2e/test-board-features.ps1 -Versions ${{ matrix.glpi }}
+
+      - name: Clean up the seeded scenario
+        if: always()
+        run: pwsh ./tests/e2e/test-visibility.ps1 -Versions ${{ matrix.glpi }} -Cleanup
+
+      - name: PHPUnit suite
+        if: matrix.glpi == 10
+        run: |
+          # Pinned to the exact build the suite was validated against, so a new
+          # release cannot change the result under our feet.
+          curl -sSL -o /tmp/phpunit-9.phar https://phar.phpunit.de/phpunit-9.6.35.phar
+          echo 'f39d634a5e5bcafd71565b33328ae4fb173703296c12ac94a24550cb8291e964  /tmp/phpunit-9.phar' | sha256sum -c -
+          docker compose -f docker-compose.glpi10.yml cp /tmp/phpunit-9.phar glpi:/tmp/phpunit-9.phar
+          docker compose -f docker-compose.glpi10.yml exec -T \
+            -e GLPI_ROOT=/var/www/glpi \
+            -e GLPI_CONFIG_DIR=/var/glpi/config \
+            glpi sh -c 'cd /var/www/glpi/plugins/kanban && php /tmp/phpunit-9.phar -c phpunit.xml.dist'
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml down -v
