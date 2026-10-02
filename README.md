@@ -22,8 +22,11 @@ Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de f
   * **Barra de SLA:** Indicador visual de progresso (verde/amarelo/vermelho) com contagem regressiva
   * Data de abertura, Técnico atribuído, Prioridade e Categoria
 * **Drag and Drop:** Mover cards entre colunas para alterar o status, com rollback otimista em caso de falha
+* **Desfazer movimento:** Notificação com ação para devolver o card à coluna anterior. O undo restaura **apenas o status**: o motivo de pendência e a solução registrados no movimento continuam no histórico do chamado. Pode ser desligado na configuração.
+* **Visões salvas:** Salve o conjunto de filtros atual com um nome e aplique-o depois. As visões ficam gravadas no servidor, vinculadas ao usuário, então acompanham o usuário entre navegadores e não se perdem ao limpar o armazenamento do navegador. O usuário que salvou gerencia as próprias visões; compartilhar uma visão com todos fica restrito a quem pode alterar a configuração do plugin.
+* **Limite de trabalho em progresso (WIP):** Defina um limite por coluna. Com o bloqueio ativado, a coluna no limite recusa novos chamados e o movimento é revertido com o motivo; sem ele, o limite apenas destaca a coluna. A contagem considera os chamados visíveis para o usuário e ignora os filtros ativos, porque o limite vale para a fila e não para a visão atual. O mesmo número aparece no cabeçalho da coluna.
 * **Responsivo:** Layout adaptativo para desktop, tablet e mobile (scroll horizontal com snap)
-* **Performance:** Limite de 200 chamados por status com debounce nos filtros
+* **Paginação por coluna:** As colunas carregam uma página de cards por vez (configurável, 1 a 200) com botão **Carregar mais**. O rodapé da coluna mostra o total real de chamados que atendem aos filtros e quantos estão na tela, então um total grande não é confundido com uma coluna cheia. As métricas do topo (SLA, atribuídos a mim, sem responsável) são calculadas sobre os cards carregados e marcadas como parciais quando há mais chamados além da página.
 
 ---
 
@@ -139,7 +142,7 @@ Dois níveis de teste são suportados, ambos validados contra **GLPI 10** e **GL
 
 ### Suíte PHPUnit (no GLPI 10)
 
-Roda dentro do container contra a instância real (57 testes: visibilidade, filtros, ordenação, SLA e regressões):
+Roda dentro do container contra a instância real (visibilidade, filtros, ordenação, SLA, paginação, WIP, undo e regressões):
 
 ```bash
 docker compose -f docker-compose.glpi10.yml exec -T \
@@ -171,6 +174,20 @@ $env:KANBAN_TEST_PASS='<senha-do-cenário>'
 .\tests\e2e\test-visibility.ps1 -Cleanup
 ```
 
+### E2E de recursos do quadro
+
+`tests/e2e/test-board-features.ps1` cobre o que não está no teste de visibilidade:
+paginação com total real por coluna, visões salvas (criar, reaplicar, apagar),
+desfazer movimento e limite de WIP. Precisa do cenário acima:
+
+```powershell
+.\tests\e2e\test-board-features.ps1
+```
+
+A suíte roda em CI nas matrizes GLPI 10 e 11 (`.github/workflows/ci.yml`), junto
+com o lint de PHP/JavaScript, a conferência do `kanban.xml`, a checagem das traduções
+e a construção do pacote.
+
 O cenário cria 2 perfis (com e sem o direito do plugin), 3 grupos (pai → subgrupo + grupo fora), gerente/membros/sem-grupo e 7 chamados (atribuídos a grupo, a usuário delegado, a subgrupo, a grupo externo, observador, etc.). As regras verificadas:
 
 | Usuário | Vê | Não vê |
@@ -192,15 +209,16 @@ kanban/
 ├── hook.php                   # Instalação/desinstalação
 ├── kanban.xml                 # Descriptor (versão, compatibilidade, download_url)
 ├── inc/
-│   ├── kanban.class.php       # Model principal: queries, filtros, SLA, visibilidade, direitos
+│   ├── kanban.class.php       # Model principal: queries, filtros, paginação, SLA, visibilidade, WIP, direitos
+│   ├── api.class.php          # Controller da API JSON: leitura/escrita, presets, undo
+│   ├── filterpreset.class.php # Visões salvas (CommonDBTM, glpi_kanban_filter_presets)
 │   ├── config.class.php       # Configuração via Config API do GLPI
 │   ├── menu.class.php         # Registro do menu no GLPI
 │   └── profile.class.php      # Aba de permissões no formulário de Perfil
 ├── front/
-│   ├── kanban.php             # Controller: página e endpoints AJAX
+│   ├── kanban.php             # Controller da página (renderiza o quadro)
+│   ├── api.php                # Endpoint JSON (front/api.php?action=...)
 │   └── config.php             # Página de configuração do plugin
-├── templates/
-│   └── kanban.html.twig       # Template Twig (server-side rendering)
 ├── public/
 │   ├── js/kanban.js           # Lógica frontend: drag-drop, filtros, countdown
 │   └── css/kanban.css         # Estilos customizados + responsivo
@@ -226,15 +244,16 @@ O pacote distribuível é gerado a partir de um **commit/tag** com `git archive`
 `.gitattributes` define o que entra nele:
 
 ```bash
-# após commitar, cria a tag 1.2.0 e gera o pacote
-git tag -a 1.2.0 -m "1.2.0"
-tools/build-release.sh            # ou: tools/build-release.sh 1.2.0 dist
-# -> dist/glpi-plugin-kanban-1.2.0.tar.bz2
+# após commitar, cria a tag <versão> e gera o pacote
+git tag -a 1.3.0 -m "1.3.0"
+tools/build-release.sh            # ou: tools/build-release.sh 1.3.0 dist
+# -> dist/glpi-plugin-kanban-1.3.0.tar.bz2
 ```
 
 Regras aplicadas em `.gitattributes` (`export-ignore`), que **excluem do pacote**:
-`tests/`, `tools/`, `docker/`, `docker-compose*.yml`, `create_test_tickets.php`,
-`.env.example`, `phpunit.xml.dist`, `test-plugin.ps1` e `prompt.md`.
+`tests/`, `tools/`, `docker/`, `dist/`, `.github/`, `docker-compose*.yml`,
+`create_test_tickets.php`, `.env.example`, `phpunit.xml.dist`, `test-plugin.ps1`,
+`prompt.md` e `PLAN-*.md`.
 
 O script falha (exit != 0) se a árvore tiver alterações não commitadas, se a versão
 não apontar para o `HEAD`, se o prefixo `kanban/` estiver ausente ou se qualquer
@@ -245,8 +264,10 @@ arquivo de desenvolvimento escapar para o pacote. O `download_url` publicado no
 
 ## 🔒 Segurança
 
-* **Autorização:** acesso à página e ao menu controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`
-* **Autorização por item:** toda escrita (`assign_to_me`, `change_priority`, `update_ticket_status`) valida a visibilidade do chamado no quadro (`isTicketVisible()`) **antes** de gravar, além de `Ticket::canUpdateItem()` — um perfil com leitura ampla (READALL) ou Super-Admin não contorna a regra de visibilidade do quadro
+* **Autorização:** acesso à página, ao menu e à API controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`. A API é o mesmo entrypoint para todos os verbos: `front/api.php` só aceita POST nas ações que alteram dados
+* **Visões salvas:** o dono cria, renomeia e apaga as próprias visões com o mesmo direito que abre o quadro, e o conteúdo gravado é apenas o conjunto de filtros que a pessoa já pode digitar no formulário. Compartilhar uma visão com todos exige `config` UPDATE, e editar a visão de outra pessoa também
+* **Autorização por item:** toda escrita (`assign_to_me`, `change_priority`, `update_ticket_status`, `undo_ticket_status`) valida a visibilidade do chamado no quadro (`isTicketVisible()`) **antes** de gravar, além de `Ticket::canUpdateItem()` — um perfil com leitura ampla (READALL) ou Super-Admin não contorna a regra de visibilidade do quadro
+* **WIP no servidor:** o limite é conferido em `updateTicketStatus()` e em `undoStatusChange()`, com a mesma contagem mostrada na coluna; a validação do JavaScript é só conforto de interface
 * **Auto-atribuição:** `assign_to_me` reproduz a regra do core (`Ticket::canAssignToMe()` ou `Ticket::canAssign()`, ou seja, `STEAL`, ou `OWN` em chamado ainda sem técnico) — `addTeamMember()` insere a linha em `glpi_tickets_users` sem nenhuma checagem
 * **Leitura de seguimentos:** `get_followups` exige `Ticket::canViewItem()` (checagem de entidade) e filtra cada acompanhamento com `ITILFollowup::canViewItem()` (`SEEPUBLIC`/`SEEPRIVATE`), além de esconder privados de outros autores
 * **SQL:** nenhum corpo de template de solução é copiado do banco para o `add()`; o plugin passa `_solutiontemplates_id` e deixa o core renderizar e escapar (`ITILSolution::prepareInputForAdd()`), o que é obrigatório no GLPI 10, onde o query builder não escapa valores
