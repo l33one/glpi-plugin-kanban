@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /**
  * -------------------------------------------------------------------------
@@ -264,7 +264,7 @@ class PluginKanbanKanban extends CommonGLPI {
             $criteria['WHERE']['tu_tech.users_id'] = $tech_id;
             $criteria['WHERE']['tu_tech.type'] = CommonITILActor::ASSIGN;
          } else {
-            // "No Technician" – tickets with no assigned technician
+            // "No Technician" â€“ tickets with no assigned technician
             $criteria['LEFT JOIN']['glpi_tickets_users AS tu_tech_none'] = [
                'ON' => [
                   't'              => 'id',
@@ -289,7 +289,7 @@ class PluginKanbanKanban extends CommonGLPI {
             $criteria['WHERE']['tu_req.users_id'] = $req_id;
             $criteria['WHERE']['tu_req.type'] = CommonITILActor::REQUESTER;
          } else {
-            // "No Requester" – tickets with no requester
+            // "No Requester" â€“ tickets with no requester
             $criteria['LEFT JOIN']['glpi_tickets_users AS tu_req_none'] = [
                'ON' => [
                   't'             => 'id',
@@ -318,7 +318,7 @@ class PluginKanbanKanban extends CommonGLPI {
             ];
             $criteria['WHERE']['gt.groups_id'] = array_values($group_ids);
          } else {
-            // "No Group" – tickets with no group assigned
+            // "No Group" â€“ tickets with no group assigned
             $criteria['LEFT JOIN']['glpi_groups_tickets AS gt_none'] = [
                'ON' => [
                   't'        => 'id',
@@ -371,7 +371,7 @@ class PluginKanbanKanban extends CommonGLPI {
                $criteria['WHERE']['t.type'] = $type;
             }
          } else {
-            // "No Type" – tickets with type = 0 or NULL
+            // "No Type" â€“ tickets with type = 0 or NULL
             $criteria['WHERE'][] = [
                'OR' => [
                   't.type' => 0,
@@ -393,7 +393,7 @@ class PluginKanbanKanban extends CommonGLPI {
             }
             $criteria['WHERE']['t.itilcategories_id'] = array_values($category_ids);
          } else {
-            // "No Category" – tickets with category = 0 or NULL
+            // "No Category" â€“ tickets with category = 0 or NULL
             $criteria['WHERE'][] = [
                'OR' => [
                   't.itilcategories_id' => 0,
@@ -589,8 +589,8 @@ class PluginKanbanKanban extends CommonGLPI {
     /**
      * Sanitize a rich-text field (ticket/followup content) server-side.
      *
-     * Uses GLPI's own sanitizer — the same one the core applies when rendering
-     * stored HTML — so untrusted content never reaches the browser as live
+     * Uses GLPI's own sanitizer â€” the same one the core applies when rendering
+     * stored HTML â€” so untrusted content never reaches the browser as live
      * markup. No client-side sanitizer is required.
      *
      * @param mixed $value Raw stored value (may be null)
@@ -815,75 +815,64 @@ class PluginKanbanKanban extends CommonGLPI {
 /**
       * Get list of requesters for filter dropdown.
       *
-      * Only active users of the caller's active entities who actually appear
-      * as requesters (type REQUESTER) on at least one ticket are returned, so
-      * the board never discloses accounts from unrelated entities.
-      *
-      * @return array Array of ['id' => int, 'name' => string]
-      */
+* Only the requesters of the tickets visible on this board are returned,
+       * so the dropdown matches the cards the user is looking at. It never
+       * discloses the whole user directory: a user only shows up here if they
+       * are the requester of at least one ticket the caller can see.
+       *
+       * @return array Array of ['id' => int, 'name' => string]
+       */
     public static function getRequestersForFilter(): array {
-       global $DB;
-       $requesters = [];
-       // Never expose the whole user directory: the list is restricted to users
-       // that hold a profile in the caller's active entities AND that actually
-       // appear as requesters on a ticket the caller is allowed to see.
-       $criteria = [
-          'SELECT'     => ['u.id', 'u.realname', 'u.firstname'],
-          'FROM'       => 'glpi_users AS u',
-          'INNER JOIN' => [
-             'glpi_tickets_users AS tu' => [
-                'ON' => [
-                   'u'  => 'id',
-                   'tu' => 'users_id'
-                ]
-             ],
-             'glpi_tickets AS t' => [
-                'ON' => [
-                   'tu' => 'tickets_id',
-                   't'  => 'id'
-                ]
-             ],
-             'glpi_profiles_users AS pu' => [
-                'ON' => [
-                   'u'  => 'id',
-                   'pu' => 'users_id'
-                ]
-             ]
-          ],
-          'WHERE'  => [
-             'u.is_deleted' => 0,
-             'u.is_active'  => 1,
-             'tu.type'      => CommonITILActor::REQUESTER,
-          ],
-          'DISTINCT' => true,
-          'ORDER'    => 'realname ASC',
-          'LIMIT'    => 500
-       ];
-        $active_entities = $_SESSION['glpiactiveentities'] ?? [0];
-        $entity_restriction = getEntitiesRestrictCriteria('u', 'entities_id', $active_entities, true);
-        if (!empty($entity_restriction)) {
-           $criteria['WHERE'][] = $entity_restriction;
-        }
-        // The profile assignment must live in an active entity as well, otherwise a
-        // user who only holds a profile elsewhere would still be disclosed.
-        $profile_entity_restriction = getEntitiesRestrictCriteria('pu', 'entities_id', $active_entities, true);
-        if (!empty($profile_entity_restriction)) {
-           $criteria['WHERE'][] = $profile_entity_restriction;
-        }
-        // Only requesters of tickets visible on this board.
-        $visibility = self::getTicketVisibilityCriteria();
-        if ($visibility !== null) {
-           $criteria['WHERE'][] = $visibility;
-        }
-        $iterator = $DB->request($criteria);
-        foreach ($iterator as $user) {
-           $requesters[] = [
-              'id'   => (int)$user['id'],
-              'name' => self::decodeStoredValue(getUserName($user['id']))
-           ];
-        }
-        self::sortUsersByName($requesters);
-        return $requesters;
+      global $DB;
+
+      // The list is the requesters of the tickets this board would show, taken
+      // from the board's own criteria. It used to be a separate query against
+      // glpi_users carrying two restrictions the board does not have:
+      // u.entities_id and pu.entities_id had to fall inside the active
+      // entities. In a multi-entity install that silently emptied the dropdown
+      // while the board stayed full: a requester holding their profile in the
+      // parent entity, or with no profile row at all, was dropped even though
+      // their ticket was right there on the board. Reading the list off
+      // buildBoardCriteria() makes that disagreement impossible.
+      $criteria = self::buildBoardCriteria([], ['by' => 'date', 'order' => 'DESC']);
+      if (empty($criteria)) {
+         return [];
+      }
+
+      $criteria['INNER JOIN']['glpi_tickets_users AS tu_req'] = [
+         'ON' => [
+            't'      => 'id',
+            'tu_req' => 'tickets_id',
+            ['AND' => ['tu_req.type' => CommonITILActor::REQUESTER]],
+         ],
+      ];
+      $criteria['INNER JOIN']['glpi_users AS u'] = [
+         'ON' => [
+            'tu_req' => 'users_id',
+            'u'      => 'id',
+         ],
+      ];
+
+      // No is_active/is_deleted filter: the board shows a ticket whose
+      // requester was deactivated or removed, and the dropdown has to offer the
+      // same person the card already shows. Naming and ordering are done in
+      // PHP, so the database only needs a cheap order to keep the LIMIT stable.
+      $criteria['SELECT']   = ['u.id'];
+      $criteria['DISTINCT'] = true;
+      $criteria['ORDER']    = ['u.realname ASC', 'u.firstname ASC', 'u.id ASC'];
+      $criteria['LIMIT']    = 500;
+
+      $requesters = [];
+      $iterator = $DB->request($criteria);
+      foreach ($iterator as $row) {
+         $user_id = (int)$row['id'];
+         $requesters[] = [
+            'id'   => $user_id,
+            'name' => self::decodeStoredValue(getUserName($user_id))
+         ];
+      }
+      self::sortUsersByName($requesters);
+      return $requesters;
     }
 
     /**
@@ -1277,7 +1266,7 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
    /**
-    * Compute key indicators ("gestão à vista") from the tickets currently
+    * Compute key indicators ("gestÃ£o Ã  vista") from the tickets currently
     * displayed on the board (already filtered by the active filters).
     *
     * `total` comes from the per-column totals (see getBoardData()), so it

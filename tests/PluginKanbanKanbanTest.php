@@ -469,6 +469,52 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    public function testGetRequestersForFilterListsRequestersOfVisibleTickets(): void
+    {
+        global $DB;
+
+        // Reproduces the production report: the board was full but the
+        // requester dropdown was empty. The old query required the requester to
+        // hold a profile (and a user row) inside the caller's active entities,
+        // which multi-entity installations do not satisfy -- the profile sits in
+        // the parent entity, or there is no profile row at all. The list must
+        // come from the tickets the board shows, nothing else.
+        $requester_id = self::insertKanbanTestUser('Requerente Sem Perfil');
+        $this->assertGreaterThan(0, $requester_id);
+
+        $profiles = $DB->request([
+            'FROM'  => 'glpi_profiles_users',
+            'WHERE' => ['users_id' => $requester_id],
+        ])->count();
+        $this->assertSame(0, (int)$profiles, 'The fixture must have no profile, that is the whole point');
+
+        $ticket_id = self::insertKanbanTestTicket('Kanban requester filter ticket');
+        $this->assertGreaterThan(0, $ticket_id);
+
+        try {
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => (int)Session::getLoginUserID(),
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => $requester_id,
+                'type'       => CommonITILActor::REQUESTER,
+            ]);
+
+            $ids = array_column(PluginKanbanKanban::getRequestersForFilter(), 'id');
+            $this->assertContains(
+                $requester_id,
+                $ids,
+                'A requester of a visible ticket must be offered, profile or not'
+            );
+        } finally {
+            $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_id]);
+            $DB->delete('glpi_tickets', ['id' => $ticket_id]);
+        }
+    }
+
     public function testGetTicketDetailReturnsTicketData(): void
     {
         $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
