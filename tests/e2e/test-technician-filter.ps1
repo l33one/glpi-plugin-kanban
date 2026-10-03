@@ -133,6 +133,7 @@ function Get-FilterData {
 
     $raw = (& $curl -s -b $jar ($base + '/plugins/kanban/front/api.php?action=get_filter_data')) -join "`n"
     if (-not $raw) { return @() }
+    if ($raw.Length -gt 0 -and $raw[0] -eq [char]0xFEFF) { $raw = $raw.Substring(1) }
     $json = $raw | ConvertFrom-Json
     $techs = @()
     foreach ($t in $json.technicians) { $techs += [pscustomobject]@{ id = $t.id; name = $t.name } }
