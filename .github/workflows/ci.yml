@@ -17,6 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
@@ -42,6 +46,9 @@ jobs:
             fi
           done < <(find . -path ./.git -prune -o -name '*.js' -print0)
           exit $status
+
+      - name: JavaScript helper tests
+        run: node --test tests/js/kanban.utils.test.js
 
       - name: Plugin descriptor is valid and matches the code
         run: php tools/check-descriptor.php
@@ -76,6 +83,7 @@ jobs:
                           kanban/front/kanban.php kanban/front/api.php \
                           kanban/inc/kanban.class.php kanban/inc/api.class.php \
                           kanban/inc/filterpreset.class.php \
+                          kanban/public/js/kanban.utils.js \
                           kanban/locales/en_GB.po kanban/locales/pt_BR.po; do
             printf '%s\n' "$listing" | grep -qx "$expected" \
               || { echo "missing from the archive: $expected"; exit 1; }

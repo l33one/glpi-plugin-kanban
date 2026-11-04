@@ -56,7 +56,7 @@ function plugin_init_kanban() {
 
       // Load CSS and JS assets in the plugin page
       $PLUGIN_HOOKS['add_css']['kanban']      = ['public/css/kanban.css'];
-      $PLUGIN_HOOKS['add_javascript']['kanban'] = ['public/js/kanban.js'];
+      $PLUGIN_HOOKS['add_javascript']['kanban'] = ['public/js/kanban.utils.js', 'public/js/kanban.js'];
 
       // Saved board views live in their own table (created by the install
       // migration and declared here so GLPI installs/updates it).

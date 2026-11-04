@@ -219,26 +219,6 @@ function getStatusColorStyle(si) {
  * that order separately; statuses missing from it are appended in native
  * order so a status added by a newer GLPI never disappears from the board.
  */
-function getOrderedStatusEntries(statuses) {
-   const order = Array.isArray(window.KANBAN_STATUS_ORDER) ? window.KANBAN_STATUS_ORDER : [];
-   const entries = [];
-   const seen = new Set();
-
-   for (const rawId of order) {
-      const id = String(rawId);
-      if (Object.prototype.hasOwnProperty.call(statuses, id) && !seen.has(id)) {
-         entries.push([id, statuses[id]]);
-         seen.add(id);
-      }
-   }
-   for (const [id, status] of Object.entries(statuses)) {
-      if (!seen.has(id)) {
-         entries.push([id, status]);
-      }
-   }
-   return entries;
-}
-
 function renderBoardColumns() {
        if (!getBoardContainer()) return;
 
@@ -252,7 +232,7 @@ function renderBoardColumns() {
        };
 
         let boardHtml = '';
-       for (const [id, status] of getOrderedStatusEntries(statuses)) { status.id = id;
+       for (const [id, status] of KanbanUtils.getOrderedStatusEntries(statuses, window.KANBAN_STATUS_ORDER)) { status.id = id;
           const statusClass = statusColors[status.id] || 'secondary';
           const statusIcon = statusIcons[status.id] || defaultStatusIcon;
           boardHtml += `
@@ -434,7 +414,7 @@ function renderBoardColumns() {
        header.textContent = lang.columns || 'Columns';
        menu.appendChild(header);
 
-       for (const [id, status] of getOrderedStatusEntries(statuses)) {
+       for (const [id, status] of KanbanUtils.getOrderedStatusEntries(statuses, window.KANBAN_STATUS_ORDER)) {
           const li = document.createElement('li');
           const label = document.createElement('label');
           label.className = 'dropdown-item kanban-column-toggle';
