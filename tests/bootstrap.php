@@ -4,7 +4,12 @@
  *
  * This bootstrap initializes the full GLPI environment (DB, session, plugin
  * autoloading) so that unit tests can exercise the plugin classes against a
- * real GLPI 10 instance.
+ * real GLPI instance.
+ *
+ * GLPI 10 and GLPI 11 are bootstrapped differently: GLPI 10 exposes everything
+ * through inc/includes.php, while GLPI 11 boots a Symfony kernel. The version is
+ * detected from the presence of src/Glpi/Kernel, not from a version constant,
+ * because GLPI_ROOT is only defined by GLPI 11's autoloader.
  *
  * The GLPI root directory can be configured via the GLPI_ROOT environment
  * variable. If not set, it falls back to a standard Linux path and then
@@ -31,51 +36,116 @@ if (!$glpi_root) {
 if (!$glpi_root) {
     $glpi_root = '/var/www/html/glpi';
 }
+$glpi_root = rtrim($glpi_root, '/\\');
 
-define('GLPI_ROOT', rtrim($glpi_root, '/\\'));
-// GLPI_CONFIG_DIR can point elsewhere (e.g. the official glpi/glpi docker image keeps
-// config under /var/glpi/config). Falls back to the classic GLPI_ROOT/config layout.
-define('GLPI_CONFIG_DIR', getenv('GLPI_CONFIG_DIR') ?: GLPI_ROOT . '/config');
-define('GLPI_VAR_DIR', GLPI_ROOT . '/files/_tests');
-define('GLPI_CRON_DIR', GLPI_VAR_DIR . '/cron');
-define('GLPI_LOG_DIR', GLPI_VAR_DIR . '/logs');
-define('GLPI_DUMP_DIR', GLPI_VAR_DIR . '/dump');
-define('GLPI_PICTURE_DIR', GLPI_VAR_DIR . '/pictures');
-define('GLPI_TMP_DIR', GLPI_VAR_DIR . '/tmp');
-define('GLPI_CACHE_DIR', GLPI_VAR_DIR . '/cache');
-define('GLPI_SESSION_DIR', GLPI_VAR_DIR . '/sessions');
-define('GLPI_MARKETPLACE_DIR', GLPI_ROOT . '/marketplace');
-define('PLUGINS_DIRECTORIES', [
-    GLPI_ROOT . '/plugins',
-    GLPI_ROOT . '/marketplace',
-]);
+// GLPI 11 replaced inc/includes.php with a Symfony kernel; on that version the
+// file is a stub and requiring it leaves every GLPI class undefined. Detect the
+// version from the kernel directory, not from a constant: GLPI_ROOT is only
+// defined by GLPI 11's autoloader.
+$is_glpi11 = is_dir($glpi_root . '/src/Glpi/Kernel');
 
-if (!file_exists(GLPI_VAR_DIR)) {
-    mkdir(GLPI_VAR_DIR, 0777, true);
-}
-// compact() only resolves variables, so the constants have to be listed here:
-// the loop below never ran and GLPI had to create the directories itself.
-$test_dirs = [
-    GLPI_CRON_DIR,
-    GLPI_LOG_DIR,
-    GLPI_DUMP_DIR,
-    GLPI_PICTURE_DIR,
-    GLPI_TMP_DIR,
-    GLPI_CACHE_DIR,
-    GLPI_SESSION_DIR,
-];
-foreach ($test_dirs as $dir) {
-    if (!file_exists($dir)) {
-        mkdir($dir, 0777, true);
+if ($is_glpi11) {
+    // TU_USER must be defined before the autoloader runs: SystemConfigurator
+    // skips config/local_define.php and inc/downstream.php when it is already
+    // set, which is exactly what a test run wants.
+    define('TU_USER', 'kanban-tests');
+
+    // GLPI_ROOT is defined by the autoloader itself (src/autoload/constants.php),
+    // so it must not be defined beforehand.
+    require_once $glpi_root . '/vendor/autoload.php';
+
+    // Keep the test files out of the instance's own var directory. These
+    // constants have to exist before the kernel is built: SystemConfigurator
+    // only fills in the ones that are still undefined.
+    define('GLPI_VAR_DIR', GLPI_ROOT . '/files/_tests');
+    define('GLPI_CRON_DIR', GLPI_VAR_DIR . '/cron');
+    define('GLPI_LOG_DIR', GLPI_VAR_DIR . '/logs');
+    define('GLPI_DUMP_DIR', GLPI_VAR_DIR . '/dump');
+    define('GLPI_PICTURE_DIR', GLPI_VAR_DIR . '/pictures');
+    define('GLPI_TMP_DIR', GLPI_VAR_DIR . '/tmp');
+    define('GLPI_CACHE_DIR', GLPI_VAR_DIR . '/cache');
+    define('GLPI_SESSION_DIR', GLPI_VAR_DIR . '/sessions');
+
+    // GLPI_USE_CSRF_CHECK and PLUGINS_DIRECTORIES are obsolete in GLPI 11 and
+    // only raise deprecation warnings, so they are intentionally not defined.
+
+    $test_dirs = [
+        GLPI_VAR_DIR,
+        GLPI_CRON_DIR,
+        GLPI_LOG_DIR,
+        GLPI_DUMP_DIR,
+        GLPI_PICTURE_DIR,
+        GLPI_TMP_DIR,
+        GLPI_CACHE_DIR,
+        GLPI_SESSION_DIR,
+    ];
+    foreach ($test_dirs as $dir) {
+        if (!file_exists($dir)) {
+            mkdir($dir, 0777, true);
+        }
     }
+
+    // `global` keeps the kernel reachable even when PHPUnit includes this file
+    // from inside a method instead of at global scope.
+    global $kernel;
+    $kernel = new \Glpi\Kernel\Kernel();
+    $kernel->boot();
+
+    // In CLI the kernel is stateless and deliberately does not start a session.
+    // Start it here: PHPUnit loads this bootstrap before it prints anything, so
+    // the session exists before output begins. Starting it later from a test
+    // fails with "Session cannot be started after headers have already been
+    // sent", because PHPUnit has already written its banner by then.
+    if (\Session::canWriteSessionFiles()) {
+        \Session::setPath();
+    }
+    \Session::start();
+} else {
+    define('GLPI_ROOT', $glpi_root);
+    // GLPI_CONFIG_DIR can point elsewhere (e.g. the official glpi/glpi docker image keeps
+    // config under /var/glpi/config). Falls back to the classic GLPI_ROOT/config layout.
+    define('GLPI_CONFIG_DIR', getenv('GLPI_CONFIG_DIR') ?: GLPI_ROOT . '/config');
+    define('GLPI_VAR_DIR', GLPI_ROOT . '/files/_tests');
+    define('GLPI_CRON_DIR', GLPI_VAR_DIR . '/cron');
+    define('GLPI_LOG_DIR', GLPI_VAR_DIR . '/logs');
+    define('GLPI_DUMP_DIR', GLPI_VAR_DIR . '/dump');
+    define('GLPI_PICTURE_DIR', GLPI_VAR_DIR . '/pictures');
+    define('GLPI_TMP_DIR', GLPI_VAR_DIR . '/tmp');
+    define('GLPI_CACHE_DIR', GLPI_VAR_DIR . '/cache');
+    define('GLPI_SESSION_DIR', GLPI_VAR_DIR . '/sessions');
+    define('GLPI_MARKETPLACE_DIR', GLPI_ROOT . '/marketplace');
+    define('PLUGINS_DIRECTORIES', [
+        GLPI_ROOT . '/plugins',
+        GLPI_ROOT . '/marketplace',
+    ]);
+
+    if (!file_exists(GLPI_VAR_DIR)) {
+        mkdir(GLPI_VAR_DIR, 0777, true);
+    }
+    // compact() only resolves variables, so the constants have to be listed here:
+    // the loop below never ran and GLPI had to create the directories itself.
+    $test_dirs = [
+        GLPI_CRON_DIR,
+        GLPI_LOG_DIR,
+        GLPI_DUMP_DIR,
+        GLPI_PICTURE_DIR,
+        GLPI_TMP_DIR,
+        GLPI_CACHE_DIR,
+        GLPI_SESSION_DIR,
+    ];
+    foreach ($test_dirs as $dir) {
+        if (!file_exists($dir)) {
+            mkdir($dir, 0777, true);
+        }
+    }
+
+    define('GLPI_USE_CSRF_CHECK', 0);
+
+    // Indicates we are running in a test suite context (avoids session_id regeneration issues).
+    define('TU_USER', 'kanban-tests');
+
+    require_once GLPI_ROOT . '/inc/includes.php';
 }
-
-define('GLPI_USE_CSRF_CHECK', 0);
-
-// Indicates we are running in a test suite context (avoids session_id regeneration issues).
-define('TU_USER', 'kanban-tests');
-
-require_once GLPI_ROOT . '/inc/includes.php';
 
 /**
  * Create test tickets for the Kanban plugin tests.

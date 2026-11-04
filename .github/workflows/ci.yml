@@ -150,14 +150,13 @@ jobs:
       # Depois do cleanup, e de proposito: a suite cria os proprios chamados e
       # nao deve depender do cenario dos E2E.
       - name: PHPUnit suite
-        if: matrix.glpi == 10
         run: |
           # Pinned to the exact build the suite was validated against, so a new
           # release cannot change the result under our feet.
           curl -sSL -o /tmp/phpunit-9.phar https://phar.phpunit.de/phpunit-9.6.35.phar
           echo 'f39d634a5e5bcafd71565b33328ae4fb173703296c12ac94a24550cb8291e964  /tmp/phpunit-9.phar' | sha256sum -c -
-          docker compose -f docker-compose.glpi10.yml cp /tmp/phpunit-9.phar glpi:/tmp/phpunit-9.phar
-          docker compose -f docker-compose.glpi10.yml exec -T \
+          docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml cp /tmp/phpunit-9.phar glpi:/tmp/phpunit-9.phar
+          docker compose -f docker-compose.glpi${{ matrix.glpi }}.yml exec -T \
             -e GLPI_ROOT=/var/www/glpi \
             -e GLPI_CONFIG_DIR=/var/glpi/config \
             glpi sh -c 'cd /var/www/glpi/plugins/kanban && php /tmp/phpunit-9.phar -c phpunit.xml.dist'

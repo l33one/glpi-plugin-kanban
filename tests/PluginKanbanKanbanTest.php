@@ -546,9 +546,11 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
-     * Regression test: GLPI stores user input sanitized (numeric HTML entities
-     * such as "&#62;" for ">"). Fields read via raw SQL must be unsanitized on
-     * output, otherwise titles show "&#62;" and descriptions show raw HTML.
+     * Regression test: GLPI 10 stores user input sanitized (numeric HTML entities
+     * such as "&#62;" for ">") and the plugin must unsanitize it on output, while
+     * GLPI 11 stores raw values and escapes them at render time. The fixture has
+     * to reproduce the storage of the version under test, otherwise it would be
+     * asserting GLPI 10's storage format on GLPI 11.
      */
     public function testTicketTitleAndContentAreUnsanitized(): void
     {
@@ -556,13 +558,19 @@ class PluginKanbanKanbanTest extends TestCase
 
         $tid = 0;
 
+        $title   = 'Falha no backup > verificar & corrigir';
+        $content = '<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>';
+        $glpi10  = version_compare((string)GLPI_VERSION, '11.0.0', '<');
+        $stored_title   = $glpi10 ? \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars($title) : $title;
+        $stored_content = $glpi10 ? \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars($content) : $content;
+
         $saved_entities = $_SESSION['glpiactiveentities'] ?? null;
 
         try {
             $now = date('Y-m-d H:i:s');
             $DB->insert('glpi_tickets', [
-                'name' => \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars('Falha no backup > verificar & corrigir'),
-                'content' => \Glpi\Toolbox\Sanitizer::encodeHtmlSpecialChars('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>'),
+                'name' => $stored_title,
+                'content' => $stored_content,
                 'status' => 1,
                 'priority' => 3,
                 'urgency' => 2,
@@ -583,7 +591,7 @@ class PluginKanbanKanbanTest extends TestCase
             foreach ($DB->request([
                 'SELECT' => ['id'],
                 'FROM' => 'glpi_tickets',
-                'WHERE' => ['name' => 'Falha no backup &#62; verificar &#38; corrigir'],
+                'WHERE' => ['name' => $stored_title],
             ]) as $row) {
                 $tid = (int)$row['id'];
             }
@@ -594,8 +602,8 @@ class PluginKanbanKanbanTest extends TestCase
 
             $detail = PluginKanbanKanban::getTicketDetail($tid);
             $this->assertNotNull($detail);
-            $this->assertSame('Falha no backup > verificar & corrigir', $detail['title']);
-            $this->assertSame('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>', $detail['content']);
+            $this->assertSame($title, $detail['title']);
+            $this->assertSame($content, $detail['content']);
 
             $result = PluginKanbanKanban::getTicketsForKanban([], [], 100);
             $found = null;
@@ -607,8 +615,8 @@ class PluginKanbanKanbanTest extends TestCase
                 }
             }
             $this->assertNotNull($found, 'Sanitized-title ticket must appear on the board');
-            $this->assertSame('Falha no backup > verificar & corrigir', $found['title']);
-            $this->assertSame('<p>Falha no <b>backup</b> noturno &amp; nos logs.</p>', $found['content']);
+            $this->assertSame($title, $found['title']);
+            $this->assertSame($content, $found['content']);
         } finally {
             if ($tid > 0) {
                 $DB->delete('glpi_tickets_users', ['tickets_id' => $tid]);
@@ -1905,6 +1913,25 @@ class PluginKanbanKanbanTest extends TestCase
     {
         global $DB;
 
+        $lookup = static function () use ($DB, $name): int {
+            foreach ($DB->request([
+                'SELECT' => ['id'],
+                'FROM' => 'glpi_users',
+                'WHERE' => ['name' => $name],
+            ]) as $row) {
+                return (int)$row['id'];
+            }
+            return 0;
+        };
+
+        // Reuse a user left by a previous run: GLPI 11 throws on a duplicate
+        // insert where GLPI 10 only printed a SQL error, so rerunning the suite
+        // against the same database would otherwise abort the test.
+        $existing = $lookup();
+        if ($existing > 0) {
+            return $existing;
+        }
+
         $DB->insert('glpi_users', [
             'name' => $name,
             'password' => Auth::getPasswordHash('kanban-test-pass'),
@@ -1914,15 +1941,7 @@ class PluginKanbanKanbanTest extends TestCase
             'is_deleted' => 0,
         ]);
 
-        $id = null;
-        foreach ($DB->request([
-            'SELECT' => ['id'],
-            'FROM' => 'glpi_users',
-            'WHERE' => ['name' => $name],
-        ]) as $row) {
-            $id = (int)$row['id'];
-        }
-        return $id ?? 0;
+        return $lookup();
     }
 
     /**
