@@ -25,6 +25,7 @@ class PluginKanbanConfig extends CommonGLPI {
          'require_solution_type'    => false,
          'cards_per_column'         => 50,
          'wip_limit'                => 0,
+         'wip_limits'               => [],
          'wip_block_exceed'         => false,
          'enable_undo'              => true,
       ];
@@ -34,9 +35,11 @@ class PluginKanbanConfig extends CommonGLPI {
          if (isset($stored[$key])) {
             // GLPI stores config values as strings; arrays are serialized
             // (exportArrayToDB). Scalars (like the drag & drop flag) stay plain.
+            // A list is stored as a JSON array ([]) and a map (like wip_limits)
+            // as a JSON object ({}), so both prefixes must be decoded.
             $value = $stored[$key];
             $cfg[$key] = (is_array($value)
-               || (is_string($value) && (str_starts_with($value, '[') || str_starts_with($value, 'a:'))))
+               || (is_string($value) && (str_starts_with($value, '[') || str_starts_with($value, '{') || str_starts_with($value, 'a:'))))
                ? importArrayFromDB($value)
                : $value;
          }
@@ -135,6 +138,89 @@ class PluginKanbanConfig extends CommonGLPI {
    }
 
    /**
+    * Explicit work-in-progress limits, keyed by status id.
+    *
+    * A missing status falls back to the global getWipLimit(). A stored 0 means
+    * "this column has no limit", which is how an administrator turns the limit
+    * off for one column while keeping it elsewhere.
+    *
+    * @return array<int, int> status id => limit (0 = unlimited)
+    */
+   public static function getWipLimits(): array {
+      $cfg = self::load();
+      $stored = $cfg['wip_limits'] ?? [];
+      if (!is_array($stored)) {
+         return [];
+      }
+
+      $limits = [];
+      foreach ($stored as $status_id => $value) {
+         $status_id = (int)$status_id;
+         if ($status_id <= 0) {
+            continue;
+         }
+         $limits[$status_id] = max(0, min(10000, (int)$value));
+      }
+      return $limits;
+   }
+
+   /**
+    * Effective work-in-progress limit of a column.
+    *
+    * @param int $status Status id.
+    * @return int Limit, or 0 when the column has no limit.
+    */
+   public static function getWipLimitForStatus(int $status): int {
+      $limits = self::getWipLimits();
+      if (array_key_exists($status, $limits)) {
+         return $limits[$status];
+      }
+      return self::getWipLimit();
+   }
+
+   /**
+    * Whether any work-in-progress limit is configured (global or per column).
+    */
+   public static function hasWipLimits(): bool {
+      if (self::getWipLimit() > 0) {
+         return true;
+      }
+      foreach (self::getWipLimits() as $limit) {
+         if ($limit > 0) {
+            return true;
+         }
+      }
+      return false;
+   }
+
+   /**
+    * Sanitize the per-column limits submitted by the configuration form.
+    *
+    * An empty field means "use the global limit" and is omitted; an explicit 0
+    * is kept because it disables the limit for that column. Unknown status ids
+    * are dropped so a hand-built POST cannot grow the stored map forever.
+    *
+    * @param array $raw Raw $_POST['wip_limits'] payload.
+    * @return array<int, int> status id => limit (0 = unlimited)
+    */
+   public static function sanitizeWipLimits(array $raw): array {
+      $known = array_keys(Ticket::getAllStatusArray());
+      $limits = [];
+      foreach ($raw as $status_id => $value) {
+         $status_id = (int)$status_id;
+         if ($status_id <= 0 || !in_array($status_id, $known, true)) {
+            continue;
+         }
+         $value = trim((string)$value);
+         if ($value === '') {
+            continue;
+         }
+         $limits[$status_id] = max(0, min(10000, (int)$value));
+      }
+      return $limits;
+   }
+
+   /**
     * Whether reaching the work-in-progress limit only warns (false) or refuses
     * the move (true).
     */
@@ -209,6 +295,11 @@ class PluginKanbanConfig extends CommonGLPI {
          $wip_limit = (int)($_POST['wip_limit'] ?? 0);
          $wip_limit = $wip_limit > 0 ? min(10000, $wip_limit) : 0;
 
+         // Per-column limits. An empty field means "use the global limit"; an
+         // explicit 0 means "no limit for this column".
+         $wip_limits_raw = $_POST['wip_limits'] ?? [];
+         $wip_limits = self::sanitizeWipLimits(is_array($wip_limits_raw) ? $wip_limits_raw : []);
+
          $success = self::save([
             'refresh_options'        => array_values($refresh_values),
             'status_order'           => $order_values,
@@ -218,6 +309,7 @@ class PluginKanbanConfig extends CommonGLPI {
             'require_solution_type'  => self::readSwitch('require_solution_type') ? 1 : 0,
             'cards_per_column'       => $cards_per_column,
             'wip_limit'              => $wip_limit,
+            'wip_limits'             => $wip_limits,
             'wip_block_exceed'       => self::readSwitch('wip_block_exceed') ? 1 : 0,
             'enable_undo'            => self::readSwitch('enable_undo') ? 1 : 0,
          ]);
@@ -235,6 +327,7 @@ class PluginKanbanConfig extends CommonGLPI {
       $require_type    = !empty($cfg['require_solution_type']);
       $cards_per_column = self::getCardsPerColumn();
       $wip_limit        = self::getWipLimit();
+      $wip_limits       = self::getWipLimits();
       $wip_block        = !empty($cfg['wip_block_exceed']);
       $undo_enabled     = !empty($cfg['enable_undo']);
 
@@ -425,6 +518,32 @@ class PluginKanbanConfig extends CommonGLPI {
                             value="<?php echo $wip_limit; ?>">
                      <div class="form-text">
                         <?php echo __('Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view.', 'kanban'); ?>
+                     </div>
+                  </div>
+
+                  <div class="mb-3">
+                     <label class="form-label fw-semibold">
+                        <?php echo __('Limit per column', 'kanban'); ?>
+                     </label>
+                     <div class="form-text mb-2">
+                        <?php echo __('Leave empty to use the global limit above. Zero means no limit for that column.', 'kanban'); ?>
+                     </div>
+                     <div class="row g-2">
+                        <?php foreach (Ticket::getAllStatusArray() as $status_id => $status_name): ?>
+                           <div class="col-12 col-sm-6">
+                              <label class="form-label small mb-1" for="wip_limit_<?php echo (int)$status_id; ?>">
+                                 <?php echo htmlspecialchars($status_name); ?>
+                              </label>
+                              <input type="number"
+                                     class="form-control"
+                                     id="wip_limit_<?php echo (int)$status_id; ?>"
+                                     name="wip_limits[<?php echo (int)$status_id; ?>]"
+                                     min="0"
+                                     max="10000"
+                                     value="<?php echo array_key_exists($status_id, $wip_limits) ? (int)$wip_limits[$status_id] : ''; ?>"
+                                     placeholder="<?php echo $wip_limit > 0 ? (int)$wip_limit : ''; ?>">
+                           </div>
+                        <?php endforeach; ?>
                      </div>
                   </div>
 

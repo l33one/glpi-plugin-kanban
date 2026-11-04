@@ -1626,11 +1626,132 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    public function testWipLimitPerColumnOverridesGlobal(): void
+    {
+        $saved = \Config::getConfigurationValues('plugin:kanban');
+
+        try {
+            // Write through the plugin's own save() so the test covers the
+            // round-trip: save() serializes the map with exportArrayToDB, which
+            // produces a JSON object ({"3":2}), and load() has to decode it.
+            PluginKanbanConfig::save([
+                'wip_limit'  => 5,
+                'wip_limits' => [Ticket::PLANNED => 2, Ticket::WAITING => 0],
+            ]);
+
+            $stored = \Config::getConfigurationValues('plugin:kanban');
+            $this->assertStringStartsWith(
+                '{',
+                (string)($stored['wip_limits'] ?? ''),
+                'The per-column map must be stored as a JSON object, not a list'
+            );
+
+            $this->assertSame(2, PluginKanbanConfig::getWipLimitForStatus(Ticket::PLANNED));
+            $this->assertSame(
+                0,
+                PluginKanbanConfig::getWipLimitForStatus(Ticket::WAITING),
+                'An explicit zero disables the limit for that column'
+            );
+            $this->assertSame(
+                5,
+                PluginKanbanConfig::getWipLimitForStatus(Ticket::INCOMING),
+                'A column without its own limit falls back to the global value'
+            );
+            $this->assertSame(
+                [Ticket::PLANNED => 2, Ticket::WAITING => 0],
+                PluginKanbanConfig::getWipLimits()
+            );
+            $this->assertTrue(PluginKanbanConfig::hasWipLimits());
+        } finally {
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'  => $saved['wip_limit'] ?? 0,
+                'wip_limits' => $saved['wip_limits'] ?? exportArrayToDB([]),
+            ]);
+        }
+    }
+
+    public function testSanitizeWipLimitsDropsEmptyAndUnknownValues(): void
+    {
+        $this->assertSame(
+            [
+                Ticket::PLANNED => 2,
+                Ticket::WAITING => 0,
+                Ticket::SOLVED  => 0,
+                Ticket::CLOSED  => 10000,
+            ],
+            PluginKanbanConfig::sanitizeWipLimits([
+                Ticket::PLANNED  => '2',
+                Ticket::WAITING  => '0',
+                Ticket::INCOMING => '',
+                99999            => 4,
+                'abc'            => 1,
+                Ticket::SOLVED   => '-3',
+                Ticket::CLOSED   => '20000',
+            ])
+        );
+    }
+
+    public function testCheckWipLimitUsesTheColumnLimit(): void
+    {
+        global $DB;
+
+        $saved = \Config::getConfigurationValues('plugin:kanban');
+        $ticket_id = self::insertKanbanTestTicket('Kanban wip per column ticket');
+        $this->assertGreaterThan(0, $ticket_id);
+
+        try {
+            $DB->update('glpi_tickets', ['status' => Ticket::PLANNED], ['id' => $ticket_id]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => (int)Session::getLoginUserID(),
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+
+            $in_column = PluginKanbanKanban::countVisibleTicketsInStatus(Ticket::PLANNED);
+
+            // Global limit off, column limit full: the column itself blocks.
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'        => 0,
+                'wip_limits'       => exportArrayToDB([Ticket::PLANNED => $in_column]),
+                'wip_block_exceed' => 1,
+            ]);
+            $this->assertNotNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::PLANNED),
+                'The per-column limit blocks the move even with no global limit'
+            );
+            $this->assertNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::INCOMING),
+                'Columns without their own limit stay unlimited'
+            );
+
+            // An explicit zero on the column wins over the global limit.
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'        => 1,
+                'wip_limits'       => exportArrayToDB([Ticket::PLANNED => 0]),
+                'wip_block_exceed' => 1,
+            ]);
+            $this->assertNull(
+                PluginKanbanKanban::checkWipLimit(Ticket::PLANNED),
+                'Zero disables the limit for that column'
+            );
+        } finally {
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'        => $saved['wip_limit'] ?? 0,
+                'wip_limits'       => $saved['wip_limits'] ?? exportArrayToDB([]),
+                'wip_block_exceed' => $saved['wip_block_exceed'] ?? 0,
+            ]);
+            $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_id]);
+            $DB->delete('glpi_tickets', ['id' => $ticket_id]);
+        }
+    }
+
     public function testConfigExposesTheNewBoardSettings(): void
     {
         $this->assertGreaterThanOrEqual(1, PluginKanbanConfig::getCardsPerColumn());
         $this->assertLessThanOrEqual(200, PluginKanbanConfig::getCardsPerColumn());
         $this->assertIsBool(PluginKanbanConfig::getWipBlockExceed());
+        $this->assertIsArray(PluginKanbanConfig::getWipLimits());
+        $this->assertIsBool(PluginKanbanConfig::hasWipLimits());
         $this->assertIsBool(PluginKanbanConfig::getEnableUndo());
     }
 

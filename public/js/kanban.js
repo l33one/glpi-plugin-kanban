@@ -41,7 +41,7 @@ const currentUser = window.KANBAN_CURRENT_USER || { id: 0, name: '' };
 const enableDragDrop = window.KANBAN_ENABLE_DRAG_DROP ? true : false;
 const enableUndo = window.KANBAN_ENABLE_UNDO ? true : false;
 const cardsPerColumn = parseInt(window.KANBAN_CARDS_PER_COLUMN, 10) || 50;
-const wipLimit = parseInt(window.KANBAN_WIP_LIMIT, 10) || 0;
+const wipEnabled = window.KANBAN_WIP_ENABLED ? true : false;
 const wipBlock = window.KANBAN_WIP_BLOCK ? true : false;
 const requirePendingReason = window.KANBAN_REQUIRE_PENDING_REASON ? true : false;
 const requireSolutionModel = window.KANBAN_REQUIRE_SOLUTION_MODEL ? true : false;
@@ -1011,7 +1011,7 @@ function loadTickets() {
      * the queue is not a limit on the current view.
      */
     function refreshWipHighlight() {
-       if (wipLimit <= 0) {
+       if (!wipEnabled) {
           wipState = {};
           applyWipClasses();
           return;

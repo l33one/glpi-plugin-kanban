@@ -176,10 +176,13 @@ class PluginKanbanApi {
     * not a limit on the current view.
     */
    private function actionGetWipState(): array {
-      $limit = PluginKanbanConfig::getWipLimit();
+      $global_limit = PluginKanbanConfig::getWipLimit();
+      $limits       = PluginKanbanConfig::getWipLimits();
       $state = [];
       foreach (array_keys(Ticket::getAllStatusArray()) as $status_id) {
-         $current = PluginKanbanKanban::countVisibleTicketsInStatus((int)$status_id);
+         $status_id = (int)$status_id;
+         $limit = array_key_exists($status_id, $limits) ? $limits[$status_id] : $global_limit;
+         $current = PluginKanbanKanban::countVisibleTicketsInStatus($status_id);
          $state[$status_id] = [
             'current' => $current,
             'limit'   => $limit,
@@ -187,7 +190,9 @@ class PluginKanbanApi {
          ];
       }
 
-      return ['wip' => $state, 'wip_limit' => $limit];
+      // wip_limit stays in the payload as the global fallback; the per-column
+      // value that actually applies is the one inside each state entry.
+      return ['wip' => $state, 'wip_limit' => $global_limit];
    }
 
    // =======================================================================

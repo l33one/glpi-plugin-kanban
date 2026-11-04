@@ -214,6 +214,12 @@ msgstr "Baixa"
 msgid "Major"
 msgstr "Crítica"
 
+msgid "Leave empty to use the global limit above. Zero means no limit for that column."
+msgstr "Deixe em branco para usar o limite global acima. Zero significa sem limite para essa coluna."
+
+msgid "Limit per column"
+msgstr "Limite por coluna"
+
 msgid "Maximum tickets in progress per column"
 msgstr "Máximo de chamados em andamento por coluna"
 

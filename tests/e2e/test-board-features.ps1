@@ -12,7 +12,9 @@
         has_more reflete o que ainda falta.
       - um movimento de status pode ser desfeito (update_ticket_status + undo_ticket_status),
         devolvendo o chamado ao status anterior.
-      - o limite de WIP Ã© contado por status (get_wip_state).
+      - o limite de WIP Ã© contado por status (get_wip_state), com limite global e
+        limite proprio por coluna; o teste altera wip_limit/wip_limits e, ao final,
+        restaura "sem limite" (wip_limit=0, wip_limits vazio).
       - saved views: salvar, listar e apagar.
       - a API sÃ³ aceita escrita por POST (GET em uma aÃ§Ã£o de escrita responde 405),
         e rejeita aÃ§Ã£o desconhecida com 404.
@@ -76,6 +78,30 @@ function Invoke-Seeder {
         -e "KANBAN_TEST_PASS=$WebPassword" `
         glpi php /var/www/glpi/plugins/kanban/tests/e2e/seeder.php
     if ($LASTEXITCODE -ne 0) { throw "Seeder falhou no GLPI $Version (exit $LASTEXITCODE)" }
+}
+
+function Set-WipConfig {
+    param([int]$Version, [int]$Global, [hashtable]$Limits = @{})
+    # PowerShell 5.1 refuses to serialize a hashtable with integer keys, so the
+    # JSON object is built by hand: the fixture expects status id => limit.
+    $pairs = @()
+    foreach ($key in $Limits.Keys) {
+        $pairs += '"' + [int]$key + '":' + [int]$Limits[$key]
+    }
+    $json = '{' + ($pairs -join ',') + '}'
+    # The value travels base64-encoded: docker compose exec hands the argument
+    # to the container through a shell, and the quotes of a JSON object would
+    # be stripped on the way, leaving invalid JSON in the environment.
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+    & docker compose -f $composeFiles[$Version] exec -T `
+        -e 'KANBAN_DB_HOST=db' `
+        -e 'KANBAN_DB_USER=glpi' `
+        -e 'KANBAN_DB_PASS=glpi_password' `
+        -e 'KANBAN_DB_NAME=glpi' `
+        -e "KANBAN_WIP_LIMIT=$Global" `
+        -e "KANBAN_WIP_LIMITS_B64=$encoded" `
+        glpi php /var/www/glpi/plugins/kanban/tests/e2e/set-wip-config.php | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "set-wip-config falhou no GLPI $Version (exit $LASTEXITCODE)" }
 }
 
 function Get-LoginFields {
@@ -234,6 +260,21 @@ foreach ($v in $Versions) {
         if ($hasStatus1) {
             Check ([int]$wip.json.wip.'1'.current -ge 0) 'a contagem de WIP Ã© um nÃºmero'
         }
+    }
+
+    Write-Host '-- WIP: limite por coluna --'
+    try {
+        Set-WipConfig -Version $v -Global 5 -Limits @{ 1 = 2 }
+        $perColumn = Invoke-Api -Session $sess -Action 'get_wip_state'
+        Check ([int]$perColumn.json.wip.'1'.limit -eq 2) 'a coluna 1 usa o limite proprio'
+        Check ([int]$perColumn.json.wip.'2'.limit -eq 5) 'coluna sem limite proprio herda o global'
+
+        Set-WipConfig -Version $v -Global 5 -Limits @{ 1 = 0 }
+        $unlimited = Invoke-Api -Session $sess -Action 'get_wip_state'
+        Check ([int]$unlimited.json.wip.'1'.limit -eq 0) 'zero desliga o limite daquela coluna'
+        Check ([int]$unlimited.json.wip.'2'.limit -eq 5) 'as demais colunas continuam no global'
+    } finally {
+        Set-WipConfig -Version $v -Global 0 -Limits @{}
     }
 
     Write-Host '-- Saved views: salvar, listar e apagar --'

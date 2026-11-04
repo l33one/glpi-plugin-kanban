@@ -73,59 +73,62 @@ function mo_encode(array $pairs): string
 function po_parse(string $content): array
 {
    $entries = [];
-   $cur = null;
-   $pending = [];
+   $cur = ['id' => '', 'plural' => null, 'forms' => []];
+   $started = false;
+   $open = null;
+
+   $finish = static function () use (&$cur, &$entries, &$started, &$open): void {
+      if (!$started) {
+         return;
+      }
+      $entries[] = $cur;
+      $cur = ['id' => '', 'plural' => null, 'forms' => []];
+      $started = false;
+      $open = null;
+   };
 
    $lines = preg_split('/\r\n|\r|\n/', $content);
    foreach ($lines as $line) {
       $line = rtrim($line);
       if (preg_match('/^msgid\s+(.*)$/', $line, $m)) {
-         if ($cur !== null) {
-            $entries[] = $cur;
-         }
-         $cur = ['id' => '', 'str' => '', 'id_multi' => '', 'str_multi' => ''];
-         $pending = ['id' => '', 'str' => '', 'mode' => 'id'];
-         $pending['id'] = po_unquote($m[1]);
-      } elseif (preg_match('/^msgstr\s+(.*)$/', $line, $m)) {
-         $pending['mode'] = 'str';
-         $pending['str'] = po_unquote($m[1]);
-      } elseif ($cur !== null && $line !== '' && $line[0] === '"') {
-         $val = po_unquote($line);
-         if ($pending['mode'] === 'id') {
-            $pending['id'] .= $val;
-         } else {
-            $pending['str'] .= $val;
-         }
-      } elseif ($cur !== null && $line === '') {
-         // Blank line: finish current entry
-         $cur['id'] = $pending['id'];
-         $cur['str'] = $pending['str'];
-         $entries[] = $cur;
-         $cur = null;
+         $finish();
+         $started = true;
+         $cur['id'] = po_unquote($m[1]);
+         $open = &$cur['id'];
+      } elseif (preg_match('/^msgid_plural\s+(.*)$/', $line, $m)) {
+         $cur['plural'] = po_unquote($m[1]);
+         $open = &$cur['plural'];
+      } elseif (preg_match('/^msgstr(?:\[(\d+)\])?\s+(.*)$/', $line, $m)) {
+         $index = isset($m[1]) && $m[1] !== '' ? (int)$m[1] : 0;
+         $cur['forms'][$index] = po_unquote($m[2]);
+         $open = &$cur['forms'][$index];
+      } elseif ($started && $line !== '' && $line[0] === '"' && $open !== null) {
+         $open .= po_unquote($line);
+      } elseif ($line === '') {
+         $finish();
       }
    }
-   if ($cur !== null) {
-      $cur['id'] = $pending['id'];
-      $cur['str'] = $pending['str'];
-      $entries[] = $cur;
-   }
+   $finish();
 
-   // Keep the "" header entry (first) for the plural-forms metadata, drop
-   // plural entries and untranslated ones.
+   // Keep the "" header entry (first) for the plural-forms metadata. Plural
+   // entries are stored as "singular\0plural" => "form0\0form1", exactly the
+   // layout msgfmt writes and check-locales compares.
    $pairs = [];
    $header = null;
    foreach ($entries as $e) {
-      if ($e['id'] === '') {
-         $header = $e['str'];
+      $forms = $e['forms'];
+      ksort($forms);
+      if ($e['id'] === '' && $e['plural'] === null) {
+         $header = implode('', $forms);
          continue;
       }
-      if (isset($e['id_plural']) || str_contains($e['id'], "\0")) {
-         continue;
+      if (count(array_filter($forms, static fn (string $v): bool => $v !== '')) === 0) {
+         continue; // untranslated entry
       }
-      if ($e['str'] === '') {
-         continue;
-      }
-      $pairs[] = [$e['id'], $e['str']];
+      $value = implode("\0", $forms);
+      $pairs[] = $e['plural'] !== null
+         ? [$e['id'] . "\0" . $e['plural'], $value]
+         : [$e['id'], $forms[0] ?? ''];
    }
    if ($header !== null) {
       array_unshift($pairs, ['', $header]);

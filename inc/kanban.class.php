@@ -1615,7 +1615,7 @@ class PluginKanbanKanban extends CommonGLPI {
     * @return string|null Error message, or null when the move is allowed.
     */
    public static function checkWipLimit(int $status): ?string {
-      $limit = PluginKanbanConfig::getWipLimit();
+      $limit = PluginKanbanConfig::getWipLimitForStatus($status);
       if ($limit <= 0 || PluginKanbanConfig::getWipBlockExceed() !== true) {
          return null;
       }
