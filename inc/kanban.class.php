@@ -1273,6 +1273,35 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
    /**
+    * Accent color of each native ticket status, used by the board header and by
+    * the columns menu. It lives in the model instead of the page controller so
+    * a test can assert that every status exposed by the running GLPI version
+    * has a color.
+    *
+    * APPROVAL only exists on GLPI 11; `defined()` keeps the map valid on GLPI 10
+    * and lets a future status fall back to the neutral 'secondary' color instead
+    * of breaking the board.
+    *
+    * @return array<int, string> status id => bootstrap color name
+    */
+   public static function getStatusColors(): array {
+      $colors = [
+         Ticket::INCOMING => 'primary',
+         Ticket::ASSIGNED => 'info',
+         Ticket::PLANNED  => 'warning',
+         Ticket::WAITING  => 'secondary',
+         Ticket::SOLVED   => 'success',
+         Ticket::CLOSED   => 'dark',
+      ];
+
+      if (defined('Ticket::APPROVAL')) {
+         $colors[constant('Ticket::APPROVAL')] = 'info';
+      }
+
+      return $colors;
+   }
+
+   /**
     * Compute key indicators ("gestÃ£o Ã  vista") from the tickets currently
     * displayed on the board (already filtered by the active filters).
     *

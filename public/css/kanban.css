@@ -200,6 +200,10 @@
 .status-pending  { --status-color: #d97706; --status-color-soft: rgba(217, 119, 6, 0.12);   --status-color-faint: rgba(217, 119, 6, 0.05); }
 .status-solved   { --status-color: #0d9488; --status-color-soft: rgba(13, 148, 136, 0.12);  --status-color-faint: rgba(13, 148, 136, 0.05); }
 .status-closed   { --status-color: #64748b; --status-color-soft: rgba(100, 116, 139, 0.12); --status-color-faint: rgba(100, 116, 139, 0.05); }
+/* GLPI 11 approval status */
+.status-approval { --status-color: #0891b2; --status-color-soft: rgba(8, 145, 178, 0.12);   --status-color-faint: rgba(8, 145, 178, 0.05); }
+/* Neutral identity for statuses not mapped yet (new GLPI versions) */
+.status-secondary { --status-color: #64748b; --status-color-soft: rgba(100, 116, 139, 0.12); --status-color-faint: rgba(100, 116, 139, 0.05); }
 
 .kanban-column-header {
    padding: 0.85rem 1rem !important;

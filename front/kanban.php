@@ -41,14 +41,7 @@ Html::header(
 
 // Prepare localized statuses for Kanban columns
 $glpi_statuses = Ticket::getAllStatusArray();
-$status_colors = [
-   Ticket::INCOMING => 'primary',
-   Ticket::ASSIGNED => 'info',
-   Ticket::PLANNED  => 'warning',
-   Ticket::WAITING  => 'secondary',
-   Ticket::SOLVED   => 'success',
-   Ticket::CLOSED   => 'dark'
-];
+$status_colors = PluginKanbanKanban::getStatusColors();
 $kanban_statuses = [];
 foreach ($glpi_statuses as $id => $name) {
    $kanban_statuses[$id] = [

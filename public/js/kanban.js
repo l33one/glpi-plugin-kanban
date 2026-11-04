@@ -101,7 +101,10 @@ const statusColors = {
    3: 'planned',
    4: 'pending',
    5: 'solved',
-   6: 'closed'
+   6: 'closed',
+   // GLPI 11 approval status. Unknown statuses (a status added by a newer GLPI)
+   // fall back to the neutral 'secondary' class instead of losing their accent.
+   10: 'approval'
 };
 
 const statusIcons = {
@@ -110,8 +113,13 @@ const statusIcons = {
    3: { icon: 'calendar', filled: false, color: 'dark' },
    4: { icon: 'circle', filled: true, color: 'warning' },
    5: { icon: 'circle', filled: false, color: 'dark' },
-   6: { icon: 'circle', filled: true, color: 'dark' }
+   6: { icon: 'circle', filled: true, color: 'dark' },
+   10: { icon: 'rosette-discount-check', filled: false, color: 'info' }
 };
+
+// Used when a GLPI version exposes a status this file does not know yet, so the
+// column keeps a visible icon and color instead of rendering an empty glyph.
+const defaultStatusIcon = { icon: 'circle', filled: false, color: 'secondary' };
 
 const bootstrapColorMap = { success: '#28a745', warning: '#ffc107', danger: '#dc3545', info: '#17a2b8', dark: '#343a40', primary: '#0d6efd', secondary: '#6c757d' };
 
@@ -246,11 +254,12 @@ function renderBoardColumns() {
         let boardHtml = '';
        for (const [id, status] of getOrderedStatusEntries(statuses)) { status.id = id;
           const statusClass = statusColors[status.id] || 'secondary';
+          const statusIcon = statusIcons[status.id] || defaultStatusIcon;
           boardHtml += `
              <div class="kanban-column status-${statusClass}" data-status-id="${id}" data-status-name="${statusClass}">
                 <div class="kanban-column-header d-flex align-items-center justify-content-between">
                    <div class="d-flex align-items-center gap-2">
-                      <span class="status-indicator d-inline-flex align-items-center justify-content-center" style="width: 14px; height: 14px;"><i class="ti ${statusIcons[status.id] ? 'ti-' + statusIcons[status.id].icon : ''}" style="${getStatusColorStyle(statusIcons[status.id])}"></i></span>
+                      <span class="status-indicator d-inline-flex align-items-center justify-content-center" style="width: 14px; height: 14px;"><i class="ti ti-${statusIcon.icon}" style="${getStatusColorStyle(statusIcon)}"></i></span>
                       <h5 class="m-0">${escapeHtml(status.name)}</h5>
                    </div>
                    <div class="d-flex align-items-center gap-1">

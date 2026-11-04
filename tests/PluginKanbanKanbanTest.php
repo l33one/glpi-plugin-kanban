@@ -1653,6 +1653,26 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    /**
+     * Every status the running GLPI version exposes must have a board color.
+     * GLPI 11 adds APPROVAL (10); without an entry the column silently falls
+     * back to the neutral color and loses its visual identity.
+     */
+    public function testEveryNativeStatusHasABoardColor(): void
+    {
+        $colors = PluginKanbanKanban::getStatusColors();
+        $allowed = ['primary', 'secondary', 'success', 'info', 'warning', 'danger', 'dark', 'light'];
+
+        foreach (Ticket::getAllStatusArray() as $id => $name) {
+            $this->assertArrayHasKey($id, $colors, "Status $id ($name) has no board color");
+            $this->assertContains($colors[$id], $allowed, "Status $id ($name) uses an unknown color");
+        }
+
+        if (defined('Ticket::APPROVAL')) {
+            $this->assertSame('info', $colors[constant('Ticket::APPROVAL')]);
+        }
+    }
+
     private static function insertKanbanTestUser(string $name): int
     {
         global $DB;
