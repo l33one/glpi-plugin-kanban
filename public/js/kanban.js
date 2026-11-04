@@ -200,6 +200,37 @@ function getStatusColorStyle(si) {
    const color = colorMap[si.color] || '#6c757d';
    return si.filled ? 'font-weight: 900; color: ' + color + ';' : 'font-weight: 400; border: 2px solid ' + color + '; border-radius: 50%;';
 }
+
+/**
+ * Return [id, status] pairs in the column order configured by the admin.
+ *
+ * KANBAN_STATUSES is a JSON object whose keys are ticket status ids. JS
+ * enumerates integer-like object keys in ascending numeric order and ignores
+ * the order they were declared in, so Object.entries() would always yield
+ * 1..6 and silently drop the configured order. KANBAN_STATUS_ORDER carries
+ * that order separately; statuses missing from it are appended in native
+ * order so a status added by a newer GLPI never disappears from the board.
+ */
+function getOrderedStatusEntries(statuses) {
+   const order = Array.isArray(window.KANBAN_STATUS_ORDER) ? window.KANBAN_STATUS_ORDER : [];
+   const entries = [];
+   const seen = new Set();
+
+   for (const rawId of order) {
+      const id = String(rawId);
+      if (Object.prototype.hasOwnProperty.call(statuses, id) && !seen.has(id)) {
+         entries.push([id, statuses[id]]);
+         seen.add(id);
+      }
+   }
+   for (const [id, status] of Object.entries(statuses)) {
+      if (!seen.has(id)) {
+         entries.push([id, status]);
+      }
+   }
+   return entries;
+}
+
 function renderBoardColumns() {
        if (!getBoardContainer()) return;
 
@@ -213,7 +244,7 @@ function renderBoardColumns() {
        };
 
         let boardHtml = '';
-       for (const [id, status] of Object.entries(statuses)) { status.id = id;
+       for (const [id, status] of getOrderedStatusEntries(statuses)) { status.id = id;
           const statusClass = statusColors[status.id] || 'secondary';
           boardHtml += `
              <div class="kanban-column status-${statusClass}" data-status-id="${id}" data-status-name="${statusClass}">
@@ -394,7 +425,7 @@ function renderBoardColumns() {
        header.textContent = lang.columns || 'Columns';
        menu.appendChild(header);
 
-       for (const [id, status] of Object.entries(statuses)) {
+       for (const [id, status] of getOrderedStatusEntries(statuses)) {
           const li = document.createElement('li');
           const label = document.createElement('label');
           label.className = 'dropdown-item kanban-column-toggle';

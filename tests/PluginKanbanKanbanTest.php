@@ -1634,6 +1634,25 @@ class PluginKanbanKanbanTest extends TestCase
         $this->assertIsBool(PluginKanbanConfig::getEnableUndo());
     }
 
+    /**
+     * The configured column order has to survive the config storage round-trip,
+     * preserving both the values and their sequence. The board itself renders
+     * that order through KANBAN_STATUS_ORDER (see front/kanban.php), because a
+     * JSON object keyed by integer status ids cannot keep a custom order.
+     */
+    public function testStatusOrderRoundTripsThroughConfig(): void
+    {
+        $saved = PluginKanbanConfig::load();
+
+        try {
+            $configured = [4, 3, 1, 2, 5, 6];
+            PluginKanbanConfig::save(['status_order' => $configured]);
+            $this->assertSame($configured, PluginKanbanConfig::getStatusOrder());
+        } finally {
+            PluginKanbanConfig::save(['status_order' => $saved['status_order'] ?? []]);
+        }
+    }
+
     private static function insertKanbanTestUser(string $name): int
     {
         global $DB;

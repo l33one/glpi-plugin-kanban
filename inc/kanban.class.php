@@ -413,24 +413,31 @@ class PluginKanbanKanban extends CommonGLPI {
 
       switch ($sort_by) {
          case 'priority':
-            $criteria['ORDER'] = "t.priority $sort_order";
+            $order_column = 't.priority';
             break;
          case 'status_duration':
             // Approximate duration in status using modified date
-            $criteria['ORDER'] = "t.date_mod $sort_order";
+            $order_column = 't.date_mod';
             break;
          case 'sla':
             // Approximate SLA urgency by resolution deadline. The client
             // sorts by elapsed percent (DESC = most elapsed / closest to
             // expiry first), so the deadline order is inverted here: DESC
             // fetches the earliest deadlines first.
-            $criteria['ORDER'] = "t.time_to_resolve " . ($sort_order === 'ASC' ? 'DESC' : 'ASC');
+            $order_column = 't.time_to_resolve';
+            $sort_order   = $sort_order === 'ASC' ? 'DESC' : 'ASC';
             break;
          case 'date':
          default:
-            $criteria['ORDER'] = "t.date $sort_order";
+            $order_column = 't.date';
             break;
       }
+
+      // t.id is a tiebreaker: several tickets often share the same date,
+      // priority or deadline, and MySQL is then free to return them in any
+      // order. Without a unique secondary sort, LIMIT/OFFSET pagination can
+      // repeat or skip cards between pages.
+      $criteria['ORDER'] = "$order_column $sort_order, t.id $sort_order";
 
       return $criteria;
    }

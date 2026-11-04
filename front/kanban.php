@@ -83,6 +83,11 @@ $categories  = PluginKanbanKanban::getCategoriesForFilter();
 // <script> context so DB-sourced strings can never break out of the literal.
 $kanban_json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 echo "<script>var KANBAN_STATUSES = " . json_encode($kanban_statuses, $kanban_json_flags) . ";</script>";
+// KANBAN_STATUSES is a JSON object keyed by status id. JavaScript enumerates
+// integer-like object keys in ascending numeric order, so the configured column
+// order cannot survive inside that map. Ship the order as its own array and let
+// the board iterate it instead of the object's keys.
+echo "<script>var KANBAN_STATUS_ORDER = " . json_encode(array_keys($kanban_statuses), $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_GLPI_ROOT = " . json_encode($CFG_GLPI['root_doc'], $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_TECHNICIANS = " . json_encode($technicians, $kanban_json_flags) . ";</script>";
 echo "<script>var KANBAN_CURRENT_USER = " . json_encode([
