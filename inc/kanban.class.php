@@ -26,6 +26,17 @@ class PluginKanbanKanban extends CommonGLPI {
    const MAX_TICKETS_PER_STATUS = 200;
 
    /**
+    * Formatted user names, memoized for the current request.
+    *
+    * getUserName() loads the user from the database on every call. A board
+    * page repeats the same few technicians across many cards, so caching the
+    * formatted name removes that repeated work without changing the output.
+    *
+    * @var array<int, string>
+    */
+   private static $user_name_cache = [];
+
+   /**
     * Define the rights displayed in the profile configuration.
     *
     * @param string $interface Interface ('central' or 'helpdesk')
@@ -154,8 +165,27 @@ class PluginKanbanKanban extends CommonGLPI {
    private static function formatBoardTickets(array $criteria, array $all_statuses): array {
       global $DB;
 
-      $tickets = [];
+      $rows = [];
       foreach ($DB->request($criteria) as $ticket) {
+         $rows[] = $ticket;
+      }
+      if (empty($rows)) {
+         return [];
+      }
+
+      $ticket_ids = array_map(static function ($ticket) {
+         return (int)$ticket['id'];
+      }, $rows);
+
+      // Resolve the actors of the whole page at once. Doing it per card made
+      // the number of queries grow linearly with the page size (two queries
+      // per card plus one getUserName() per actor).
+      $requesters  = self::getRequesterNamesForTickets($ticket_ids);
+      $technicians = self::getAssignedTechniciansForTickets($ticket_ids);
+
+      $tickets = [];
+      foreach ($rows as $ticket) {
+         $ticket_id = (int)$ticket['id'];
          $ticket['status_name'] = $all_statuses[(int)$ticket['status']] ?? __('Unknown status', 'kanban');
 
          // Decode GLPI-10-encoded plain-text fields (GLPI 11 stores raw
@@ -165,8 +195,8 @@ class PluginKanbanKanban extends CommonGLPI {
          $ticket['content']  = self::safeRichText($ticket['content']);
          $ticket['category'] = self::decodeStoredValue($ticket['category']);
 
-         $ticket['requester_name'] = self::getTicketRequesterName($ticket['id']);
-         $ticket['assigned_techs'] = self::getAssignedTechnicians($ticket['id']);
+         $ticket['requester_name'] = $requesters[$ticket_id] ?? '';
+         $ticket['assigned_techs'] = $technicians[$ticket_id] ?? [];
          $ticket['sla_progress']   = self::calculateSlaProgress($ticket);
 
          $tickets[] = $ticket;
@@ -960,17 +990,39 @@ class PluginKanbanKanban extends CommonGLPI {
      }
 
     /**
-     * Fetch technicians assigned to a specific ticket
+     * Fetch technicians assigned to a specific ticket.
+     *
+     * Kept as a thin wrapper around the batch resolver so the single-ticket
+     * callers (ticket detail modal) share the exact same shape and ordering as
+     * the board.
      *
      * @param int $ticket_id
      * @return array Array of ['id' => int, 'name' => string, 'firstname' => string,
      *                         'realname' => string, 'picture' => string|null]
      */
     private static function getAssignedTechnicians($ticket_id) {
+       $ticket_id = (int)$ticket_id;
+       $techs = self::getAssignedTechniciansForTickets([$ticket_id]);
+       return $techs[$ticket_id] ?? [];
+    }
+
+    /**
+     * Fetch the assigned technicians of several tickets with a single query.
+     *
+     * @param int[] $ticket_ids
+     * @return array<int, array<int, array<string, mixed>>> ticket id => technicians
+     */
+    private static function getAssignedTechniciansForTickets(array $ticket_ids): array {
        global $DB;
-       $techs = [];
+
+       $ticket_ids = array_values(array_unique(array_map('intval', $ticket_ids)));
+       if (empty($ticket_ids)) {
+          return [];
+       }
+
+       $techs = array_fill_keys($ticket_ids, []);
        $iterator = $DB->request([
-          'SELECT'    => ['u.id', 'u.realname', 'u.firstname', 'u.picture'],
+          'SELECT'    => ['tu.tickets_id', 'u.id', 'u.realname', 'u.firstname', 'u.picture'],
           'FROM'      => 'glpi_tickets_users AS tu',
           'LEFT JOIN' => [
              'glpi_users AS u' => [
@@ -981,16 +1033,17 @@ class PluginKanbanKanban extends CommonGLPI {
              ]
           ],
           'WHERE'     => [
-             'tu.tickets_id' => $ticket_id,
+             'tu.tickets_id' => $ticket_ids,
              'tu.type'       => CommonITILActor::ASSIGN
-          ]
+          ],
+          'ORDER'     => ['tu.tickets_id ASC', 'tu.id ASC']
        ]);
 
        foreach ($iterator as $user) {
           if ($user['id']) {
-             $techs[] = [
+             $techs[(int)$user['tickets_id']][] = [
                 'id'        => (int)$user['id'],
-                'name'      => self::decodeStoredValue(getUserName($user['id'])),
+                'name'      => self::decodeStoredValue(self::getUserNameCached($user['id'])),
                 'firstname' => self::decodeStoredValue($user['firstname']),
                 'realname'  => self::decodeStoredValue($user['realname']),
                 'picture'   => self::getPictureUrlCompat($user['picture']),
@@ -998,6 +1051,20 @@ class PluginKanbanKanban extends CommonGLPI {
           }
        }
        return $techs;
+    }
+
+    /**
+     * Return getUserName() from a per-request cache.
+     *
+     * @param int $user_id
+     * @return string
+     */
+    private static function getUserNameCached($user_id): string {
+       $user_id = (int)$user_id;
+       if (!array_key_exists($user_id, self::$user_name_cache)) {
+          self::$user_name_cache[$user_id] = (string)getUserName($user_id);
+       }
+       return self::$user_name_cache[$user_id];
     }
 
    /**
@@ -1023,16 +1090,41 @@ class PluginKanbanKanban extends CommonGLPI {
     }
 
     /**
-     * Get the requester name for a specific ticket
+     * Get the requester name for a specific ticket.
+     *
+     * Wrapper kept for the ticket detail modal; the board resolves requesters
+     * for the whole page in one query.
      *
      * @param int $ticket_id
      * @return string
      */
     private static function getTicketRequesterName($ticket_id) {
+       $ticket_id = (int)$ticket_id;
+       $requesters = self::getRequesterNamesForTickets([$ticket_id]);
+       return $requesters[$ticket_id] ?? '';
+    }
+
+    /**
+     * Resolve the requester name of several tickets with a single query.
+     *
+     * When a ticket has more than one requester the lowest actor id wins, which
+     * keeps the previous "first requester" behaviour deterministic instead of
+     * depending on the database row order.
+     *
+     * @param int[] $ticket_ids
+     * @return array<int, string> ticket id => requester name (omitted when none)
+     */
+    private static function getRequesterNamesForTickets(array $ticket_ids): array {
        global $DB;
-       $requester = '';
+
+       $ticket_ids = array_values(array_unique(array_map('intval', $ticket_ids)));
+       if (empty($ticket_ids)) {
+          return [];
+       }
+
+       $requesters = [];
        $iterator = $DB->request([
-          'SELECT' => ['u.id', 'u.realname', 'u.firstname'],
+          'SELECT' => ['tu.tickets_id', 'u.id'],
           'FROM'   => 'glpi_users AS u',
           'INNER JOIN' => [
              'glpi_tickets_users AS tu' => [
@@ -1043,18 +1135,20 @@ class PluginKanbanKanban extends CommonGLPI {
              ]
           ],
           'WHERE'  => [
-             'tu.tickets_id' => $ticket_id,
+             'tu.tickets_id' => $ticket_ids,
              'tu.type'       => CommonITILActor::REQUESTER
           ],
-          'LIMIT'  => 1
+          'ORDER'  => ['tu.tickets_id ASC', 'tu.id ASC']
        ]);
 
-        foreach ($iterator as $user) {
-           if ($user['id']) {
-              $requester = self::decodeStoredValue(getUserName($user['id']));
-           }
-        }
-        return $requester;
+       foreach ($iterator as $user) {
+          $ticket_id = (int)$user['tickets_id'];
+          if (!$user['id'] || array_key_exists($ticket_id, $requesters)) {
+             continue;
+          }
+          $requesters[$ticket_id] = self::decodeStoredValue(self::getUserNameCached($user['id']));
+       }
+       return $requesters;
     }
 
     /**

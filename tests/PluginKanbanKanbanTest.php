@@ -1673,6 +1673,113 @@ class PluginKanbanKanbanTest extends TestCase
         }
     }
 
+    /**
+     * The board resolves requesters and technicians for a whole page at once.
+     * This pins the batch result to the per-ticket result so removing the N+1
+     * cannot silently change what a card shows.
+     */
+    public function testBatchActorLookupMatchesSingleTicketLookup(): void
+    {
+        global $DB;
+
+        $suffix = uniqid('', true);
+        $tech_a = self::insertKanbanTestUser('kanban_batch_tech_a_' . $suffix);
+        $tech_b = self::insertKanbanTestUser('kanban_batch_tech_b_' . $suffix);
+        $this->assertGreaterThan(0, $tech_a);
+        $this->assertGreaterThan(0, $tech_b);
+
+        $DB->update('glpi_users', ['realname' => 'Batch', 'firstname' => 'Tech A'], ['id' => $tech_a]);
+        $DB->update('glpi_users', ['realname' => 'Batch', 'firstname' => 'Tech B'], ['id' => $tech_b]);
+
+        $ticket_a = self::insertKanbanTestTicket('Kanban batch actors A ' . $suffix);
+        $ticket_b = self::insertKanbanTestTicket('Kanban batch actors B ' . $suffix);
+        $this->assertGreaterThan(0, $ticket_a);
+        $this->assertGreaterThan(0, $ticket_b);
+
+        try {
+            $login_user = (int)Session::getLoginUserID();
+
+            // Ticket A: two technicians, one requester.
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_a,
+                'users_id'   => $tech_a,
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_a,
+                'users_id'   => $tech_b,
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_a,
+                'users_id'   => $login_user,
+                'type'       => CommonITILActor::REQUESTER,
+            ]);
+
+            // Ticket B: a technician that is also the requester, so a leak
+            // between the two maps would be visible.
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_b,
+                'users_id'   => $tech_a,
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_b,
+                'users_id'   => $tech_b,
+                'type'       => CommonITILActor::REQUESTER,
+            ]);
+
+            $techs = self::invokeKanbanPrivate('getAssignedTechniciansForTickets', [[$ticket_a, $ticket_b]]);
+            $requesters = self::invokeKanbanPrivate('getRequesterNamesForTickets', [[$ticket_a, $ticket_b]]);
+
+            $this->assertSame([$tech_a, $tech_b], array_column($techs[$ticket_a], 'id'));
+            $this->assertSame([$tech_a], array_column($techs[$ticket_b], 'id'), 'Technicians must not leak across tickets');
+            $this->assertSame('Batch Tech A', $techs[$ticket_b][0]['name']);
+            $this->assertSame('Tech A', $techs[$ticket_b][0]['firstname']);
+            $this->assertArrayHasKey('picture', $techs[$ticket_b][0]);
+
+            $this->assertSame(getUserName($login_user), $requesters[$ticket_a]);
+            $this->assertSame(getUserName($tech_b), $requesters[$ticket_b], 'Requester must not leak across tickets');
+
+            // The single-ticket path (still used by the detail modal) has to
+            // return exactly the same payload as the batch path.
+            $this->assertSame(
+                self::invokeKanbanPrivate('getAssignedTechnicians', [$ticket_a]),
+                $techs[$ticket_a]
+            );
+            $this->assertSame(
+                self::invokeKanbanPrivate('getTicketRequesterName', [$ticket_b]),
+                $requesters[$ticket_b]
+            );
+
+            // An empty page must not build an invalid "IN ()" query.
+            $this->assertSame([], self::invokeKanbanPrivate('getAssignedTechniciansForTickets', [[]]));
+            $this->assertSame([], self::invokeKanbanPrivate('getRequesterNamesForTickets', [[]]));
+        } finally {
+            $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_a]);
+            $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_b]);
+            $DB->delete('glpi_tickets', ['id' => $ticket_a]);
+            $DB->delete('glpi_tickets', ['id' => $ticket_b]);
+            $DB->delete('glpi_users', ['id' => $tech_a]);
+            $DB->delete('glpi_users', ['id' => $tech_b]);
+        }
+    }
+
+    /**
+     * Call a private method of the model so tests can pin internal helpers
+     * without widening the public API.
+     *
+     * @param string $method
+     * @param array  $args
+     * @return mixed
+     */
+    private static function invokeKanbanPrivate(string $method, array $args)
+    {
+        $reflection = new ReflectionMethod(PluginKanbanKanban::class, $method);
+        $reflection->setAccessible(true);
+        return $reflection->invokeArgs(null, $args);
+    }
+
     private static function insertKanbanTestUser(string $name): int
     {
         global $DB;
