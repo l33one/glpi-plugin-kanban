@@ -106,6 +106,8 @@ class PluginKanbanApi {
          'ticket_id'  => $this->intParam('ticket_id'),
          'type'       => $this->intParam('type'),
          'category'   => $this->intParam('category'),
+         'priority'   => $this->intParam('priority'),
+         'sla_state'  => $this->strParam('sla_state'),
       ];
       $sort = [
          'by'    => $this->strParam('sort_by', 'date'),
@@ -279,6 +281,8 @@ class PluginKanbanApi {
                'group'      => $this->intParam('group'),
                'type'       => $this->intParam('type'),
                'category'   => $this->intParam('category'),
+               'priority'   => $this->intParam('priority'),
+               'sla_state'  => $this->strParam('sla_state'),
                'assigned_to_me' => $this->boolParam('assigned_to_me'),
             ],
             (int)$this->strParam('id') ?: null,

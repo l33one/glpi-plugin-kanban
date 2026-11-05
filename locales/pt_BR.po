@@ -34,8 +34,14 @@ msgstr "Todas as categorias"
 msgid "All Groups"
 msgstr "Todos os grupos"
 
+msgid "All Priorities"
+msgstr "Todas as prioridades"
+
 msgid "All Requesters"
 msgstr "Todos os solicitantes"
+
+msgid "All SLA states"
+msgstr "Todos os estados de SLA"
 
 msgid "All Technicians"
 msgstr "Todos os técnicos"
@@ -250,6 +256,9 @@ msgstr "Sem grupo"
 msgid "No Requester"
 msgstr "Sem solicitante"
 
+msgid "No SLA"
+msgstr "Sem SLA"
+
 msgid "No saved view yet"
 msgstr "Nenhuma visão salva ainda"
 
@@ -399,11 +408,20 @@ msgstr "SLA (mais próximo do vencimento primeiro)"
 msgid "SLA (Farthest from expiry first)"
 msgstr "SLA (mais distante do vencimento primeiro)"
 
+msgid "SLA due soon"
+msgstr "SLA a vencer"
+
+msgid "SLA on time"
+msgstr "SLA dentro do prazo"
+
 msgid "SLA overdue"
 msgstr "SLA em atraso"
 
 msgid "SLA paused"
 msgstr "SLA pausado"
+
+msgid "SLA state"
+msgstr "Estado de SLA"
 
 msgid "Solution"
 msgstr "Solução"

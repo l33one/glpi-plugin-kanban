@@ -34,8 +34,14 @@ msgstr "All Categories"
 msgid "All Groups"
 msgstr "All Groups"
 
+msgid "All Priorities"
+msgstr "All Priorities"
+
 msgid "All Requesters"
 msgstr "All Requesters"
+
+msgid "All SLA states"
+msgstr "All SLA states"
 
 msgid "All Technicians"
 msgstr "All Technicians"
@@ -250,6 +256,9 @@ msgstr "No Group"
 msgid "No Requester"
 msgstr "No Requester"
 
+msgid "No SLA"
+msgstr "No SLA"
+
 msgid "No saved view yet"
 msgstr "No saved view yet"
 
@@ -399,11 +408,20 @@ msgstr "SLA (Closest to expiry first)"
 msgid "SLA (Farthest from expiry first)"
 msgstr "SLA (Farthest from expiry first)"
 
+msgid "SLA due soon"
+msgstr "SLA due soon"
+
+msgid "SLA on time"
+msgstr "SLA on time"
+
 msgid "SLA overdue"
 msgstr "SLA overdue"
 
 msgid "SLA paused"
 msgstr "SLA paused"
+
+msgid "SLA state"
+msgstr "SLA state"
 
 msgid "Solution"
 msgstr "Solution"

@@ -50,6 +50,17 @@ foreach ($glpi_statuses as $id => $name) {
    ];
 }
 
+// Priorities offered by the board filter. Kept in the same order and with the
+// same labels the cards use (KANBAN_TRANSLATIONS.priorityLabels).
+$kanban_priorities = [
+   1 => __('Very Low', 'kanban'),
+   2 => __('Low', 'kanban'),
+   3 => __('Normal', 'kanban'),
+   4 => __('High', 'kanban'),
+   5 => __('Very High', 'kanban'),
+   6 => __('Major', 'kanban'),
+];
+
 // Apply the admin-configured column order (PluginKanbanConfig) when set.
 // Statuses not listed are appended in their native order so a newly-created
 // ticket status never disappears from the board.
@@ -120,6 +131,12 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "noGroup" => __("No Group", "kanban"),
     "noType" => __("No Type", "kanban"),
     "noCategoryFilter" => __("No Category", "kanban"),
+    "allPriorities" => __("All Priorities", "kanban"),
+    "allSlaStates" => __("All SLA states", "kanban"),
+    "slaState" => __("SLA state", "kanban"),
+    "slaDueSoon" => __("SLA due soon", "kanban"),
+    "slaOnTime" => __("SLA on time", "kanban"),
+    "slaNoSla" => __("No SLA", "kanban"),
     "searchByNumber" => __("Search by ticket number", "kanban"),
     "searchPlaceholder" => __("Search: number, title, category, description...", "kanban"),
     "advancedFilters" => __("Advanced Filters", "kanban"),
@@ -411,6 +428,37 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                         <?php endforeach; ?>
                      </select>
                   </div>
+
+                  <div class="col-auto kanban-filter-item">
+                     <label class="visually-hidden" for="filter-priority"><?php echo __('Priority', 'kanban'); ?></label>
+                      <select class="form-select select2-simple" id="filter-priority" name="priority" style="min-width: 150px;">
+<option value=""><?php echo __('All Priorities', 'kanban'); ?></option>
+                        <?php foreach ($kanban_priorities as $priority_id => $priority_name): ?>
+                          <option value="<?php echo (int)$priority_id; ?>"><?php echo htmlspecialchars($priority_name, ENT_QUOTES, 'UTF-8'); ?></option>
+                       <?php endforeach; ?>
+                    </select>
+                 </div>
+
+                 <?php
+                 // SLA states mirror the frozen-clock rules of the model: the
+                 // server computes the filter in SQL so the column total agrees
+                 // with the progress bar rendered on each card.
+                 $kanban_sla_states = [
+                    'overdue'  => __('SLA overdue', 'kanban'),
+                    'due_soon' => __('SLA due soon', 'kanban'),
+                    'ontime'   => __('SLA on time', 'kanban'),
+                    'no_sla'   => __('No SLA', 'kanban'),
+                 ];
+                 ?>
+                 <div class="col-auto kanban-filter-item">
+                    <label class="visually-hidden" for="filter-sla-state"><?php echo __('SLA state', 'kanban'); ?></label>
+                     <select class="form-select select2-simple" id="filter-sla-state" name="sla_state" style="min-width: 150px;">
+<option value=""><?php echo __('All SLA states', 'kanban'); ?></option>
+                       <?php foreach ($kanban_sla_states as $state_key => $state_label): ?>
+                         <option value="<?php echo htmlspecialchars($state_key, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($state_label, ENT_QUOTES, 'UTF-8'); ?></option>
+                      <?php endforeach; ?>
+                   </select>
+                </div>
 
                   <!-- Sort hint: per-column sort dropdowns are in each column header -->
                   <div class="col-auto d-none d-xxl-inline">

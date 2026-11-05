@@ -608,7 +608,7 @@ const checkbox = document.createElement('input');
        const badge = document.getElementById('kanban-adv-count');
        if (!badge) return;
        let count = 0;
-        ['filter-technician', 'filter-requester', 'filter-group', 'filter-type', 'filter-category'].forEach(id => {
+        ['filter-technician', 'filter-requester', 'filter-group', 'filter-type', 'filter-category', 'filter-priority', 'filter-sla-state'].forEach(id => {
            const el = document.getElementById(id);
            if (el && el.value !== '' && el.value !== null && el.value !== undefined) count++;
        });
@@ -2324,6 +2324,8 @@ function applyNativeTheme() {
          group: get('filter-group') || '',
          type: get('filter-type') || '',
          category: get('filter-category') || '',
+         priority: get('filter-priority') || '',
+         sla_state: get('filter-sla-state') || '',
       };
    }
 
@@ -2351,6 +2353,8 @@ function applyNativeTheme() {
       set('filter-group', filters.group);
       set('filter-type', filters.type);
       set('filter-category', filters.category);
+      set('filter-priority', filters.priority);
+      set('filter-sla-state', filters.sla_state);
 
       const label = document.getElementById('kanban-views-label');
       if (label) label.textContent = preset.name || (lang.savedViews || 'Saved views');

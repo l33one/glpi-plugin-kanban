@@ -433,6 +433,27 @@ class PluginKanbanKanban extends CommonGLPI {
          }
       }
 
+      // Apply Priority filter. GLPI priorities are 1-6; anything outside that
+      // range is not a stored priority, so it is ignored instead of matching
+      // nothing because of a malformed filter.
+      if (isset($filters['priority']) && $filters['priority'] !== null) {
+         $priority = (int)$filters['priority'];
+         if ($priority >= 1 && $priority <= 6) {
+            $criteria['WHERE']['t.priority'] = $priority;
+         }
+      }
+
+      // Apply SLA state filter. The SQL must mirror calculateSlaProgress():
+      // solved/closed tickets freeze at solvedate (falling back to date_mod)
+      // and pending tickets pause at begin_waiting_date, otherwise the column
+      // totals and the pagination would disagree with the card's SLA bar.
+      if (isset($filters['sla_state']) && $filters['sla_state'] !== null && $filters['sla_state'] !== '') {
+         $sla_criteria = self::getSlaStateCriteria((string)$filters['sla_state']);
+         if ($sla_criteria !== null) {
+            $criteria['WHERE'][] = $sla_criteria;
+         }
+      }
+
       // Apply Sorting
       $sort_by = $sort['by'] ?? 'date';
       $sort_order = $sort['order'] ?? 'DESC';
@@ -470,6 +491,67 @@ class PluginKanbanKanban extends CommonGLPI {
       $criteria['ORDER'] = "$order_column $sort_order, t.id $sort_order";
 
       return $criteria;
+   }
+
+   /**
+    * SQL criteria for one SLA state, matching calculateSlaProgress().
+    *
+    * The elapsed time is measured against a frozen reference when the SLA clock
+    * is stopped (solved/closed at solvedate, pending at begin_waiting_date) and
+    * against the current GLPI time otherwise. GLPI's clock lives in the session
+    * during tests, so NOW() is deliberately not used: the filter has to agree
+    * with the percentage rendered on the card under the same clock.
+    *
+    * States:
+    *  - overdue  : deadline already reached (or the ticket has no usable window);
+    *  - due_soon : at least 80% of the window elapsed, matching the warning bar;
+    *  - ontime   : has an SLA and is below that threshold;
+    *  - no_sla   : no resolution deadline at all.
+    *
+    * @param string $state
+    * @return \QueryExpression|null
+    */
+   private static function getSlaStateCriteria(string $state) {
+      if (!in_array($state, ['overdue', 'due_soon', 'ontime', 'no_sla'], true)) {
+         return null;
+      }
+
+      $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
+      if (strtotime((string)$now) === false) {
+         $now = date('Y-m-d H:i:s');
+      }
+      $now_sql = "'" . addslashes((string)$now) . "'";
+
+      $has_sla = "(t.time_to_resolve IS NOT NULL AND t.time_to_resolve <> '0000-00-00 00:00:00')";
+      $reference = "(CASE "
+         . "WHEN t.status IN (" . Ticket::SOLVED . ", " . Ticket::CLOSED . ") THEN COALESCE("
+         . "NULLIF(t.solvedate, '0000-00-00 00:00:00'), "
+         . "NULLIF(t.date_mod, '0000-00-00 00:00:00'), $now_sql) "
+         . "WHEN t.status = " . Ticket::WAITING . " THEN COALESCE("
+         . "NULLIF(t.begin_waiting_date, '0000-00-00 00:00:00'), $now_sql) "
+         . "ELSE $now_sql END)";
+      $overdue = "($has_sla AND (t.time_to_resolve <= t.date_creation OR $reference >= t.time_to_resolve))";
+      $due_soon = "($has_sla AND NOT $overdue AND "
+         . "TIMESTAMPDIFF(SECOND, t.date_creation, $reference) >= "
+         . "0.8 * TIMESTAMPDIFF(SECOND, t.date_creation, t.time_to_resolve))";
+      $no_sla = "(t.time_to_resolve IS NULL OR t.time_to_resolve = '0000-00-00 00:00:00')";
+
+      switch ($state) {
+         case 'overdue':
+            $sql = $overdue;
+            break;
+         case 'due_soon':
+            $sql = $due_soon;
+            break;
+         case 'ontime':
+            $sql = "($has_sla AND NOT $overdue AND NOT $due_soon)";
+            break;
+         default:
+            $sql = $no_sla;
+            break;
+      }
+
+      return new \QueryExpression($sql);
    }
 
    /**

@@ -181,6 +181,17 @@ function Invoke-Api {
     return @{ code = $code; body = $body; json = $json }
 }
 
+function Get-BoardCards {
+    param($Json)
+    $cards = @()
+    if ($Json -and $Json.statuses) {
+        foreach ($column in $Json.statuses.PSObject.Properties) {
+            $cards += @($column.Value)
+        }
+    }
+    return $cards
+}
+
 foreach ($v in $Versions) {
     if (-not $composeFiles.ContainsKey($v)) { continue }
     $currentBase = $baseUrl[$v]
@@ -247,6 +258,60 @@ foreach ($v in $Versions) {
         } else {
             Check $false 'nenhum chamado disponÃ­vel para testar o undo'
         }
+    }
+
+    Write-Host '-- Filtros: prioridade e estado de SLA --'
+    $byPriority = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ priority = 5; limit = 50 }
+    Check ($byPriority.json -ne $null) "get_tickets com priority=5 devolve JSON (HTTP $($byPriority.code))"
+    if ($byPriority.json) {
+        $priorityCards = Get-BoardCards -Json $byPriority.json
+        Check ($priorityCards.Count -gt 0) 'priority=5 devolve ao menos um card'
+        $wrongPriority = @($priorityCards | Where-Object { [int]$_.priority -ne 5 })
+        Check ($wrongPriority.Count -eq 0) 'priority=5 nao devolve card de outra prioridade'
+
+        $byLowPriority = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ priority = 1; limit = 50 }
+        $lowCards = Get-BoardCards -Json $byLowPriority.json
+        Check ($lowCards.Count -gt 0) 'priority=1 devolve ao menos um card'
+        $wrongLow = @($lowCards | Where-Object { [int]$_.priority -ne 1 })
+        Check ($wrongLow.Count -eq 0) 'priority=1 nao devolve card de outra prioridade'
+
+        $overdue = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ sla_state = 'overdue'; limit = 50 }
+        $overdueCards = Get-BoardCards -Json $overdue.json
+        Check ($overdueCards.Count -gt 0) 'sla_state=overdue devolve ao menos um card'
+        $notOverdue = @($overdueCards | Where-Object { [string]$_.sla_progress.status -ne 'overdue' })
+        Check ($notOverdue.Count -eq 0) 'sla_state=overdue so devolve cards atrasados'
+
+        $ontime = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ sla_state = 'ontime'; limit = 50 }
+        $ontimeCards = Get-BoardCards -Json $ontime.json
+        Check ($ontimeCards.Count -gt 0) 'sla_state=ontime devolve ao menos um card'
+        $notOntime = @($ontimeCards | Where-Object { [string]$_.sla_progress.status -eq 'overdue' })
+        Check ($notOntime.Count -eq 0) 'sla_state=ontime nao devolve card atrasado'
+
+        $noSla = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ sla_state = 'no_sla'; limit = 50 }
+        $noSlaCards = Get-BoardCards -Json $noSla.json
+        Check ($noSlaCards.Count -gt 0) 'sla_state=no_sla devolve ao menos um card'
+        $withSla = @($noSlaCards | Where-Object { [string]$_.sla_progress.status -ne 'no_sla' })
+        Check ($withSla.Count -eq 0) 'sla_state=no_sla so devolve cards sem SLA'
+    }
+
+    # Os dois filtros precisam sobreviver ao ciclo salvar/listar de uma view.
+    $slaViewName = 'KB-E2E filtros SLA'
+    $slaSave = Invoke-Api -Session $sess -Action 'save_preset' -Post -Params @{
+        name = $slaViewName; priority = 5; sla_state = 'overdue'; is_private = 1
+    }
+    Check ($slaSave.json.result.success -eq $true) "salva a view '$slaViewName' (erro: $($slaSave.json.result.error))"
+    $slaViewId = [int]$slaSave.json.result.id
+    if ($slaViewId -gt 0) {
+        $slaList = Invoke-Api -Session $sess -Action 'get_presets'
+        $slaView = @($slaList.json.presets | Where-Object { [int]$_.id -eq $slaViewId })
+        if ($slaView.Count -eq 1) {
+            Check ([int]$slaView[0].filters.priority -eq 5) 'a view guarda o filtro de prioridade'
+            Check ([string]$slaView[0].filters.sla_state -eq 'overdue') 'a view guarda o filtro de SLA'
+        } else {
+            Check $false 'a view de filtros nao apareceu em get_presets'
+        }
+        $slaDel = Invoke-Api -Session $sess -Action 'delete_preset' -Post -Params @{ id = $slaViewId }
+        Check ($slaDel.json.result.success -eq $true) 'apaga a view de filtros'
     }
 
     Write-Host '-- WIP: contagem por status --'

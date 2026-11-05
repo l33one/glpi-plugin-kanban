@@ -157,6 +157,19 @@ $t_other  = kb_ticket($conn, $marker, 'KB-E2E outro-grupo', 1);        // grupo 
 $t_obs    = kb_ticket($conn, $marker, 'KB-E2E observador', 1);         // grupo 9751 como OBSERVER
 $t_ext    = kb_ticket($conn, $marker, 'KB-E2E estrangeiro', 1);        // técnico: kb_extuser (grupo 9753)
 
+// Chamados determinísticos para os filtros de prioridade e de estado de SLA:
+// um atrasado com prioridade alta e um dentro do prazo com prioridade baixa.
+// O SLA é calculado no servidor a partir de time_to_resolve, então o cenário
+// precisa semear datas reais em vez de depender do relógio da execução.
+run($conn, "UPDATE glpi_tickets
+            SET priority = 5,
+                time_to_resolve = DATE_SUB(NOW(), INTERVAL 1 DAY)
+            WHERE id = $t_grp", 'sla atrasado grupo-pai');
+run($conn, "UPDATE glpi_tickets
+            SET priority = 1,
+                time_to_resolve = DATE_ADD(NOW(), INTERVAL 7 DAY)
+            WHERE id = $t_sub", 'sla no prazo subgrupo');
+
 run($conn, "INSERT INTO glpi_groups_tickets (tickets_id, groups_id, type) VALUES ($t_grp, 9751, 2)", 'gt grp');
 run($conn, "INSERT INTO glpi_groups_tickets (tickets_id, groups_id, type) VALUES ($t_sub, 9752, 2)", 'gt sub');
 run($conn, "INSERT INTO glpi_groups_tickets (tickets_id, groups_id, type) VALUES ($t_other, 9753, 2)", 'gt other');

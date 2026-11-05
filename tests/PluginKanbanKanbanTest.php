@@ -1895,6 +1895,151 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
+     * The priority filter is a plain column restriction, but it must be applied
+     * on the server for every status (and therefore for the column totals too).
+     */
+    public function testPriorityFilterReturnsOnlyRequestedPriority(): void
+    {
+        $low = 0;
+        $high = 0;
+
+        try {
+            $low = self::insertKanbanTestTicket('Kanban priority filter low');
+            $high = self::insertKanbanTestTicket('Kanban priority filter high');
+            $this->assertGreaterThan(0, $low);
+            $this->assertGreaterThan(0, $high);
+
+            self::assignTicketToCurrentUser($low);
+            self::assignTicketToCurrentUser($high);
+
+            global $DB;
+            $DB->update('glpi_tickets', ['priority' => 1], ['id' => $low]);
+            $DB->update('glpi_tickets', ['priority' => 5], ['id' => $high]);
+
+            $ids = self::boardTicketIds(['priority' => 5]);
+            $this->assertContains($high, $ids);
+            $this->assertNotContains($low, $ids, 'A different priority must not match the filter');
+
+            // A value that cannot be a GLPI priority is ignored instead of
+            // matching nothing: a malformed filter must not empty the board.
+            $unfiltered = self::boardTicketIds(['priority' => 999]);
+            $this->assertContains($low, $unfiltered);
+            $this->assertContains($high, $unfiltered);
+        } finally {
+            self::deleteKanbanTestTickets([$low, $high]);
+        }
+    }
+
+    /**
+     * The SLA filter runs in SQL, so it must freeze/pause the clock exactly like
+     * calculateSlaProgress(): otherwise the column total and the pagination
+     * would disagree with the progress bar rendered on the card.
+     */
+    public function testSlaStateFilterMirrorsFrozenClockRules(): void
+    {
+        global $DB;
+
+        $saved_now = $_SESSION['glpi_currenttime'] ?? null;
+        $_SESSION['glpi_currenttime'] = '2026-08-02 12:00:00';
+
+        $created = '2026-08-01 12:00:00';
+        $past_deadline = '2026-08-02 11:00:00';
+        $ids = [];
+
+        try {
+            $overdue = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA overdue',
+                'status' => Ticket::ASSIGNED,
+                'date_creation' => $created,
+                'date_mod' => $created,
+                'time_to_resolve' => $past_deadline,
+            ]);
+            $due_soon = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA due soon',
+                'status' => Ticket::ASSIGNED,
+                'date_creation' => $created,
+                'date_mod' => $created,
+                'time_to_resolve' => '2026-08-02 14:00:00',
+            ]);
+            $ontime = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA on time',
+                'status' => Ticket::ASSIGNED,
+                'date_creation' => $created,
+                'date_mod' => $created,
+                'time_to_resolve' => '2026-08-10 12:00:00',
+            ]);
+            $no_sla = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA absent',
+                'status' => Ticket::ASSIGNED,
+                'date_creation' => $created,
+                'date_mod' => $created,
+                'time_to_resolve' => null,
+            ]);
+            // Deadline already passed in real time, but the ticket stopped at
+            // solvedate: the filter must use the frozen clock (on time).
+            $frozen = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA frozen by solution',
+                'status' => Ticket::SOLVED,
+                'date_creation' => $created,
+                'date_mod' => '2026-08-01 13:00:00',
+                'solvedate' => '2026-08-01 13:00:00',
+                'time_to_resolve' => $past_deadline,
+            ]);
+            // Deadline already passed, but the ticket is pending: the clock is
+            // paused at begin_waiting_date, so it is not overdue either.
+            $paused = self::insertKanbanSlaTicket($ids, [
+                'name' => 'Kanban SLA paused by pending',
+                'status' => Ticket::WAITING,
+                'date_creation' => $created,
+                'date_mod' => $created,
+                'begin_waiting_date' => '2026-08-01 13:00:00',
+                'time_to_resolve' => $past_deadline,
+            ]);
+
+            $overdue_ids = self::boardTicketIds(['sla_state' => 'overdue']);
+            $this->assertContains($overdue, $overdue_ids);
+            $this->assertNotContains($frozen, $overdue_ids, 'A solved ticket freezes at solvedate');
+            $this->assertNotContains($paused, $overdue_ids, 'A pending ticket pauses at begin_waiting_date');
+
+            $due_soon_ids = self::boardTicketIds(['sla_state' => 'due_soon']);
+            $this->assertContains($due_soon, $due_soon_ids);
+            $this->assertNotContains($overdue, $due_soon_ids, 'Overdue is not due soon');
+            $this->assertNotContains($ontime, $due_soon_ids);
+
+            $ontime_ids = self::boardTicketIds(['sla_state' => 'ontime']);
+            $this->assertContains($ontime, $ontime_ids);
+            $this->assertContains($frozen, $ontime_ids);
+            $this->assertContains($paused, $ontime_ids);
+            $this->assertNotContains($overdue, $ontime_ids);
+            $this->assertNotContains($no_sla, $ontime_ids);
+
+            $no_sla_ids = self::boardTicketIds(['sla_state' => 'no_sla']);
+            $this->assertContains($no_sla, $no_sla_ids);
+            $this->assertNotContains($ontime, $no_sla_ids);
+
+            // The card payload uses the same reference: the frozen ticket's bar
+            // is not at 100% even though its deadline is in the past.
+            $board = PluginKanbanKanban::getBoardData(['sla_state' => 'ontime'], [], 100);
+            $frozen_card = null;
+            foreach ($board['statuses'][Ticket::SOLVED] ?? [] as $card) {
+                if ((int)$card['id'] === $frozen) {
+                    $frozen_card = $card;
+                }
+            }
+            $this->assertNotNull($frozen_card);
+            $this->assertSame('active', $frozen_card['sla_progress']['status']);
+            $this->assertTrue($frozen_card['sla_progress']['frozen']);
+        } finally {
+            self::deleteKanbanTestTickets($ids);
+            if ($saved_now === null) {
+                unset($_SESSION['glpi_currenttime']);
+            } else {
+                $_SESSION['glpi_currenttime'] = $saved_now;
+            }
+        }
+    }
+
+    /**
      * Call a private method of the model so tests can pin internal helpers
      * without widening the public API.
      *
@@ -1907,6 +2052,67 @@ class PluginKanbanKanbanTest extends TestCase
         $reflection = new ReflectionMethod(PluginKanbanKanban::class, $method);
         $reflection->setAccessible(true);
         return $reflection->invokeArgs(null, $args);
+    }
+
+    /**
+     * Board ticket ids matching the filters, flattened across every status.
+     */
+    private static function boardTicketIds(array $filters): array
+    {
+        $ids = [];
+        foreach (PluginKanbanKanban::getTicketsForKanban($filters, ['by' => 'date', 'order' => 'DESC'], 200) as $tickets) {
+            foreach ($tickets as $ticket) {
+                $ids[] = (int)$ticket['id'];
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * Assign a ticket to the session user so the board visibility rule allows it.
+     */
+    private static function assignTicketToCurrentUser(int $ticket_id): void
+    {
+        global $DB;
+
+        $DB->insert('glpi_tickets_users', [
+            'tickets_id' => $ticket_id,
+            'users_id'   => (int)Session::getLoginUserID(),
+            'type'       => CommonITILActor::ASSIGN,
+        ]);
+    }
+
+    /**
+     * Insert a ticket with explicit SLA fields and register it for cleanup.
+     */
+    private static function insertKanbanSlaTicket(array &$ids, array $fields): int
+    {
+        global $DB;
+
+        $name = (string)$fields['name'];
+        unset($fields['name']);
+
+        $id = self::insertKanbanTestTicket($name);
+        $ids[] = $id;
+        if ($id > 0) {
+            $DB->update('glpi_tickets', $fields, ['id' => $id]);
+            self::assignTicketToCurrentUser($id);
+        }
+        return $id;
+    }
+
+    /**
+     * Remove every actor and the ticket rows created by a test.
+     */
+    private static function deleteKanbanTestTickets(array $ids): void
+    {
+        global $DB;
+
+        foreach (array_filter(array_map('intval', $ids)) as $id) {
+            $DB->delete('glpi_tickets_users', ['tickets_id' => $id]);
+            $DB->delete('glpi_groups_tickets', ['tickets_id' => $id]);
+            $DB->delete('glpi_tickets', ['id' => $id]);
+        }
     }
 
     private static function insertKanbanTestUser(string $name): int

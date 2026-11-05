@@ -36,6 +36,8 @@ class PluginKanbanFilterPreset extends CommonDBTM {
       'group'          => 'int',
       'type'           => 'int',
       'category'       => 'int',
+      'priority'       => 'int',
+      'sla_state'      => 'string',
       'assigned_to_me' => 'bool',
    ];
 
