@@ -222,7 +222,7 @@ kanban/
 ├── public/
 │   ├── js/kanban.js           # Lógica frontend: drag-drop, filtros, countdown
 │   └── css/kanban.css         # Estilos customizados + responsivo
-├── locales/                   # Traduções en_GB / pt_BR
+├── locales/                   # Traduções en_GB / es_ES / fr_FR / pt_BR
 ├── tests/                     # [dev] suíte PHPUnit + E2E
 ├── tools/                     # [dev] compilador de locales e build de release
 ├── docker/                    # [dev] binários auxiliares (phpunit.phar é baixado sob demanda)

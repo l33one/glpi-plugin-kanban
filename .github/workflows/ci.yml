@@ -84,7 +84,8 @@ jobs:
                           kanban/inc/kanban.class.php kanban/inc/api.class.php \
                           kanban/inc/filterpreset.class.php \
                           kanban/public/js/kanban.utils.js \
-                          kanban/locales/en_GB.po kanban/locales/pt_BR.po; do
+                          kanban/locales/en_GB.po kanban/locales/es_ES.po \
+                          kanban/locales/fr_FR.po kanban/locales/pt_BR.po; do
             printf '%s\n' "$listing" | grep -qx "$expected" \
               || { echo "missing from the archive: $expected"; exit 1; }
           done

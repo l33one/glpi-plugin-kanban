@@ -43,6 +43,8 @@
    </versions>
    <langs>
       <lang>en_GB</lang>
+      <lang>es_ES</lang>
+      <lang>fr_FR</lang>
       <lang>pt_BR</lang>
    </langs>
    <license>GPL v2+</license>

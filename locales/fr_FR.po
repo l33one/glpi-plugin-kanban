@@ -1,0 +1,616 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kanban\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "A description is required to move to Pending"
+msgstr "Une description est requise pour déplacer vers En attente"
+
+msgid "A notification lets you put the ticket back in its previous column. Undoing only restores the status: a pending reason or a solution recorded by the move stays in the ticket history."
+msgstr "Une notification permet de remettre le ticket dans sa colonne précédente. L'annulation restaure uniquement le statut : la raison d'attente ou la solution enregistrée lors du déplacement reste dans l'historique du ticket."
+
+msgid "A pending reason is required to move to Pending"
+msgstr "Une raison d'attente est requise pour déplacer vers En attente"
+
+msgid "A solution description is required to move to Solved"
+msgstr "Une description de la solution est requise pour déplacer vers Résolu"
+
+msgid "A solution model is required to move to Solved"
+msgstr "Un modèle de solution est requis pour déplacer vers Résolu"
+
+msgid "A solution type is required to move to Solved"
+msgstr "Un type de solution est requis pour déplacer vers Résolu"
+
+msgid "Advanced Filters"
+msgstr "Filtres avancés"
+
+msgid "All Categories"
+msgstr "Toutes les catégories"
+
+msgid "All Groups"
+msgstr "Tous les groupes"
+
+msgid "All Priorities"
+msgstr "Toutes les priorités"
+
+msgid "All Requesters"
+msgstr "Tous les demandeurs"
+
+msgid "All SLA states"
+msgstr "Tous les états SLA"
+
+msgid "All Technicians"
+msgstr "Tous les techniciens"
+
+msgid "All types"
+msgstr "Tous les types"
+
+msgid "An error occurred while loading the board"
+msgstr "Une erreur est survenue lors du chargement du tableau"
+
+msgid "An error occurred while processing the request"
+msgstr "Une erreur est survenue lors du traitement de la requête"
+
+msgid "applied"
+msgstr "appliqué"
+
+msgid "Apply"
+msgstr "Appliquer"
+
+msgid "Assign to me"
+msgstr "M'assigner"
+
+msgid "Assigned"
+msgstr "Attribué"
+
+msgid "Assigned to me"
+msgstr "Attribués à moi"
+
+msgid "Auto-refresh"
+msgstr "Actualisation automatique"
+
+msgid "Automatic follow-up"
+msgstr "Suivi automatique"
+
+msgid "Automatic resolution"
+msgstr "Résolution automatique"
+
+msgid "Available refresh intervals (minutes)"
+msgstr "Intervalles d'actualisation disponibles (minutes)"
+
+msgid "Batch actions"
+msgstr "Actions par lot"
+
+msgid "Batch result: %1$d applied, %2$d refused"
+msgstr "Résultat du lot : %1$d appliqués, %2$d refusés"
+
+msgid "Board indicators"
+msgstr "Indicateurs du tableau"
+
+msgid "Cancel"
+msgstr "Annuler"
+
+msgid "Card fields"
+msgstr "Champs de la carte"
+
+msgid "Cards loaded per column"
+msgstr "Cartes chargées par colonne"
+
+msgid "Category"
+msgstr "Catégorie"
+
+msgid "Change priority"
+msgstr "Changer la priorité"
+
+msgid "Choose a priority first"
+msgstr "Choisissez d'abord une priorité"
+
+msgid "Choose a status first"
+msgstr "Choisissez d'abord un statut"
+
+msgid "Clear"
+msgstr "Effacer"
+
+msgid "Clear selection"
+msgstr "Effacer la sélection"
+
+msgid "Close"
+msgstr "Fermer"
+
+msgid "Column order"
+msgstr "Ordre des colonnes"
+
+msgid "Columns"
+msgstr "Colonnes"
+
+msgid "Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed)."
+msgstr "IDs de statut de ticket séparés par des virgules, dans l'ordre d'apparition des colonnes. Laissez vide pour suivre l'ordre natif des statuts. Généralement : 1 (Nouveau), 2 (Attribué), 3 (Planifié), 4 (En attente), 5 (Résolu), 6 (Clos)."
+
+msgid "Comma-separated values in minutes (1-60). These intervals will be available in the auto-refresh dropdown on the Kanban board."
+msgstr "Valeurs séparées par des virgules en minutes (1-60). Ces intervalles seront disponibles dans la liste déroulante d'actualisation automatique du tableau Kanban."
+
+msgid "Configuration saved successfully."
+msgstr "Configuration enregistrée avec succès."
+
+msgid "Could not assign ticket"
+msgstr "Impossible d'assigner le ticket"
+
+msgid "Could not delete the view"
+msgstr "Impossible de supprimer la vue"
+
+msgid "Could not rename the view"
+msgstr "Impossible de renommer la vue"
+
+msgid "Could not save configuration"
+msgstr "Impossible d'enregistrer la configuration"
+
+msgid "Could not save the view"
+msgstr "Impossible d'enregistrer la vue"
+
+msgid "Could not update priority"
+msgstr "Impossible de mettre à jour la priorité"
+
+msgid "Could not update status"
+msgstr "Impossible de mettre à jour le statut"
+
+msgid "counts based on the cards shown"
+msgstr "comptages basés sur les cartes affichées"
+
+msgid "Counts based on the cards shown: SLA and assignee figures cover the loaded cards, while the total is the number of matching tickets."
+msgstr "Comptages basés sur les cartes affichées : les chiffres SLA et d'assignation portent sur les cartes chargées, tandis que le total correspond au nombre de tickets correspondants."
+
+msgid "Critical today"
+msgstr "Critiques aujourd'hui"
+
+msgid "Date Open (Newest first)"
+msgstr "Date d'ouverture (plus récent en premier)"
+
+msgid "Date Open (Oldest first)"
+msgstr "Date d'ouverture (plus ancien en premier)"
+
+msgid "Delete the view"
+msgstr "Supprimer la vue"
+
+msgid "Describe why the ticket is pending..."
+msgstr "Décrivez pourquoi le ticket est en attente..."
+
+msgid "Description"
+msgstr "Description"
+
+msgid "Enable moving cards between columns by drag & drop"
+msgstr "Autoriser le déplacement des cartes entre les colonnes par glisser-déposer"
+
+msgid "Fields"
+msgstr "Champs"
+
+msgid "Group"
+msgstr "Groupe"
+
+msgid "Hide column"
+msgstr "Masquer la colonne"
+
+msgid "High"
+msgstr "Haute"
+
+msgid "How many cards a column shows before a \"load more\" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden."
+msgstr "Nombre de cartes affichées par une colonne avant l'apparition du bouton \"Charger plus\" (1-200). Une colonne qui correspond à plus de tickets que cette valeur affiche son total réel, donc rien n'est masqué."
+
+msgid "in X d"
+msgstr "dans X j"
+
+msgid "Invalid request"
+msgstr "Requête invalide"
+
+msgid "Invalid view name"
+msgstr "Nom de vue invalide"
+
+msgid "just now"
+msgstr "à l'instant"
+
+msgid "Kanban"
+msgstr "Kanban"
+
+msgid "Kanban Board"
+msgstr "Tableau Kanban"
+
+msgid "Kanban board"
+msgstr "Tableau kanban"
+
+msgid "Kanban Configuration"
+msgstr "Configuration Kanban"
+
+msgid "Kanban Plugin Configuration"
+msgstr "Configuration du plugin Kanban"
+
+msgid "List follow-ups"
+msgstr "Lister les suivis"
+
+msgid "Load more"
+msgstr "Charger plus"
+
+msgid "Loading..."
+msgstr "Chargement..."
+
+msgid "Low"
+msgstr "Basse"
+
+msgid "Major"
+msgstr "Majeure"
+
+msgid "Leave empty to use the global limit above. Zero means no limit for that column."
+msgstr "Laissez vide pour utiliser la limite globale ci-dessus. Zéro signifie aucune limite pour cette colonne."
+
+msgid "Limit per column"
+msgstr "Limite par colonne"
+
+msgid "Maximum tickets in progress per column"
+msgstr "Nombre maximal de tickets en cours par colonne"
+
+msgid "Move"
+msgstr "Déplacer"
+
+msgid "Move to"
+msgstr "Déplacer vers"
+
+msgid "Move to Pending"
+msgstr "Déplacer vers En attente"
+
+msgid "Move to Solved"
+msgstr "Déplacer vers Résolu"
+
+msgid "New Ticket"
+msgstr "Nouveau ticket"
+
+msgid "No Category"
+msgstr "Aucune catégorie"
+
+msgid "No follow-ups for this ticket"
+msgstr "Aucun suivi pour ce ticket"
+
+msgid "No Group"
+msgstr "Aucun groupe"
+
+msgid "No Requester"
+msgstr "Aucun demandeur"
+
+msgid "No SLA"
+msgstr "Aucun SLA"
+
+msgid "No saved view yet"
+msgstr "Aucune vue enregistrée pour le moment"
+
+msgid "No Technician"
+msgstr "Aucun technicien"
+
+msgid "No tickets"
+msgstr "Aucun ticket"
+
+msgid "No Type"
+msgstr "Aucun type"
+
+msgid "No type"
+msgstr "Aucun type"
+
+msgid "Normal"
+msgstr "Normale"
+
+msgid "Off"
+msgstr "Désactivé"
+
+msgid "Offer to undo a card move from the board"
+msgstr "Proposer d'annuler le déplacement d'une carte depuis le tableau"
+
+msgid "Open"
+msgstr "Ouvrir"
+
+msgid "Open duration"
+msgstr "Durée d'ouverture"
+
+msgid "Open in GLPI"
+msgstr "Ouvrir dans GLPI"
+
+msgid "Opening date"
+msgstr "Date d'ouverture"
+
+msgid "Order of the board columns (status ids)"
+msgstr "Ordre des colonnes du tableau (IDs de statut)"
+
+msgid "Pending reason"
+msgstr "Raison d'attente"
+
+msgid "Permission denied"
+msgstr "Accès refusé"
+
+msgid "Please give the view a name"
+msgstr "Veuillez donner un nom à la vue"
+
+msgid "Priority"
+msgstr "Priorité"
+
+msgid "Priority (High to Low)"
+msgstr "Priorité (décroissante)"
+
+msgid "Priority (Low to High)"
+msgstr "Priorité (croissante)"
+
+msgid "Quick actions"
+msgstr "Actions rapides"
+
+msgid "Refresh"
+msgstr "Actualiser"
+
+msgid "Refuse moves that would exceed the limit"
+msgstr "Refuser les déplacements qui dépasseraient la limite"
+
+msgid "refused"
+msgstr "refusé"
+
+msgid "Requester"
+msgstr "Demandeur"
+
+msgid "Require a pending reason when moving a card to Pending"
+msgstr "Exiger une raison d'attente lors du déplacement d'une carte vers En attente"
+
+msgid "Require a solution model when moving a card to Solved"
+msgstr "Exiger un modèle de solution lors du déplacement d'une carte vers Résolu"
+
+msgid "Require a solution type when moving a card to Solved"
+msgstr "Exiger un type de solution lors du déplacement d'une carte vers Résolu"
+
+msgid "Required fields on column changes"
+msgstr "Champs obligatoires lors des changements de colonne"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Save this view"
+msgstr "Enregistrer cette vue"
+
+msgid "Saved"
+msgstr "Enregistré"
+
+msgid "Saved board view"
+msgid_plural "Saved board views"
+msgstr[0] "Vue du tableau enregistrée"
+msgstr[1] "Vues du tableau enregistrées"
+
+msgid "Saved views"
+msgstr "Vues enregistrées"
+
+msgid "Search by ticket number"
+msgstr "Rechercher par numéro de ticket"
+
+msgid "Search: number, title, category, description..."
+msgstr "Rechercher : numéro, titre, catégorie, description..."
+
+msgid "Select a model..."
+msgstr "Sélectionner un modèle..."
+
+msgid "Select a pending reason before moving the card."
+msgstr "Sélectionnez une raison d'attente avant de déplacer la carte."
+
+msgid "Select a reason..."
+msgstr "Sélectionner une raison..."
+
+msgid "Select a solution model before moving the card."
+msgstr "Sélectionnez un modèle de solution avant de déplacer la carte."
+
+msgid "Select a solution type before moving the card."
+msgstr "Sélectionnez un type de solution avant de déplacer la carte."
+
+msgid "Select all in column"
+msgstr "Tout sélectionner dans la colonne"
+
+msgid "Select at least one card"
+msgstr "Sélectionnez au moins une carte"
+
+msgid "Select card"
+msgstr "Sélectionner la carte"
+
+msgid "selected"
+msgstr "sélectionné"
+
+msgid "Set the status to pending"
+msgstr "Définir le statut sur En attente"
+
+msgid "Share with everyone"
+msgstr "Partager avec tout le monde"
+
+msgid "Show / hide columns"
+msgstr "Afficher / masquer les colonnes"
+
+msgid "Show all columns"
+msgstr "Afficher toutes les colonnes"
+
+msgid "Show column"
+msgstr "Afficher la colonne"
+
+msgid "Showing %1$d of %2$d"
+msgstr "Affichage de %1$d sur %2$d"
+
+msgid "Skip to board"
+msgstr "Aller au tableau"
+
+msgid "SLA"
+msgstr "SLA"
+
+msgid "SLA (Closest to expiry first)"
+msgstr "SLA (expiration la plus proche en premier)"
+
+msgid "SLA (Farthest from expiry first)"
+msgstr "SLA (expiration la plus lointaine en premier)"
+
+msgid "SLA due soon"
+msgstr "SLA bientôt échu"
+
+msgid "SLA on time"
+msgstr "SLA dans les délais"
+
+msgid "SLA overdue"
+msgstr "SLA en retard"
+
+msgid "SLA paused"
+msgstr "SLA en pause"
+
+msgid "SLA state"
+msgstr "État du SLA"
+
+msgid "Solution"
+msgstr "Solution"
+
+msgid "Solution model"
+msgstr "Modèle de solution"
+
+msgid "Solution type"
+msgstr "Type de solution"
+
+msgid "Sort by"
+msgstr "Trier par"
+
+msgid "Sort via column dropdowns"
+msgstr "Trier via les menus des colonnes"
+
+msgid "Status"
+msgstr "Statut"
+
+msgid "Status unchanged; only the follow-up was recorded"
+msgstr "Statut inchangé ; seul le suivi a été enregistré"
+
+msgid "Status updated"
+msgstr "Statut mis à jour"
+
+msgid "Technician"
+msgstr "Technicien"
+
+msgid "The move is blocked until a pending reason is selected."
+msgstr "Le déplacement est bloqué tant qu'une raison d'attente n'est pas sélectionnée."
+
+msgid "The move is blocked until a solution model is selected."
+msgstr "Le déplacement est bloqué tant qu'un modèle de solution n'est pas sélectionné."
+
+msgid "The move is blocked until a solution type is set (either chosen or filled in automatically from the model)."
+msgstr "Le déplacement est bloqué tant qu'un type de solution n'est pas défini (choisi ou rempli automatiquement à partir du modèle)."
+
+msgid "The plugin directory must be named \"kanban\""
+msgstr "Le répertoire du plugin doit s'appeler \"kanban\""
+
+msgid "The status changed, but the pending reason was not recorded (no follow-up right)."
+msgstr "Le statut a changé, mais la raison d'attente n'a pas été enregistrée (pas de droit de suivi)."
+
+msgid "The status changed, but the solution was not recorded (the ticket can no longer be solved)."
+msgstr "Le statut a changé, mais la solution n'a pas été enregistrée (le ticket ne peut plus être résolu)."
+
+msgid "The ticket was moved back"
+msgstr "Le ticket a été replacé"
+
+msgid "The view name is too long"
+msgstr "Le nom de la vue est trop long"
+
+msgid "This column is limited to %d ticket(s) in progress. Move or close one before adding another."
+msgstr "Cette colonne est limitée à %d ticket(s) en cours. Déplacez-en un ou fermez-le avant d'en ajouter un autre."
+
+msgid "This column reached its limit of %d tickets in progress"
+msgstr "Cette colonne a atteint sa limite de %d tickets en cours"
+
+msgid "Ticket Details"
+msgstr "Détails du ticket"
+
+msgid "Ticket follow-ups"
+msgstr "Suivis du ticket"
+
+msgid "Ticket not found"
+msgstr "Ticket introuvable"
+
+msgid "Ticket type"
+msgstr "Type de ticket"
+
+msgid "Time in Status (Longest first)"
+msgstr "Temps dans le statut (plus long en premier)"
+
+msgid "Time in Status (Shortest first)"
+msgstr "Temps dans le statut (plus court en premier)"
+
+msgid "Today"
+msgstr "Aujourd'hui"
+
+msgid "Tomorrow"
+msgstr "Demain"
+
+msgid "Total tickets"
+msgstr "Total des tickets"
+
+msgid "Unassigned"
+msgstr "Non attribué"
+
+msgid "Undo"
+msgstr "Défaire"
+
+msgid "Undo a card move"
+msgstr "Défaire un déplacement de carte"
+
+msgid "Undo the move"
+msgstr "Défaire le déplacement"
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+msgid "Unknown action"
+msgstr "Action inconnue"
+
+msgid "Unknown status"
+msgstr "Statut inconnu"
+
+msgid "Very High"
+msgstr "Très haute"
+
+msgid "Very Low"
+msgstr "Très basse"
+
+msgid "View deleted"
+msgstr "Vue supprimée"
+
+msgid "View name"
+msgstr "Nom de la vue"
+
+msgid "View not found"
+msgstr "Vue introuvable"
+
+msgid "View saved"
+msgstr "Vue enregistrée"
+
+msgid "View the kanban board"
+msgstr "Voir le tableau kanban"
+
+msgid "Visible tickets"
+msgstr "Tickets visibles"
+
+msgid "When moving to Pending the reason is stored as a follow-up; when moving to Solved a solution (description, model or type) can be recorded."
+msgstr "Lors du déplacement vers En attente, la raison est enregistrée comme suivi ; lors du déplacement vers Résolu, une solution (description, modèle ou type) peut être enregistrée."
+
+msgid "When off, a column over the limit is only highlighted on the board. When on, the move is rejected and the check also runs on the server."
+msgstr "Désactivé, une colonne au-delà de la limite est seulement mise en évidence sur le tableau. Activé, le déplacement est refusé et la vérification s'exécute aussi côté serveur."
+
+msgid "Within SLA"
+msgstr "SLA respecté"
+
+msgid "Work in progress limit"
+msgstr "Limite de travail en cours"
+
+msgid "X d ago"
+msgstr "il y a X j"
+
+msgid "X h ago"
+msgstr "il y a X h"
+
+msgid "X min ago"
+msgstr "il y a X min"
+
+msgid "Yesterday"
+msgstr "Hier"
+
+msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
+msgstr "Zéro désactive la limite. Le décompte correspond aux tickets que vous pouvez voir dans la colonne, en ignorant les filtres actifs, car la limite s'applique à la file d'attente et non à la vue actuelle."
