@@ -717,7 +717,7 @@ const checkbox = document.createElement('input');
        const label = document.getElementById('kanbanFollowupsModalLabel');
        if (label) label.textContent = (lang.followupsTitle || 'Follow-ups') + ' #' + ticketId;
 
-       body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+       body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">' + escapeHtml(lang.loading || 'Loading...') + '</span></div></div>';
        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
        modal.show();
 
@@ -1505,7 +1505,7 @@ function createCardElement(ticket) {
        const card = document.createElement('div');
        card.className = 'kanban-card card';
               card.setAttribute('data-ticket-id', ticket.id);
-                     card.setAttribute('aria-label', 'Ticket #' + ticket.id + ' - ' + (ticket.title || ''));
+                     card.setAttribute('aria-label', (lang.ticketNumber || 'Ticket #') + ' ' + ticket.id + ' - ' + (ticket.title || ''));
 
        if (enableDragDrop) {
           card.setAttribute('draggable', 'true');
@@ -2441,10 +2441,10 @@ function updateCountdowns() {
           slaHtml = `
              <div class="kanban-detail-sla">
                 <div class="d-flex justify-content-between align-items-baseline mb-1">
-                   <span class="kanban-detail-sla-title">SLA progress</span>
-                   <span class="kanban-detail-sla-value">${ticket.sla_progress.percent}% elapsed</span>
+                   <span class="kanban-detail-sla-title">${escapeHtml(lang.slaProgress || 'SLA progress')}</span>
+                   <span class="kanban-detail-sla-value">${escapeHtml((lang.slaElapsed || '%d%% elapsed').replace('%d', ticket.sla_progress.percent).replace('%%', '%'))}</span>
                 </div>
-                <div class="progress" role="progressbar" aria-label="SLA progress"
+                <div class="progress" role="progressbar" aria-label="${escapeHtml(lang.slaProgress || 'SLA progress')}"
                      aria-valuenow="${ticket.sla_progress.percent}" aria-valuemin="0" aria-valuemax="100">
                    <div class="progress-bar bg-${ticket.sla_progress.color}" style="width: ${ticket.sla_progress.percent}%"></div>
                 </div>
@@ -2453,7 +2453,7 @@ function updateCountdowns() {
        }
 
        // Content is already sanitized server-side via GLPI RichText::getSafeHtml().
-       const content = ticket.content || 'No description available.';
+       const content = ticket.content || escapeHtml(lang.noDescription || 'No description available.');
 
        // One label/value pair. Both columns use the same alignment, so the
        // reader does not have to jump between right- and left-aligned values.
@@ -2466,31 +2466,31 @@ function updateCountdowns() {
        body.innerHTML = `
            <div class="kanban-detail-grid">
               <section class="kanban-detail-section">
-                 <h6 class="kanban-detail-heading">Ticket</h6>
+                 <h6 class="kanban-detail-heading">${escapeHtml(lang.ticketSection || 'Ticket')}</h6>
                  <dl class="kanban-detail-list">
-                    ${row('Ticket #:', ticket.id)}
-                    ${row('Title:', escapeHtml(ticket.title))}
-                    ${row('Status:', `<span class="badge bg-secondary">${escapeHtml(ticket.status_name || '')}</span>`)}
-                    ${row('Priority:', priorityBadge)}
-                    ${row('Category:', escapeHtml(ticket.category || lang.noCategory))}
-                    ${row('Urgency:', escapeHtml(ticket.urgency_label || ''))}
-                    ${row('Impact:', escapeHtml(ticket.impact_label || ''))}
+                    ${row(lang.ticketNumber || 'Ticket #', ticket.id)}
+                    ${row(lang.title || 'Title', escapeHtml(ticket.title))}
+                    ${row(lang.status || 'Status', `<span class="badge bg-secondary">${escapeHtml(ticket.status_name || '')}</span>`)}
+                    ${row(lang.priority || 'Priority', priorityBadge)}
+                    ${row(lang.category || 'Category', escapeHtml(ticket.category || lang.noCategory))}
+                    ${row(lang.urgency || 'Urgency', escapeHtml(ticket.urgency_label || ''))}
+                    ${row(lang.impact || 'Impact', escapeHtml(ticket.impact_label || ''))}
                  </dl>
               </section>
               <section class="kanban-detail-section">
-                 <h6 class="kanban-detail-heading">People &amp; dates</h6>
+                 <h6 class="kanban-detail-heading">${escapeHtml(lang.peopleAndDates || 'People & dates')}</h6>
                  <dl class="kanban-detail-list">
-                    ${row('Requester:', escapeHtml(ticket.requester_name || 'N/A'))}
-                    ${row('Technician:', escapeHtml(techNames))}
-                    ${row('Opened:', escapeHtml(ticket.date_creation_formatted || ticket.date_creation || 'N/A'))}
-                    ${row('Last Updated:', escapeHtml(ticket.date_mod || 'N/A'))}
-                    ${row('Action Time:', ticket.actiontime ? formatDuration(ticket.actiontime) : 'N/A')}
+                    ${row(lang.requester || 'Requester', escapeHtml(ticket.requester_name || 'N/A'))}
+                    ${row(lang.technician || 'Technician', escapeHtml(techNames))}
+                    ${row(lang.opened || 'Opened', escapeHtml(ticket.date_creation_formatted || ticket.date_creation || 'N/A'))}
+                    ${row(lang.lastUpdated || 'Last updated', escapeHtml(ticket.date_mod || 'N/A'))}
+                    ${row(lang.actionTime || 'Action time', ticket.actiontime ? formatDuration(ticket.actiontime) : 'N/A')}
                  </dl>
               </section>
            </div>
            ${slaHtml}
            <section class="kanban-detail-section kanban-detail-description">
-              <h6 class="kanban-detail-heading">Description</h6>
+              <h6 class="kanban-detail-heading">${escapeHtml(lang.description || 'Description')}</h6>
               <div class="modal-description">
                  ${content}
               </div>
@@ -3006,7 +3006,7 @@ document.addEventListener('DOMContentLoaded', function () {
       modalEl.addEventListener('hidden.bs.modal', function () {
          const body = document.getElementById('kanbanTicketModalBody');
          if (body) {
-            body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+            body.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">' + escapeHtml(lang.loading || 'Loading...') + '</span></div></div>';
          }
       });
    }

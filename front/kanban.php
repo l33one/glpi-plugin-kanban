@@ -234,6 +234,24 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "unsetDefaultView" => __("Unset the default view", "kanban"),
     "defaultViewSet" => __("Default view set", "kanban"),
     "defaultViewCleared" => __("Default view cleared", "kanban"),
+    "ticketNumber" => __("Ticket #", "kanban"),
+    "title" => __("Title", "kanban"),
+    "status" => __("Status", "kanban"),
+    "priority" => __("Priority", "kanban"),
+    "category" => __("Category", "kanban"),
+    "urgency" => __("Urgency", "kanban"),
+    "impact" => __("Impact", "kanban"),
+    "requester" => __("Requester", "kanban"),
+    "technician" => __("Technician", "kanban"),
+    "opened" => __("Opened", "kanban"),
+    "lastUpdated" => __("Last updated", "kanban"),
+    "actionTime" => __("Action time", "kanban"),
+    "ticketSection" => __("Ticket", "kanban"),
+    "peopleAndDates" => __("People & dates", "kanban"),
+    "description" => __("Description", "kanban"),
+    "slaProgress" => __("SLA progress", "kanban"),
+    "slaElapsed" => __("%d%% elapsed", "kanban"),
+    "noDescription" => __("No description available.", "kanban"),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
@@ -616,12 +634,12 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
              <div class="modal-body" id="kanbanTicketModalBody">
                 <div class="text-center py-3">
                    <div class="spinner-border text-primary" role="status">
-                      <span class="visually-hidden">Loading...</span>
+                      <span class="visually-hidden"><?php echo __("Loading...", "kanban"); ?></span>
                    </div>
                 </div>
              </div>
              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?php echo __("Close", "kanban"); ?></button>
                 <a href="#" class="btn btn-primary" id="kanbanTicketModalOpen" target="_blank"><?php echo __("Open in GLPI", "kanban"); ?></a>
              </div>
           </div>
@@ -639,12 +657,12 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
              <div class="modal-body" id="kanbanFollowupsModalBody">
                 <div class="text-center py-3">
                    <div class="spinner-border text-primary" role="status">
-                      <span class="visually-hidden">Loading...</span>
+                      <span class="visually-hidden"><?php echo __("Loading...", "kanban"); ?></span>
                    </div>
                 </div>
              </div>
              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><?php echo __("Close", "kanban"); ?></button>
              </div>
            </div>
         </div>

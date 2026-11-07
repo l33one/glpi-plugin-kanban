@@ -7,6 +7,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
+msgid "%d%% elapsed"
+msgstr "%d%% écoulé"
+
 msgid "A description is required to move to Pending"
 msgstr "Une description est requise pour déplacer vers En attente"
 
@@ -24,6 +27,9 @@ msgstr "Un modèle de solution est requis pour déplacer vers Résolu"
 
 msgid "A solution type is required to move to Solved"
 msgstr "Un type de solution est requis pour déplacer vers Résolu"
+
+msgid "Action time"
+msgstr "Temps d'action"
 
 msgid "Advanced Filters"
 msgstr "Filtres avancés"
@@ -208,6 +214,9 @@ msgstr "Haute"
 msgid "How many cards a column shows before a \"load more\" button appears (1-200). A column that matches more tickets than this displays its real total, so nothing is hidden."
 msgstr "Nombre de cartes affichées par une colonne avant l'apparition du bouton \"Charger plus\" (1-200). Une colonne qui correspond à plus de tickets que cette valeur affiche son total réel, donc rien n'est masqué."
 
+msgid "Impact"
+msgstr "Impact"
+
 msgid "in X d"
 msgstr "dans X j"
 
@@ -234,6 +243,9 @@ msgstr "Configuration Kanban"
 
 msgid "Kanban Plugin Configuration"
 msgstr "Configuration du plugin Kanban"
+
+msgid "Last updated"
+msgstr "Dernière mise à jour"
 
 msgid "List follow-ups"
 msgstr "Lister les suivis"
@@ -276,6 +288,9 @@ msgstr "Nouveau ticket"
 
 msgid "No Category"
 msgstr "Aucune catégorie"
+
+msgid "No description available."
+msgstr "Aucune description disponible."
 
 msgid "No follow-ups for this ticket"
 msgstr "Aucun suivi pour ce ticket"
@@ -322,6 +337,9 @@ msgstr "Durée d'ouverture"
 msgid "Open in GLPI"
 msgstr "Ouvrir dans GLPI"
 
+msgid "Opened"
+msgstr "Ouvert le"
+
 msgid "Opening date"
 msgstr "Date d'ouverture"
 
@@ -330,6 +348,9 @@ msgstr "Ordre des colonnes du tableau (IDs de statut)"
 
 msgid "Pending reason"
 msgstr "Raison d'attente"
+
+msgid "People & dates"
+msgstr "Personnes et dates"
 
 msgid "Permission denied"
 msgstr "Accès refusé"
@@ -468,6 +489,9 @@ msgstr "SLA en retard"
 msgid "SLA paused"
 msgstr "SLA en pause"
 
+msgid "SLA progress"
+msgstr "Progression du SLA"
+
 msgid "SLA state"
 msgstr "État du SLA"
 
@@ -528,6 +552,12 @@ msgstr "Cette colonne est limitée à %d ticket(s) en cours. Déplacez-en un ou 
 msgid "This column reached its limit of %d tickets in progress"
 msgstr "Cette colonne a atteint sa limite de %d tickets en cours"
 
+msgid "Ticket"
+msgstr "Ticket"
+
+msgid "Ticket #"
+msgstr "Ticket n°"
+
 msgid "Ticket Details"
 msgstr "Détails du ticket"
 
@@ -545,6 +575,9 @@ msgstr "Temps dans le statut (plus long en premier)"
 
 msgid "Time in Status (Shortest first)"
 msgstr "Temps dans le statut (plus court en premier)"
+
+msgid "Title"
+msgstr "Titre"
 
 msgid "Today"
 msgstr "Aujourd'hui"
@@ -578,6 +611,9 @@ msgstr "Statut inconnu"
 
 msgid "Unset the default view"
 msgstr "Retirer la vue par défaut"
+
+msgid "Urgency"
+msgstr "Urgence"
 
 msgid "Very High"
 msgstr "Très haute"
