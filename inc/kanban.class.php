@@ -1746,6 +1746,76 @@ class PluginKanbanKanban extends CommonGLPI {
    }
 
    /**
+    * Apply one action to a list of tickets, keeping the result of each one.
+    *
+    * The single-ticket methods already hold every check (visibility, UPDATE
+    * right, WIP, transition requirements); a batch loops over them instead of
+    * duplicating the rules, and records a refusal per id so one bad card never
+    * aborts the rest of the selection.
+    *
+    * @param string $action_type assign_to_me|change_priority|update_status
+    * @param int[]  $ticket_ids
+    * @param array  $params      'priority' for change_priority; 'status' and
+    *                            'extra' for update_status.
+    * @return array ['results' => [id => ['id','success','error']],
+    *                'success_count' => int, 'error_count' => int, 'total' => int]
+    */
+   public static function batchAction(string $action_type, array $ticket_ids, array $params = []): array {
+      $results = [];
+      $success_count = 0;
+      $error_count   = 0;
+
+      $ids = [];
+      foreach ($ticket_ids as $ticket_id) {
+         $ticket_id = (int)$ticket_id;
+         if ($ticket_id > 0) {
+            $ids[$ticket_id] = $ticket_id;
+         }
+      }
+
+      foreach ($ids as $ticket_id) {
+         switch ($action_type) {
+            case 'assign_to_me':
+               $result = self::assignToMe($ticket_id);
+               break;
+            case 'change_priority':
+               $result = self::changePriority($ticket_id, (int)($params['priority'] ?? 0));
+               break;
+            case 'update_status':
+               $result = self::updateTicketStatus(
+                  $ticket_id,
+                  (int)($params['status'] ?? 0),
+                  (array)($params['extra'] ?? [])
+               );
+               break;
+            default:
+               $result = ['success' => false, 'error' => __('Invalid request', 'kanban')];
+               break;
+         }
+
+         $success = !empty($result['success']);
+         if ($success) {
+            $success_count++;
+         } else {
+            $error_count++;
+         }
+
+         $results[(string)$ticket_id] = [
+            'id'      => $ticket_id,
+            'success' => $success,
+            'error'   => $success ? null : ($result['error'] ?? __('Invalid request', 'kanban')),
+         ];
+      }
+
+      return [
+         'results'       => $results,
+         'success_count' => $success_count,
+         'error_count'   => $error_count,
+         'total'         => count($results),
+      ];
+   }
+
+   /**
     * Transition a ticket to a new status (drag & drop).
     *
 * Depending on the destination the associated GLPI data is recorded too:

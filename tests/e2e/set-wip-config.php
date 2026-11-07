@@ -13,6 +13,8 @@
  *   KANBAN_WIP_LIMIT       global limit (0 = no limit)
  *   KANBAN_WIP_LIMITS_B64  base64 of a JSON object status id => limit
  *                          (0 = unlimited for that column)
+ *   KANBAN_WIP_BLOCK       "1" to refuse moves into a full column, "0" to only
+ *                          warn. The batch tests need a move to be refused.
  */
 
 // CLI-only defence in depth: never web-reachable.
@@ -31,6 +33,7 @@ if ($host === '' || $user === '' || $passdb === '' || $name === '') {
 }
 
 $global = max(0, min(10000, (int)getenv('KANBAN_WIP_LIMIT')));
+$block  = getenv('KANBAN_WIP_BLOCK') === '1' ? 1 : 0;
 
 $raw = (string)getenv('KANBAN_WIP_LIMITS_B64');
 $decoded = [];
@@ -74,8 +77,9 @@ if ($stmt === false) {
 
 $context = 'plugin:kanban';
 $values = [
-    'wip_limit'  => (string)$global,
-    'wip_limits' => json_encode($limits),
+    'wip_limit'        => (string)$global,
+    'wip_limits'       => json_encode($limits),
+    'wip_block_exceed' => (string)$block,
 ];
 foreach ($values as $key => $value) {
     $stmt->bind_param('sss', $context, $key, $value);
@@ -87,4 +91,8 @@ foreach ($values as $key => $value) {
 $stmt->close();
 $mysqli->close();
 
-echo json_encode(['wip_limit' => $global, 'wip_limits' => $limits]) . PHP_EOL;
+echo json_encode([
+    'wip_limit'        => $global,
+    'wip_limits'       => $limits,
+    'wip_block_exceed' => $block,
+]) . PHP_EOL;

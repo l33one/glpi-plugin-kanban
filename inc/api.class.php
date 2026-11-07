@@ -36,6 +36,7 @@ class PluginKanbanApi {
       'change_priority',
       'update_ticket_status',
       'undo_ticket_status',
+      'batch_action',
       'save_preset',
       'delete_preset',
       'rename_preset',
@@ -253,6 +254,48 @@ class PluginKanbanApi {
       ];
    }
 
+   /**
+    * Apply one action to several tickets, keeping the per-ticket result.
+    *
+    * A batch is not a transaction: one refused card (no right, not visible,
+    * WIP full, missing pending description) must not undo or block the cards
+    * that were accepted. The model reuses the same single-ticket methods, so
+    * every check stays in one place and the batch cannot bypass them.
+    */
+   private function actionBatchAction(): array {
+      $action_type = $this->strParam('action_type');
+      if (!in_array($action_type, ['assign_to_me', 'change_priority', 'update_status'], true)) {
+         $this->fail(__('Invalid request', 'kanban'), 400);
+      }
+
+      $ticket_ids = $this->intListParam('ticket_ids');
+      if (count($ticket_ids) === 0) {
+         $this->fail(__('Invalid request', 'kanban'), 400);
+      }
+
+      $params = [];
+      if ($action_type === 'change_priority') {
+         $params['priority'] = $this->requireIntParam('priority');
+      } elseif ($action_type === 'update_status') {
+         $params['status'] = $this->requireIntParam('status');
+         $params['extra'] = [
+            'pending_reason'              => $this->strParam('pending_reason'),
+            'pending'                     => $this->strParam('pending'),
+            'pendingreasons_id'           => $this->intParam('pendingreasons_id'),
+            'followup_frequency'          => $this->intParam('followup_frequency'),
+            'followups_before_resolution' => $this->intParam('followups_before_resolution'),
+            'solution'                    => $this->strParam('solution'),
+            'solution_type_id'            => $this->intParam('solution_type_id'),
+            'solution_template_id'        => $this->intParam('solution_template_id'),
+         ];
+      }
+
+      return [
+         'result'     => PluginKanbanKanban::batchAction($action_type, $ticket_ids, $params),
+         'csrf_token' => Session::getNewCSRFToken(),
+      ];
+   }
+
    private function actionGetPresets(): array {
       return ['presets' => PluginKanbanFilterPreset::listForUser()];
    }
@@ -355,6 +398,40 @@ class PluginKanbanApi {
       }
 
       return $value;
+   }
+
+   /**
+    * A list of positive integer ids, accepted either as repeated fields
+    * (ticket_ids[]=1&ticket_ids[]=2) or as "1,2,3" / a JSON array. The board
+    * posts a comma-separated list, but the other shapes keep the endpoint
+    * usable from a plain form or a script.
+    */
+   private function intListParam(string $name): array {
+      $raw = $_POST[$name] ?? $_GET[$name] ?? [];
+      if (is_string($raw)) {
+         $raw = trim($raw);
+         if ($raw === '') {
+            return [];
+         }
+         $decoded = json_decode($raw, true);
+         $raw = is_array($decoded) ? $decoded : explode(',', $raw);
+      }
+      if (!is_array($raw)) {
+         return [];
+      }
+
+      $ids = [];
+      foreach ($raw as $value) {
+         if (!is_scalar($value)) {
+            continue;
+         }
+         $id = (int)$value;
+         if ($id > 0) {
+            $ids[$id] = $id;
+         }
+      }
+
+      return array_values($ids);
    }
 
    private function boolParam(string $name): bool {

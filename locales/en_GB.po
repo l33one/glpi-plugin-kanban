@@ -55,6 +55,12 @@ msgstr "An error occurred while loading the board"
 msgid "An error occurred while processing the request"
 msgstr "An error occurred while processing the request"
 
+msgid "applied"
+msgstr "applied"
+
+msgid "Apply"
+msgstr "Apply"
+
 msgid "Assign to me"
 msgstr "Assign to me"
 
@@ -76,6 +82,12 @@ msgstr "Automatic resolution"
 msgid "Available refresh intervals (minutes)"
 msgstr "Available refresh intervals (minutes)"
 
+msgid "Batch actions"
+msgstr "Batch actions"
+
+msgid "Batch result: %1$d applied, %2$d refused"
+msgstr "Batch result: %1$d applied, %2$d refused"
+
 msgid "Board indicators"
 msgstr "Board indicators"
 
@@ -94,8 +106,17 @@ msgstr "Category"
 msgid "Change priority"
 msgstr "Change priority"
 
+msgid "Choose a priority first"
+msgstr "Choose a priority first"
+
+msgid "Choose a status first"
+msgstr "Choose a status first"
+
 msgid "Clear"
 msgstr "Clear"
+
+msgid "Clear selection"
+msgstr "Clear selection"
 
 msgid "Close"
 msgstr "Close"
@@ -325,6 +346,9 @@ msgstr "Refresh"
 msgid "Refuse moves that would exceed the limit"
 msgstr "Refuse moves that would exceed the limit"
 
+msgid "refused"
+msgstr "refused"
+
 msgid "Requester"
 msgstr "Requester"
 
@@ -377,6 +401,18 @@ msgstr "Select a solution model before moving the card."
 
 msgid "Select a solution type before moving the card."
 msgstr "Select a solution type before moving the card."
+
+msgid "Select all in column"
+msgstr "Select all in column"
+
+msgid "Select at least one card"
+msgstr "Select at least one card"
+
+msgid "Select card"
+msgstr "Select card"
+
+msgid "selected"
+msgstr "selected"
 
 msgid "Set the status to pending"
 msgstr "Set the status to pending"
@@ -437,6 +473,9 @@ msgstr "Sort by"
 
 msgid "Sort via column dropdowns"
 msgstr "Sort via column dropdowns"
+
+msgid "Status"
+msgstr "Status"
 
 msgid "Status unchanged; only the follow-up was recorded"
 msgstr "Status unchanged; only the follow-up was recorded"

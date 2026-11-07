@@ -665,6 +665,52 @@
    letter-spacing: 0.02em;
 }
 
+/* ===== Batch selection and actions ===== */
+.kanban-card-select,
+.kanban-select-all {
+   width: 0.95rem;
+   height: 0.95rem;
+   margin: 0;
+   cursor: pointer;
+   flex-shrink: 0;
+}
+
+.kanban-select-all-wrap {
+   display: inline-flex;
+   align-items: center;
+   margin: 0;
+   cursor: pointer;
+}
+
+.kanban-card-selected {
+   border-color: var(--kanban-primary) !important;
+   outline: 2px solid var(--kanban-primary);
+   outline-offset: -2px;
+}
+
+.kanban-card-selected .card-body {
+   background: var(--kanban-surface-soft);
+   border-radius: 0.5rem;
+}
+
+.kanban-batch-bar {
+   position: sticky;
+   bottom: 0.75rem;
+   z-index: 20;
+   margin-top: 0.75rem;
+   padding: 0.55rem 0.75rem;
+   background: var(--kanban-surface);
+   border: 1px solid var(--kanban-border-strong);
+   border-radius: 0.75rem;
+   box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+}
+
+.kanban-batch-count {
+   font-size: 0.85rem;
+   color: var(--kanban-text);
+   padding-right: 0.25rem;
+}
+
 /* Open link — subtle icon, appears on hover */
 .card-open-link {
    display: inline-flex;

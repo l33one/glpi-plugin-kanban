@@ -81,7 +81,7 @@ function Invoke-Seeder {
 }
 
 function Set-WipConfig {
-    param([int]$Version, [int]$Global, [hashtable]$Limits = @{})
+    param([int]$Version, [int]$Global, [hashtable]$Limits = @{}, [int]$Block = 0)
     # PowerShell 5.1 refuses to serialize a hashtable with integer keys, so the
     # JSON object is built by hand: the fixture expects status id => limit.
     $pairs = @()
@@ -100,6 +100,7 @@ function Set-WipConfig {
         -e 'KANBAN_DB_NAME=glpi' `
         -e "KANBAN_WIP_LIMIT=$Global" `
         -e "KANBAN_WIP_LIMITS_B64=$encoded" `
+        -e "KANBAN_WIP_BLOCK=$Block" `
         glpi php /var/www/glpi/plugins/kanban/tests/e2e/set-wip-config.php | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "set-wip-config falhou no GLPI $Version (exit $LASTEXITCODE)" }
 }
@@ -346,6 +347,46 @@ foreach ($v in $Versions) {
         Set-WipConfig -Version $v -Global 0 -Limits @{}
     }
 
+    Write-Host '-- Acoes em lote: resultado por chamado com recusa parcial --'
+    # Leave exactly one free slot in status 2: the first move is accepted, the
+    # second finds the column full. A batch is not a transaction, so the
+    # accepted ticket must stay moved and the refused one must come back with
+    # its own reason instead of aborting the whole selection.
+    $wipBefore = Invoke-Api -Session $sess -Action 'get_wip_state'
+    $status2Count = 0
+    if ($wipBefore.json -and $null -ne $wipBefore.json.wip.'2') {
+        $status2Count = [int]$wipBefore.json.wip.'2'.current
+    }
+
+    $batchSource = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ status = 1; limit = 50 }
+    $batchIds = @($batchSource.json.statuses.'1' | ForEach-Object { [int]$_.id })
+    if ($batchIds.Count -ge 2) {
+        $batchTicketIds = "$($batchIds[0]),$($batchIds[1])"
+        try {
+            Set-WipConfig -Version $v -Global 0 -Limits @{ 2 = ($status2Count + 1) } -Block 1
+            $batch = Invoke-Api -Session $sess -Action 'batch_action' -Post -Params @{
+                action_type = 'update_status'; status = 2; ticket_ids = $batchTicketIds
+            }
+            Check ($batch.json -ne $null) "batch_action devolve JSON (HTTP $($batch.code))"
+            if ($batch.json -and $batch.json.result) {
+                $batchResult = $batch.json.result
+                Check ([int]$batchResult.total -eq 2) "o lote processa os 2 chamados (total $($batchResult.total))"
+                Check ([int]$batchResult.success_count -eq 1) "um movimento e aceito (aceitos $($batchResult.success_count))"
+                Check ([int]$batchResult.error_count -eq 1) "um movimento e recusado pelo WIP (recusados $($batchResult.error_count))"
+
+                $batchRows = @($batchResult.results.PSObject.Properties | ForEach-Object { $_.Value })
+                $batchOk = @($batchRows | Where-Object { $_.success -eq $true })
+                $batchKo = @($batchRows | Where-Object { $_.success -ne $true })
+                Check ($batchOk.Count -eq 1 -and $batchKo.Count -eq 1) 'cada chamado tem o seu proprio resultado'
+                Check ($batchKo.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace([string]$batchKo[0].error)) 'o chamado recusado traz o motivo individual'
+            }
+        } finally {
+            Set-WipConfig -Version $v -Global 0 -Limits @{}
+        }
+    } else {
+        Write-Host '  (poucos chamados no status 1: pulando o teste de lote)' -ForegroundColor Yellow
+    }
+
     Write-Host '-- Saved views: salvar, listar e apagar --'
     $viewName = 'KB-E2E view'
     $save = Invoke-Api -Session $sess -Action 'save_preset' -Post -Params @{ name = $viewName; technician = 0; is_private = 1 }
@@ -386,6 +427,13 @@ if ($viewId -gt 0) {
     # ParÃ¢metro obrigatÃ³rio ausente Ã© requisiÃ§Ã£o invÃ¡lida, nÃ£o erro 500.
     $noTicket = Invoke-Api -Session $sess -Action 'update_ticket_status' -Post
     Check ($noTicket.code -eq '400') "update_ticket_status sem ticket_id responde 400 (obtido $($noTicket.code))"
+
+    $batchGet = Invoke-Api -Session $sess -Action 'batch_action' -Params @{ action_type = 'assign_to_me'; ticket_ids = '1' }
+    Check ($batchGet.code -eq '405') "GET em batch_action responde 405 (obtido $($batchGet.code))"
+
+    $batchEmpty = Invoke-Api -Session $sess -Action 'batch_action' -Post -Params @{ action_type = 'assign_to_me' }
+    Check ($batchEmpty.code -eq '400') "batch_action sem ticket_ids responde 400 (obtido $($batchEmpty.code))"
+
     $noFollowup = Invoke-Api -Session $sess -Action 'get_followups'
     Check ($noFollowup.code -eq '400') "get_followups sem ticket_id responde 400 (obtido $($noFollowup.code))"
 

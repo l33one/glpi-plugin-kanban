@@ -55,6 +55,12 @@ msgstr "Ocorreu um erro ao carregar o quadro"
 msgid "An error occurred while processing the request"
 msgstr "Ocorreu um erro ao processar a solicitação"
 
+msgid "applied"
+msgstr "aplicado(s)"
+
+msgid "Apply"
+msgstr "Aplicar"
+
 msgid "Assign to me"
 msgstr "Atribuir a mim"
 
@@ -76,6 +82,12 @@ msgstr "Resolução automática"
 msgid "Available refresh intervals (minutes)"
 msgstr "Intervalos de atualização disponíveis (minutos)"
 
+msgid "Batch actions"
+msgstr "Ações em lote"
+
+msgid "Batch result: %1$d applied, %2$d refused"
+msgstr "Resultado do lote: %1$d aplicado(s), %2$d recusado(s)"
+
 msgid "Board indicators"
 msgstr "Indicadores do quadro"
 
@@ -94,8 +106,17 @@ msgstr "Categoria"
 msgid "Change priority"
 msgstr "Alterar prioridade"
 
+msgid "Choose a priority first"
+msgstr "Escolha uma prioridade primeiro"
+
+msgid "Choose a status first"
+msgstr "Escolha um status primeiro"
+
 msgid "Clear"
 msgstr "Limpar"
+
+msgid "Clear selection"
+msgstr "Limpar seleção"
 
 msgid "Close"
 msgstr "Fechar"
@@ -325,6 +346,9 @@ msgstr "Atualizar"
 msgid "Refuse moves that would exceed the limit"
 msgstr "Recusar movimentos que ultrapassem o limite"
 
+msgid "refused"
+msgstr "recusado(s)"
+
 msgid "Requester"
 msgstr "Solicitante"
 
@@ -377,6 +401,18 @@ msgstr "Selecione um modelo de solução antes de mover o cartão."
 
 msgid "Select a solution type before moving the card."
 msgstr "Selecione um tipo de solução antes de mover o cartão."
+
+msgid "Select all in column"
+msgstr "Selecionar todos da coluna"
+
+msgid "Select at least one card"
+msgstr "Selecione pelo menos um card"
+
+msgid "Select card"
+msgstr "Selecionar card"
+
+msgid "selected"
+msgstr "selecionado(s)"
 
 msgid "Set the status to pending"
 msgstr "Definir o status como pendente"
@@ -437,6 +473,9 @@ msgstr "Ordenar por"
 
 msgid "Sort via column dropdowns"
 msgstr "Ordenar pelos menus das colunas"
+
+msgid "Status"
+msgstr "Status"
 
 msgid "Status unchanged; only the follow-up was recorded"
 msgstr "Status inalterado; apenas o follow-up foi registrado"

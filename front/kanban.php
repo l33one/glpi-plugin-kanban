@@ -218,6 +218,18 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "requireSolutionType" => __("Select a solution type before moving the card.", "kanban"),
     "requiredPendingDescription" => __("A description is required to move to Pending", "kanban"),
     "requiredSolutionDescription" => __("A solution description is required to move to Solved", "kanban"),
+    "batchActions" => __("Batch actions", "kanban"),
+    "selected" => __("selected", "kanban"),
+    "selectCard" => __("Select card", "kanban"),
+    "selectAllInColumn" => __("Select all in column", "kanban"),
+    "clearSelection" => __("Clear selection", "kanban"),
+    "apply" => __("Apply", "kanban"),
+    "batchApplied" => __("applied", "kanban"),
+    "batchRefused" => __("refused", "kanban"),
+    "batchNoSelection" => __("Select at least one card", "kanban"),
+    "batchNeedPriority" => __("Choose a priority first", "kanban"),
+    "batchNeedStatus" => __("Choose a status first", "kanban"),
+    "batchSummary" => __('Batch result: %1$d applied, %2$d refused', 'kanban'),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
@@ -526,6 +538,53 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
    <div id="kanban-board" class="kanban-board-container row flex-nowrap overflow-auto py-2">
       <!-- Dynamically filled by JavaScript -->
    </div>
+
+   <!-- Batch actions: shown only while at least one card is selected. Each
+        action is applied per ticket by the server, so a refused card is
+        reported individually instead of aborting the whole selection. -->
+   <div id="kanban-batch-bar" class="kanban-batch-bar d-none" role="region" aria-label="<?php echo __('Batch actions', 'kanban'); ?>">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+         <span class="kanban-batch-count">
+            <strong id="kanban-batch-count">0</strong> <?php echo __('selected', 'kanban'); ?>
+         </span>
+         <button type="button" id="kanban-batch-assign" class="btn btn-sm btn-outline-primary">
+            <i class="ti ti-user-check"></i> <?php echo __('Assign to me', 'kanban'); ?>
+         </button>
+
+         <div class="d-flex align-items-center gap-1">
+            <label class="visually-hidden" for="kanban-batch-priority"><?php echo __('Priority', 'kanban'); ?></label>
+            <select id="kanban-batch-priority" class="form-select form-select-sm" style="min-width: 150px;">
+               <option value=""><?php echo __('Change priority', 'kanban'); ?>...</option>
+               <?php foreach ($kanban_priorities as $priority_id => $priority_name): ?>
+                  <option value="<?php echo (int)$priority_id; ?>"><?php echo htmlspecialchars($priority_name, ENT_QUOTES, 'UTF-8'); ?></option>
+               <?php endforeach; ?>
+            </select>
+            <button type="button" id="kanban-batch-priority-apply" class="btn btn-sm btn-outline-secondary">
+               <?php echo __('Apply', 'kanban'); ?>
+            </button>
+         </div>
+
+         <div class="d-flex align-items-center gap-1">
+            <label class="visually-hidden" for="kanban-batch-status"><?php echo __('Status', 'kanban'); ?></label>
+            <select id="kanban-batch-status" class="form-select form-select-sm" style="min-width: 150px;">
+               <option value=""><?php echo __('Move to', 'kanban'); ?>...</option>
+               <?php foreach ($kanban_statuses as $status_id => $status): ?>
+                  <option value="<?php echo (int)$status_id; ?>"><?php echo htmlspecialchars($status['name'], ENT_QUOTES, 'UTF-8'); ?></option>
+               <?php endforeach; ?>
+            </select>
+            <input type="text" id="kanban-batch-note" class="form-control form-control-sm d-none" style="min-width: 220px;"
+                   aria-label="<?php echo __('Description', 'kanban'); ?>">
+            <button type="button" id="kanban-batch-status-apply" class="btn btn-sm btn-outline-secondary">
+               <?php echo __('Move', 'kanban'); ?>
+            </button>
+         </div>
+
+         <button type="button" id="kanban-batch-clear" class="btn btn-sm btn-link text-decoration-none">
+            <?php echo __('Clear selection', 'kanban'); ?>
+         </button>
+      </div>
+   </div>
+   <div id="kanban-batch-summary" class="small mt-1" aria-live="polite"></div>
 
     <!-- Loading overlay (hidden by default) -->
     <div id="kanban-loading-overlay" class="kanban-loading-overlay" style="display:none;">

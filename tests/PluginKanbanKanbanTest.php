@@ -2040,6 +2040,142 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
+     * A batch is not a transaction: every ticket gets its own result and one
+     * refusal must not stop the tickets that were accepted.
+     */
+    public function testBatchActionKeepsResultPerTicket(): void
+    {
+        global $DB;
+
+        $accepted = self::insertKanbanTestTicket('Kanban batch accepted');
+        $refused  = self::insertKanbanTestTicket('Kanban batch refused');
+        $missing  = 99999999;
+
+        try {
+            // Visibility on this board is actor based (assigned user/group), so
+            // only the accepted ticket is reachable by the current session.
+            self::assignTicketToCurrentUser($accepted);
+
+            $result = PluginKanbanKanban::batchAction(
+                'change_priority',
+                [$accepted, $refused, $missing],
+                ['priority' => 5]
+            );
+
+            $this->assertSame(3, $result['total']);
+            $this->assertSame(1, $result['success_count']);
+            $this->assertSame(2, $result['error_count']);
+
+            $this->assertTrue($result['results'][(string)$accepted]['success']);
+            $this->assertNull($result['results'][(string)$accepted]['error']);
+            $this->assertFalse(
+                $result['results'][(string)$refused]['success'],
+                'A ticket outside the board visibility must be refused'
+            );
+            $this->assertNotNull($result['results'][(string)$refused]['error']);
+            $this->assertFalse($result['results'][(string)$missing]['success']);
+            $this->assertSame($missing, $result['results'][(string)$missing]['id']);
+
+            $priority = $DB->request([
+                'SELECT' => ['priority'],
+                'FROM'   => 'glpi_tickets',
+                'WHERE'  => ['id' => $accepted],
+            ])->current()['priority'];
+            $this->assertSame(5, (int)$priority, 'The accepted ticket must keep the change');
+
+            $untouched = $DB->request([
+                'SELECT' => ['priority'],
+                'FROM'   => 'glpi_tickets',
+                'WHERE'  => ['id' => $refused],
+            ])->current()['priority'];
+            $this->assertSame(3, (int)$untouched, 'The refused ticket must be left untouched');
+        } finally {
+            self::deleteKanbanTestTickets([$accepted, $refused]);
+        }
+    }
+
+    /**
+     * WIP rules stay per ticket inside a batch, and an unknown action is
+     * reported per id instead of silently succeeding.
+     */
+    public function testBatchActionEnforcesWipAndRejectsUnknownAction(): void
+    {
+        $saved = \Config::getConfigurationValues('plugin:kanban');
+
+        $ticket_a = self::insertKanbanTestTicket('Kanban batch wip A');
+        $ticket_b = self::insertKanbanTestTicket('Kanban batch wip B');
+
+        try {
+            self::assignTicketToCurrentUser($ticket_a);
+            self::assignTicketToCurrentUser($ticket_b);
+
+            // Derive the limit from the real column count: a hardcoded value
+            // only blocks when the suite happens to own the whole column.
+            $in_target = PluginKanbanKanban::countVisibleTicketsInStatus(Ticket::ASSIGNED);
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'        => $in_target,
+                'wip_block_exceed' => 1,
+            ]);
+
+            $blocked = PluginKanbanKanban::batchAction(
+                'update_status',
+                [$ticket_a, $ticket_b],
+                ['status' => Ticket::ASSIGNED, 'extra' => []]
+            );
+            $this->assertSame(0, $blocked['success_count']);
+            $this->assertSame(2, $blocked['error_count']);
+            foreach ($blocked['results'] as $row) {
+                $this->assertFalse($row['success']);
+                $this->assertNotNull($row['error']);
+            }
+
+            $unknown = PluginKanbanKanban::batchAction('not_an_action', [$ticket_a]);
+            $this->assertSame(0, $unknown['success_count']);
+            $this->assertSame(1, $unknown['error_count']);
+            $this->assertFalse($unknown['results'][(string)$ticket_a]['success']);
+        } finally {
+            \Config::setConfigurationValues('plugin:kanban', [
+                'wip_limit'        => $saved['wip_limit'] ?? 0,
+                'wip_block_exceed' => $saved['wip_block_exceed'] ?? 0,
+            ]);
+            self::deleteKanbanTestTickets([$ticket_a, $ticket_b]);
+        }
+    }
+
+    /**
+     * The batch de-duplicates ids and reuses assignToMe, so an already
+     * assigned ticket is accepted instead of being added twice.
+     */
+    public function testBatchActionDeduplicatesAndAssignsToCurrentUser(): void
+    {
+        global $DB;
+
+        $ticket = self::insertKanbanTestTicket('Kanban batch assign');
+
+        try {
+            self::assignTicketToCurrentUser($ticket);
+
+            $result = PluginKanbanKanban::batchAction('assign_to_me', [$ticket, $ticket]);
+            $this->assertSame(1, $result['total'], 'Repeated ids must be collapsed');
+            $this->assertSame(1, $result['success_count']);
+            $this->assertTrue($result['results'][(string)$ticket]['success']);
+
+            $count = $DB->request([
+                'FROM'  => 'glpi_tickets_users',
+                'WHERE' => [
+                    'tickets_id' => $ticket,
+                    'users_id'   => (int)Session::getLoginUserID(),
+                    'type'       => CommonITILActor::ASSIGN,
+                ],
+                'COUNT' => 'c',
+            ])->current()['c'] ?? 0;
+            $this->assertSame(1, (int)$count, 'assignToMe must not duplicate the technician');
+        } finally {
+            self::deleteKanbanTestTickets([$ticket]);
+        }
+    }
+
+    /**
      * Call a private method of the model so tests can pin internal helpers
      * without widening the public API.
      *

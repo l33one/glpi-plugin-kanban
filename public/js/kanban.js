@@ -76,6 +76,10 @@ const pendingResolutionOptions = [
 // State of the in-flight drag (null when idle).
 let dragState = null; // { ticketId, fromStatus }
 
+// Ticket ids currently selected for a batch action. Kept as strings because
+// that is what data attributes return; the API casts them back to ints.
+const selectedTickets = new Set();
+
 // Pending status transition awaiting the (optional) modal confirmation.
 let transitionAction = null; // { ticketId, toStatus }
 
@@ -243,6 +247,10 @@ function renderBoardColumns() {
                       <h5 class="m-0">${escapeHtml(status.name)}</h5>
                    </div>
                    <div class="d-flex align-items-center gap-1">
+                      <label class="kanban-select-all-wrap" title="${escapeHtml(lang.selectAllInColumn || 'Select all in column')}">
+                         <input type="checkbox" class="form-check-input kanban-select-all" data-status-id="${id}"
+                                aria-label="${escapeHtml(lang.selectAllInColumn || 'Select all in column')}">
+                      </label>
                       <span class="badge rounded-pill fs-7 card-count card-count-badge" id="count-${id}" aria-live="polite" aria-label="${escapeHtml(status.name)} tickets count">--</span>
                       <span class="kanban-wip-badge-slot" id="wip-${id}-slot"></span>
                       <button type="button" class="btn btn-sm kanban-hide-btn" data-status-id="${id}" title="${escapeHtml(lang.hideColumn)}" aria-label="${escapeHtml(lang.hideColumn)}">
@@ -639,6 +647,7 @@ const checkbox = document.createElement('input');
        if (window.$ && window.$.fn && typeof window.$.fn.select2 === 'function') {
           try { window.$(sel).trigger('change'); } catch (e) { /* select2 refresh */ }
        }
+       clearBatchSelection();
        updateAdvancedFilterCount();
        loadTickets();
     }
@@ -754,6 +763,209 @@ const checkbox = document.createElement('input');
     }
 
     /**
+     * Refresh the batch bar and the checkboxes from the selected set.
+     *
+     * Called after every selection change and after a board render, so the
+     * checkboxes of re-rendered cards and the "select all" state stay in sync
+     * without the board keeping DOM references.
+     */
+    function updateBatchBar() {
+       const bar = document.getElementById('kanban-batch-bar');
+       const counter = document.getElementById('kanban-batch-count');
+       if (counter) counter.textContent = selectedTickets.size;
+       if (bar) bar.classList.toggle('d-none', selectedTickets.size === 0);
+
+       document.querySelectorAll('.kanban-card-select').forEach(cb => {
+          const id = cb.getAttribute('data-ticket-id');
+          const selected = id !== null && selectedTickets.has(id);
+          cb.checked = selected;
+          const card = cb.closest('.kanban-card');
+          if (card) card.classList.toggle('kanban-card-selected', selected);
+       });
+
+       document.querySelectorAll('.kanban-select-all').forEach(cb => {
+          const statusId = cb.getAttribute('data-status-id');
+          const zone = document.getElementById('status-column-' + statusId);
+          const cards = zone ? Array.from(zone.querySelectorAll('.kanban-card-select')) : [];
+          const checked = cards.filter(c => selectedTickets.has(c.getAttribute('data-ticket-id'))).length;
+          cb.checked = cards.length > 0 && checked === cards.length;
+          cb.indeterminate = checked > 0 && checked < cards.length;
+       });
+    }
+
+    function setTicketSelected(ticketId, selected) {
+       if (ticketId === null || ticketId === undefined || ticketId === '') return;
+       const id = String(ticketId);
+       if (selected) {
+          selectedTickets.add(id);
+       } else {
+          selectedTickets.delete(id);
+       }
+       updateBatchBar();
+    }
+
+    function setColumnSelected(statusId, selected) {
+       const zone = document.getElementById('status-column-' + statusId);
+       if (!zone) return;
+       zone.querySelectorAll('.kanban-card-select').forEach(cb => {
+          const id = cb.getAttribute('data-ticket-id');
+          if (id === null) return;
+          if (selected) {
+             selectedTickets.add(id);
+          } else {
+             selectedTickets.delete(id);
+          }
+       });
+       updateBatchBar();
+    }
+
+    function clearBatchSelection() {
+       selectedTickets.clear();
+       updateBatchBar();
+    }
+
+    function resetBatchControls() {
+       ['kanban-batch-priority', 'kanban-batch-status'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+       });
+       const note = document.getElementById('kanban-batch-note');
+       if (note) {
+          note.value = '';
+          note.classList.add('d-none');
+       }
+    }
+
+    /**
+     * Show the description field only for the statuses that require one.
+     */
+    function updateBatchNote() {
+       const status = document.getElementById('kanban-batch-status');
+       const note = document.getElementById('kanban-batch-note');
+       if (!status || !note) return;
+
+       const value = status.value;
+       const needsNote = value === '4' || value === '5';
+       note.classList.toggle('d-none', !needsNote);
+       note.value = '';
+       if (value === '4') {
+          note.placeholder = lang.pendingReasonPlaceholder || 'Describe why the ticket is pending...';
+       } else if (value === '5') {
+          note.placeholder = lang.solutionDescription || 'Solution';
+       }
+    }
+
+    /**
+     * POST one batch action and report the per-ticket result.
+     *
+     * The server applies the action to each id independently; the summary
+     * separates what was accepted from what was refused, and the first
+     * refusals are quoted in the toast so the user knows which cards to fix.
+     */
+    function runBatch(actionType, params) {
+       const ids = Array.from(selectedTickets).filter(id => /^\d+$/.test(id));
+       if (ids.length === 0) {
+          showToast(lang.batchNoSelection || 'Select at least one card', 'warning');
+          return;
+       }
+
+       const body = new URLSearchParams();
+       body.append('action', 'batch_action');
+       body.append('action_type', actionType);
+       body.append('ticket_ids', ids.join(','));
+       Object.keys(params || {}).forEach(key => {
+          const value = params[key];
+          if (value !== null && value !== undefined && value !== '') {
+             body.append(key, value);
+          }
+       });
+       if (getCsrfToken()) body.append('_glpi_csrf_token', getCsrfToken());
+
+       showLoading();
+       fetch(apiUrl, { method: 'POST', body: body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+          .then(r => r.json())
+          .then(res => {
+             if (res && res.csrf_token) {
+                _csrfToken = res.csrf_token;
+             }
+             hideLoading();
+             if (!res || res.success !== true || !res.result) {
+                showToast((res && res.error) || 'Error', 'danger');
+                return;
+             }
+
+             const result = res.result;
+             const applied = Number(result.success_count) || 0;
+             const refused = Number(result.error_count) || 0;
+             const failures = Object.keys(result.results || {})
+                .map(key => result.results[key])
+                .filter(row => !row.success);
+
+             let message = (lang.batchSummary || 'Batch result: %1$d applied, %2$d refused')
+                .replace('%1$d', applied)
+                .replace('%2$d', refused);
+             if (failures.length > 0) {
+                message += ' - ' + failures.slice(0, 3)
+                   .map(row => '#' + row.id + ': ' + (row.error || ''))
+                   .join('; ');
+             }
+
+             const summary = document.getElementById('kanban-batch-summary');
+             if (summary) {
+                summary.textContent = message;
+                summary.className = 'small mt-1 ' + (refused > 0 ? 'text-warning' : 'text-success');
+             }
+             showToast(message, refused > 0 ? 'warning' : 'success');
+
+             clearBatchSelection();
+             resetBatchControls();
+             loadTickets();
+          })
+          .catch(() => {
+             hideLoading();
+             showToast('Error', 'danger');
+          });
+    }
+
+    function applyBatchPriority() {
+       const select = document.getElementById('kanban-batch-priority');
+       const priority = select ? select.value : '';
+       if (!priority) {
+          showToast(lang.batchNeedPriority || 'Choose a priority first', 'warning');
+          return;
+       }
+       runBatch('change_priority', { priority: priority });
+    }
+
+    function applyBatchStatus() {
+       const select = document.getElementById('kanban-batch-status');
+       const status = select ? select.value : '';
+       if (!status) {
+          showToast(lang.batchNeedStatus || 'Choose a status first', 'warning');
+          return;
+       }
+
+       const noteEl = document.getElementById('kanban-batch-note');
+       const note = noteEl ? noteEl.value.trim() : '';
+       const params = { status: status };
+       if (status === '4') {
+          if (!note) {
+             showToast(lang.requiredPendingDescription || 'A description is required to move to Pending', 'warning');
+             return;
+          }
+          params.pending = '1';
+          params.pending_reason = note;
+       } else if (status === '5') {
+          if (!note) {
+             showToast(lang.requiredSolutionDescription || 'A solution description is required to move to Solved', 'warning');
+             return;
+          }
+          params.solution = note;
+       }
+       runBatch('update_status', params);
+    }
+
+    /**
      * Show empty placeholder in a column with no tickets
      */
     function showEmptyPlaceholder(zone, statusId) {
@@ -864,6 +1076,7 @@ function loadTickets() {
              startTimerIfNeeded();
              refreshWipHighlight();
              hideLoading();
+             updateBatchBar();
           })
           .catch(err => {
              console.error('Error fetching tickets:', err);
@@ -932,6 +1145,7 @@ function loadTickets() {
        sorted.forEach(ticket => zone.appendChild(createCardElement(ticket)));
 
        renderColumnFooter(statusId);
+       updateBatchBar();
     }
 
     /**
@@ -1374,7 +1588,11 @@ function createCardElement(ticket) {
        card.innerHTML = `
           <div class="card-body">
              <div class="kanban-card-top">
-                <span class="ticket-id">#${ticket.id}</span>
+                <div class="d-flex align-items-center gap-2">
+                   <input type="checkbox" class="form-check-input kanban-card-select" data-ticket-id="${ticket.id}"
+                          aria-label="${escapeHtml((lang.selectCard || 'Select card') + ' #' + ticket.id)}">
+                   <span class="ticket-id">#${ticket.id}</span>
+                </div>
                 <div class="d-flex align-items-center gap-1 flex-shrink-0">
                    ${topActions.join('')}
                    ${buildQuickActionsHtml(ticket)}
@@ -1396,9 +1614,9 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
           </div>
        `;
 
-       // Click on card (not on links/buttons) opens detail modal
+       // Click on card (not on links/buttons/selection controls) opens detail modal
        card.addEventListener('click', function (e) {
-          if (e.target.closest('a') || e.target.closest('button')) return;
+          if (e.target.closest('a') || e.target.closest('button') || e.target.closest('input') || e.target.closest('label')) return;
           showTicketDetail(ticket);
        });
 
@@ -1477,6 +1695,7 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
    function onDragStart(e) {
       const card = e.target.closest('.kanban-card');
       if (!card || !enableDragDrop) return;
+      if (e.target.closest('.kanban-card-select, .kanban-select-all')) return;
       const ticketId = card.getAttribute('data-ticket-id');
       const col = card.closest('.kanban-column');
       if (!ticketId) return;
@@ -1915,6 +2134,7 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
        // Secondary selects: refresh filters and keep the active-count badge in sync
        getFilterForm().querySelectorAll('select').forEach(select => {
          select.addEventListener('change', function () {
+            clearBatchSelection();
             updateAdvancedFilterCount();
             debouncedLoadTickets();
          });
@@ -1924,7 +2144,10 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
    // Omnichannel search field (live, debounced)
    const searchInput = document.getElementById('filter-search');
    if (searchInput) {
-      searchInput.addEventListener('input', debouncedLoadTickets);
+      searchInput.addEventListener('input', function () {
+         clearBatchSelection();
+         debouncedLoadTickets();
+      });
    }
 
    // "Assigned to me" quick filter
@@ -1941,6 +2164,7 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
       clearBtn.addEventListener('click', function () {
           if (getFilterForm()) getFilterForm().reset();
          if (searchInput) searchInput.value = '';
+         clearBatchSelection();
          updateAdvancedFilterCount();
          loadTickets();
       });
@@ -2355,6 +2579,7 @@ function applyNativeTheme() {
       set('filter-category', filters.category);
       set('filter-priority', filters.priority);
       set('filter-sla-state', filters.sla_state);
+      clearBatchSelection();
 
       const label = document.getElementById('kanban-views-label');
       if (label) label.textContent = preset.name || (lang.savedViews || 'Saved views');
@@ -2571,6 +2796,42 @@ document.addEventListener('DOMContentLoaded', function () {
    if (saveViewBtn) {
       saveViewBtn.addEventListener('click', openSaveViewDialog);
    }
+
+   // Batch selection and actions. The change listener is delegated so cards
+   // re-rendered by a refresh keep their checkbox wired without re-binding.
+   document.addEventListener('change', function (e) {
+      const cardSelect = e.target.closest('.kanban-card-select');
+      if (cardSelect) {
+         setTicketSelected(cardSelect.getAttribute('data-ticket-id'), cardSelect.checked);
+         return;
+      }
+      const columnSelect = e.target.closest('.kanban-select-all');
+      if (columnSelect) {
+         setColumnSelected(columnSelect.getAttribute('data-status-id'), columnSelect.checked);
+      }
+   });
+
+   const batchAssignBtn = document.getElementById('kanban-batch-assign');
+   if (batchAssignBtn) {
+      batchAssignBtn.addEventListener('click', () => runBatch('assign_to_me'));
+   }
+   const batchPriorityApply = document.getElementById('kanban-batch-priority-apply');
+   if (batchPriorityApply) {
+      batchPriorityApply.addEventListener('click', applyBatchPriority);
+   }
+   const batchStatusSelect = document.getElementById('kanban-batch-status');
+   if (batchStatusSelect) {
+      batchStatusSelect.addEventListener('change', updateBatchNote);
+   }
+   const batchStatusApply = document.getElementById('kanban-batch-status-apply');
+   if (batchStatusApply) {
+      batchStatusApply.addEventListener('click', applyBatchStatus);
+   }
+   const batchClearBtn = document.getElementById('kanban-batch-clear');
+   if (batchClearBtn) {
+      batchClearBtn.addEventListener('click', clearBatchSelection);
+   }
+   updateBatchBar();
 
    // Columns visibility menu (may live outside the board container).
    // The checkboxes handle their own toggling via the "change" event.
