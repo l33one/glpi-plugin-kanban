@@ -544,9 +544,10 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
       </div>
    </div>
 
-   <!-- Kanban Board Container -->
+   <!-- Kanban Board Container. tabindex="-1" lets the accessibility skip
+        link above move focus here, not only scroll the page. -->
    <a href="#kanban-board" class="skip-link"><?php echo __("Skip to board", "kanban"); ?></a>
-   <div id="kanban-board" class="kanban-board-container row flex-nowrap overflow-auto py-2">
+   <div id="kanban-board" tabindex="-1" class="kanban-board-container row flex-nowrap overflow-auto py-2">
       <!-- Dynamically filled by JavaScript -->
    </div>
 
