@@ -249,6 +249,7 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "ticketSection" => __("Ticket", "kanban"),
     "peopleAndDates" => __("People & dates", "kanban"),
     "description" => __("Description", "kanban"),
+    "agingBadge" => __("No movement for %d day(s)", "kanban"),
     "slaProgress" => __("SLA progress", "kanban"),
     "slaElapsed" => __("%d%% elapsed", "kanban"),
     "noDescription" => __("No description available.", "kanban"),

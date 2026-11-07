@@ -100,6 +100,9 @@ msgstr "Board indicators"
 msgid "Cancel"
 msgstr "Cancel"
 
+msgid "Card aging"
+msgstr "Card aging"
+
 msgid "Card fields"
 msgstr "Card fields"
 
@@ -180,6 +183,9 @@ msgstr "Date Open (Newest first)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Date Open (Oldest first)"
+
+msgid "Days without movement to highlight a card"
+msgstr "Days without movement to highlight a card"
 
 msgid "Default view cleared"
 msgstr "Default view cleared"
@@ -297,6 +303,9 @@ msgstr "No follow-ups for this ticket"
 
 msgid "No Group"
 msgstr "No Group"
+
+msgid "No movement for %d day(s)"
+msgstr "No movement for %d day(s)"
 
 msgid "No Requester"
 msgstr "No Requester"
@@ -662,6 +671,9 @@ msgstr "X min ago"
 
 msgid "Yesterday"
 msgstr "Yesterday"
+
+msgid "Zero disables the highlight. A card in an active column is highlighted when it has not been modified for at least this many days."
+msgstr "Zero disables the highlight. A card in an active column is highlighted when it has not been modified for at least this many days."
 
 msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
 msgstr "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."

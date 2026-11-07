@@ -182,6 +182,7 @@ class PluginKanbanKanban extends CommonGLPI {
       // per card plus one getUserName() per actor).
       $requesters  = self::getRequesterNamesForTickets($ticket_ids);
       $technicians = self::getAssignedTechniciansForTickets($ticket_ids);
+      $aging_days  = PluginKanbanConfig::getAgingDays();
 
       $tickets = [];
       foreach ($rows as $ticket) {
@@ -198,6 +199,7 @@ class PluginKanbanKanban extends CommonGLPI {
          $ticket['requester_name'] = $requesters[$ticket_id] ?? '';
          $ticket['assigned_techs'] = $technicians[$ticket_id] ?? [];
          $ticket['sla_progress']   = self::calculateSlaProgress($ticket);
+         $ticket = self::decorateAging($ticket, $aging_days);
 
          $tickets[] = $ticket;
       }
@@ -1321,9 +1323,67 @@ class PluginKanbanKanban extends CommonGLPI {
        $ticket['requester_name'] = self::getTicketRequesterName($ticket_id);
        $ticket['sla_progress'] = self::calculateSlaProgress($ticket);
        $ticket['date_creation_formatted'] = Html::convDateTime($ticket['date_creation']);
+       $ticket = self::decorateAging($ticket, PluginKanbanConfig::getAgingDays());
 
        return $ticket;
     }
+
+   /**
+    * Days elapsed since a ticket was last modified.
+    *
+    * The reference "now" follows GLPI's session clock, the same one the SLA
+    * calculation uses, so the board does not disagree with the server around
+    * midnight or when the browser clock is wrong.
+    *
+    * @param string|null $last_mod Ticket date_mod (Y-m-d H:i:s).
+    * @param int|null    $now      Reference timestamp, or null for the session time.
+    * @return int Whole days, never negative.
+    */
+   public static function calculateAgingDays($last_mod, ?int $now = null): int {
+      $last_mod = (string)$last_mod;
+      if ($last_mod === '' || str_starts_with($last_mod, '0000-00-00')) {
+         return 0;
+      }
+
+      $last = strtotime($last_mod);
+      if ($last === false) {
+         return 0;
+      }
+
+      if ($now === null) {
+         $session_time = $_SESSION['glpi_currenttime'] ?? null;
+         $now = $session_time !== null ? strtotime((string)$session_time) : time();
+         if ($now === false) {
+            $now = time();
+         }
+      }
+
+      $elapsed = $now - $last;
+      return $elapsed > 0 ? (int)floor($elapsed / 86400) : 0;
+   }
+
+   /**
+    * Add the aging fields used by the card renderer.
+    *
+    * A card is stale only when the administrator enabled the highlight
+    * (threshold > 0) and the ticket still sits in an active column. Solved and
+    * closed tickets are archives, so an old date_mod there is expected.
+    *
+    * @param array    $ticket    Ticket row with status and date_mod.
+    * @param int      $threshold Days configured by the administrator (0 = off).
+    * @param int|null $now       Reference timestamp, or null for the session time.
+    * @return array Ticket with aging_days (int) and aging_stale (bool).
+    */
+   public static function decorateAging(array $ticket, int $threshold, ?int $now = null): array {
+      $days = self::calculateAgingDays($ticket['date_mod'] ?? null, $now);
+      $status = (int)($ticket['status'] ?? 0);
+      $is_archive = in_array($status, [Ticket::SOLVED, Ticket::CLOSED], true);
+
+      $ticket['aging_days'] = $days;
+      $ticket['aging_stale'] = $threshold > 0 && !$is_archive && $days >= $threshold;
+
+      return $ticket;
+   }
 
    /**
     * Calculate SLA progress percentage and color class

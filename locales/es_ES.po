@@ -100,6 +100,9 @@ msgstr "Indicadores del tablero"
 msgid "Cancel"
 msgstr "Cancelar"
 
+msgid "Card aging"
+msgstr "Antigüedad de las tarjetas"
+
 msgid "Card fields"
 msgstr "Campos de la tarjeta"
 
@@ -180,6 +183,9 @@ msgstr "Fecha de apertura (más reciente primero)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Fecha de apertura (más antigua primero)"
+
+msgid "Days without movement to highlight a card"
+msgstr "Días sin movimiento para destacar una tarjeta"
 
 msgid "Default view cleared"
 msgstr "Vista predeterminada eliminada"
@@ -297,6 +303,9 @@ msgstr "No hay seguimientos para esta petición"
 
 msgid "No Group"
 msgstr "Sin grupo"
+
+msgid "No movement for %d day(s)"
+msgstr "Sin movimiento durante %d día(s)"
 
 msgid "No Requester"
 msgstr "Sin solicitante"
@@ -662,6 +671,9 @@ msgstr "hace X min"
 
 msgid "Yesterday"
 msgstr "Ayer"
+
+msgid "Zero disables the highlight. A card in an active column is highlighted when it has not been modified for at least this many days."
+msgstr "Cero desactiva el resaltado. Una tarjeta en una columna activa se resalta cuando no se ha modificado durante al menos esta cantidad de días."
 
 msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
 msgstr "Cero desactiva el límite. El recuento corresponde a las peticiones que puede ver en la columna, ignorando los filtros activos, porque el límite se aplica a la cola y no a la vista actual."

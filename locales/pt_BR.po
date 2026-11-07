@@ -100,6 +100,9 @@ msgstr "Indicadores do quadro"
 msgid "Cancel"
 msgstr "Cancelar"
 
+msgid "Card aging"
+msgstr "Envelhecimento dos cards"
+
 msgid "Card fields"
 msgstr "Campos do cartão"
 
@@ -180,6 +183,9 @@ msgstr "Data de abertura (mais recente primeiro)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Data de abertura (mais antigo primeiro)"
+
+msgid "Days without movement to highlight a card"
+msgstr "Dias sem movimento para destacar um card"
 
 msgid "Default view cleared"
 msgstr "Visão padrão removida"
@@ -297,6 +303,9 @@ msgstr "Sem acompanhamentos para este chamado"
 
 msgid "No Group"
 msgstr "Sem grupo"
+
+msgid "No movement for %d day(s)"
+msgstr "Sem movimento há %d dia(s)"
 
 msgid "No Requester"
 msgstr "Sem solicitante"
@@ -662,6 +671,9 @@ msgstr "há X min"
 
 msgid "Yesterday"
 msgstr "Ontem"
+
+msgid "Zero disables the highlight. A card in an active column is highlighted when it has not been modified for at least this many days."
+msgstr "Zero desliga o destaque. Um card em uma coluna ativa é destacado quando não é modificado há pelo menos essa quantidade de dias."
 
 msgid "Zero disables the limit. The count is the tickets you can see in the column, ignoring the active filters, because the limit applies to the queue and not to the current view."
 msgstr "Zero desativa o limite. A contagem considera os chamados que você consegue ver na coluna, ignorando os filtros ativos, porque o limite se aplica à fila e não à visão atual."

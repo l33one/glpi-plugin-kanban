@@ -1514,6 +1514,9 @@ function createCardElement(ticket) {
 
        // Apply border styling based on priority
        card.style.borderLeftColor = priorityColors[ticket.priority] || '#0d6efd';
+       if (ticket.aging_stale) {
+          card.classList.add('kanban-card-stale');
+       }
 
        // SLA Progress Bar HTML
        let slaBarHtml = '';
@@ -1558,6 +1561,17 @@ function createCardElement(ticket) {
 
        // Priority badge
        const priorityBadge = `<span class="badge fs-8 text-nowrap px-2" style="background-color:${priorityColors[ticket.priority] || '#0d6efd'}; color:${(ticket.priority || 0) >= 4 ? '#000' : '#fff'}; min-width: 60px; justify-content: center;">${priorityLabels[ticket.priority] || 'Normal'}</span>`;
+
+       // Aging badge: the server already decided whether the card is stale, so
+       // the threshold and the GLPI timezone live in one place.
+       const agingText = ticket.aging_stale
+          ? (lang.agingBadge || 'No movement for %d day(s)').replace('%d', ticket.aging_days)
+          : '';
+       const agingBadge = agingText
+          ? `<div class="kanban-aging" title="${escapeHtml(agingText)}" aria-label="${escapeHtml(agingText)}">
+                <i class="ti ti-alert-triangle" aria-hidden="true"></i><span>${escapeHtml(agingText)}</span>
+             </div>`
+          : '';
 
        // Construct the ticket URL
        const ticketUrl = glpiRoot + '/front/ticket.form.php?id=' + ticket.id;
@@ -1619,6 +1633,7 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
                    ${escapeHtml(ticket.title)}
                 </a>
              </h6>
+             ${agingBadge}
              ${slaBarHtml}
              ${metaItems.length > 0 ? '<div class="card-meta">' + metaItems.join('') + '</div>' : ''}
           </div>

@@ -1479,6 +1479,101 @@ class PluginKanbanKanbanTest extends TestCase
         $this->assertFalse($without_totals['partial']);
     }
 
+    public function testCalculateAgingDaysUsesWholeDaysAndIgnoresFutureDates(): void
+    {
+        $now = strtotime('2026-11-07 12:00:00');
+
+        $this->assertSame(0, PluginKanbanKanban::calculateAgingDays('', $now));
+        $this->assertSame(0, PluginKanbanKanban::calculateAgingDays('0000-00-00 00:00:00', $now));
+        $this->assertSame(0, PluginKanbanKanban::calculateAgingDays('not-a-date', $now));
+        $this->assertSame(0, PluginKanbanKanban::calculateAgingDays('2026-11-07 11:00:00', $now));
+        $this->assertSame(2, PluginKanbanKanban::calculateAgingDays('2026-11-05 11:00:00', $now));
+        $this->assertSame(1, PluginKanbanKanban::calculateAgingDays('2026-11-05 13:00:00', $now));
+        $this->assertSame(0, PluginKanbanKanban::calculateAgingDays('2026-11-08 12:00:00', $now));
+    }
+
+    public function testAgingPayloadOnlyFlagsActiveCardsPastTheThreshold(): void
+    {
+        $now = strtotime('2026-11-07 12:00:00');
+
+        $old_active = PluginKanbanKanban::decorateAging([
+            'status'   => Ticket::INCOMING,
+            'date_mod' => '2026-11-04 12:00:00',
+        ], 3, $now);
+        $this->assertSame(3, $old_active['aging_days']);
+        $this->assertTrue($old_active['aging_stale']);
+
+        $old_below_threshold = PluginKanbanKanban::decorateAging([
+            'status'   => Ticket::INCOMING,
+            'date_mod' => '2026-11-05 13:00:00',
+        ], 3, $now);
+        $this->assertSame(1, $old_below_threshold['aging_days']);
+        $this->assertFalse($old_below_threshold['aging_stale']);
+
+        $disabled = PluginKanbanKanban::decorateAging([
+            'status'   => Ticket::INCOMING,
+            'date_mod' => '2026-10-01 12:00:00',
+        ], 0, $now);
+        $this->assertSame(37, $disabled['aging_days']);
+        $this->assertFalse($disabled['aging_stale'], 'A threshold of 0 must disable the highlight');
+
+        foreach ([Ticket::SOLVED, Ticket::CLOSED] as $archived_status) {
+            $archived = PluginKanbanKanban::decorateAging([
+                'status'   => $archived_status,
+                'date_mod' => '2026-10-01 12:00:00',
+            ], 3, $now);
+            $this->assertFalse($archived['aging_stale'], 'Solved and closed cards are archives');
+        }
+    }
+
+    public function testBoardMarksOldActiveCardsAsStale(): void
+    {
+        global $DB;
+
+        $_SESSION['glpiactiveentities'] = [0];
+        unset($_SESSION['glpigroups']);
+
+        $previous = PluginKanbanConfig::getAgingDays();
+        $ticket_id = 0;
+        try {
+            PluginKanbanConfig::save(['aging_days' => 3]);
+
+            $ticket_id = self::insertKanbanTestTicket('Kanban aging ticket');
+            $this->assertGreaterThan(0, $ticket_id);
+
+            $DB->update(
+                'glpi_tickets',
+                ['date_mod' => date('Y-m-d H:i:s', strtotime('-10 days'))],
+                ['id' => $ticket_id]
+            );
+            // The board only shows tickets the user is responsible for.
+            $DB->insert('glpi_tickets_users', [
+                'tickets_id' => $ticket_id,
+                'users_id'   => (int)Session::getLoginUserID(),
+                'type'       => CommonITILActor::ASSIGN,
+            ]);
+
+            $board = PluginKanbanKanban::getBoardData([], ['by' => 'date', 'order' => 'DESC'], 50);
+            $found = null;
+            foreach ($board['statuses'][Ticket::INCOMING] ?? [] as $ticket) {
+                if ((int)$ticket['id'] === $ticket_id) {
+                    $found = $ticket;
+                    break;
+                }
+            }
+
+            $this->assertNotNull($found, 'The old ticket must be on the board');
+            $this->assertGreaterThanOrEqual(9, $found['aging_days']);
+            $this->assertTrue($found['aging_stale'], 'An old active card must be flagged as stale');
+        } finally {
+            PluginKanbanConfig::save(['aging_days' => $previous]);
+            if ($ticket_id > 0) {
+                $DB->delete('glpi_tickets_users', ['tickets_id' => $ticket_id]);
+                $DB->delete('glpi_tickets', ['id' => $ticket_id]);
+            }
+        }
+    }
+
     public function testCountVisibleTicketsInStatusMatchesTheColumnTotal(): void
     {
         global $DB;

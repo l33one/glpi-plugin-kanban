@@ -665,6 +665,38 @@
    letter-spacing: 0.02em;
 }
 
+/* ===== Stale cards (aging) =====
+ * The badge carries the text; the amber border is the discreet highlight. The
+ * left border is the priority accent, so it is deliberately left untouched. */
+.kanban-card.kanban-card-stale {
+   border-top-color: rgba(217, 119, 6, 0.5) !important;
+   border-right-color: rgba(217, 119, 6, 0.35) !important;
+   border-bottom-color: rgba(217, 119, 6, 0.35) !important;
+}
+
+.kanban-aging {
+   display: inline-flex;
+   align-items: center;
+   gap: 0.3rem;
+   margin-top: 0.4rem;
+   padding: 0.15rem 0.5rem;
+   border-radius: 999px;
+   background: rgba(217, 119, 6, 0.12);
+   color: #b45309;
+   font-size: 0.7rem;
+   font-weight: 600;
+   line-height: 1.4;
+}
+
+.kanban-aging i {
+   font-size: 0.85rem;
+}
+
+.kanban-page-wrapper.kanban-theme-dark .kanban-aging {
+   background: rgba(251, 191, 36, 0.16);
+   color: #fbbf24;
+}
+
 /* ===== Batch selection and actions ===== */
 .kanban-card-select,
 .kanban-select-all {

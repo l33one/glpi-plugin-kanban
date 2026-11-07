@@ -24,6 +24,7 @@ class PluginKanbanConfig extends CommonGLPI {
          'require_solution_model'   => false,
          'require_solution_type'    => false,
          'cards_per_column'         => 50,
+         'aging_days'               => 0,
          'wip_limit'                => 0,
          'wip_limits'               => [],
          'wip_block_exceed'         => false,
@@ -126,6 +127,19 @@ class PluginKanbanConfig extends CommonGLPI {
          return 1;
       }
       return min(200, $value);
+   }
+
+   /**
+    * Days without movement after which a card is highlighted (0 = disabled).
+    *
+    * A card is "stale" when its last modification is at least this old and it
+    * still sits in an active column. Solved and closed cards are archives, so
+    * they are never highlighted.
+    */
+   public static function getAgingDays(): int {
+      $cfg = self::load();
+      $value = (int)($cfg['aging_days'] ?? 0);
+      return $value > 0 ? min(3650, $value) : 0;
    }
 
    /**
@@ -292,6 +306,9 @@ class PluginKanbanConfig extends CommonGLPI {
          $cards_per_column = (int)($_POST['cards_per_column'] ?? 50);
          $cards_per_column = min(200, max(1, $cards_per_column));
 
+         $aging_days = (int)($_POST['aging_days'] ?? 0);
+         $aging_days = $aging_days > 0 ? min(3650, $aging_days) : 0;
+
          $wip_limit = (int)($_POST['wip_limit'] ?? 0);
          $wip_limit = $wip_limit > 0 ? min(10000, $wip_limit) : 0;
 
@@ -308,6 +325,7 @@ class PluginKanbanConfig extends CommonGLPI {
             'require_solution_model' => self::readSwitch('require_solution_model') ? 1 : 0,
             'require_solution_type'  => self::readSwitch('require_solution_type') ? 1 : 0,
             'cards_per_column'       => $cards_per_column,
+            'aging_days'             => $aging_days,
             'wip_limit'              => $wip_limit,
             'wip_limits'             => $wip_limits,
             'wip_block_exceed'       => self::readSwitch('wip_block_exceed') ? 1 : 0,
@@ -326,6 +344,7 @@ class PluginKanbanConfig extends CommonGLPI {
       $require_model   = !empty($cfg['require_solution_model']);
       $require_type    = !empty($cfg['require_solution_type']);
       $cards_per_column = self::getCardsPerColumn();
+      $aging_days       = self::getAgingDays();
       $wip_limit        = self::getWipLimit();
       $wip_limits       = self::getWipLimits();
       $wip_block        = !empty($cfg['wip_block_exceed']);
@@ -439,6 +458,30 @@ class PluginKanbanConfig extends CommonGLPI {
                          placeholder="1, 2, 3, 4, 5, 6">
                   <div class="form-text">
                      <?php echo __('Comma-separated ticket status ids, in the order the columns should appear. Leave empty to follow the native status order. Typically: 1 (New), 2 (Assigned), 3 (Planned), 4 (Pending), 5 (Solved), 6 (Closed).', 'kanban'); ?>
+                  </div>
+               </div>
+            </div>
+
+            <div class="card mt-3">
+               <div class="card-header">
+                  <i class="ti ti-alert-triangle me-1"></i>
+                  <?php echo __('Card aging', 'kanban'); ?>
+               </div>
+               <div class="card-body">
+                  <div class="mb-3">
+                     <label for="aging_days" class="form-label fw-semibold">
+                        <?php echo __('Days without movement to highlight a card', 'kanban'); ?>
+                     </label>
+                     <input type="number"
+                            class="form-control"
+                            id="aging_days"
+                            name="aging_days"
+                            min="0"
+                            max="3650"
+                            value="<?php echo $aging_days; ?>">
+                     <div class="form-text">
+                        <?php echo __('Zero disables the highlight. A card in an active column is highlighted when it has not been modified for at least this many days.', 'kanban'); ?>
+                     </div>
                   </div>
                </div>
             </div>
