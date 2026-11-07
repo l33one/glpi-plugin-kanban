@@ -189,7 +189,11 @@ function Get-BoardCards {
             $cards += @($column.Value)
         }
     }
-    return $cards
+    # The comma operator keeps the result an array. Without it a column with a
+    # single card is unrolled to a PSCustomObject, whose .Count is empty on
+    # Windows PowerShell 5.1 and makes "Count -gt 0" fail even when a card
+    # was returned.
+    return ,$cards
 }
 
 foreach ($v in $Versions) {
