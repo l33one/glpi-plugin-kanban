@@ -233,6 +233,11 @@ kanban/
 └── README.md
 ```
 
+> **Idiomas:** o plugin envia os catálogos `en_GB`, `es_ES`, `fr_FR` e `pt_BR`.
+> Variantes regionais sem catálogo próprio (por exemplo `es_AR`, `es_MX`,
+> `fr_CA`, `pt_PT`) reutilizam o catálogo base da mesma família em tempo de
+> execução, então a interface também aparece traduzida nessas configurações.
+
 > Os itens marcados com `[dev]` existem no repositório para revisão e CI, mas
 > **nunca** são publicados: ver [Publicação](#-publicação).
 

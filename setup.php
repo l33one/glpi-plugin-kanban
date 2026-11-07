@@ -49,6 +49,11 @@ function plugin_init_kanban() {
    $PLUGIN_HOOKS['csrf_compliant']['kanban'] = true;
 
    if (Plugin::isPluginActive('kanban')) {
+      // GLPI only loads locales/<glpilanguage>.mo, so a regional variant such as
+      // es_AR or fr_CA would otherwise fall back to English. Load the matching
+      // base catalog under the active locale before any label is translated.
+      plugin_kanban_load_locale_fallback();
+
       // Register the plugin under the Helpdesk menu
       $PLUGIN_HOOKS['menu_toadd']['kanban'] = [
          'helpdesk' => 'PluginKanbanMenu',
@@ -95,6 +100,79 @@ function plugin_init_kanban() {
          error_log('[kanban] Plugin::registerClass(PluginKanbanFilterPreset) failed: ' . $e->getMessage());
       }
    }
+}
+
+/**
+ * Load a base catalog for regional language variants
+ *
+ * GLPI resolves plugin translations by the exact session language only
+ * (e.g. es_AR looks for locales/es_AR.mo) and silently falls back to
+ * en_GB.mo when that file is absent. The plugin ships one catalog per
+ * language, so regional variants reuse it: es_* -> es_ES, fr_* -> fr_FR,
+ * pt_* -> pt_BR. Plugin::loadLang() is called again with the base language
+ * forced, registering the catalog under the language actually in use.
+ *
+ * @return void
+ */
+function plugin_kanban_load_locale_fallback() {
+   global $TRANSLATE;
+
+   if (!is_object($TRANSLATE) || empty($_SESSION['glpilanguage'])) {
+      return;
+   }
+
+   $current = $_SESSION['glpilanguage'];
+
+   // Base catalog used for each language family. Languages not listed here
+   // are left untouched so GLPI keeps its native resolution.
+   $base_catalogs = [
+      'es' => 'es_ES',
+      'fr' => 'fr_FR',
+      'pt' => 'pt_BR',
+   ];
+
+   $family = explode('_', $current)[0];
+   if (!isset($base_catalogs[$family])) {
+      return;
+   }
+
+   $base = $base_catalogs[$family];
+   if ($current === $base) {
+      return;
+   }
+
+   $locales_dir = __DIR__ . '/locales/';
+   // Keep an exact catalog when one exists for the variant; only fall back
+   // to the base catalog when the requested locale has no file of its own.
+   if (is_file($locales_dir . $current . '.mo') || !is_file($locales_dir . $base . '.mo')) {
+      return;
+   }
+
+   Plugin::loadLang('kanban', $base, $current);
+
+   // The English fallback may already be cached for this locale, either in
+   // memory (this request) or in the shared cache (previous requests), and a
+   // cached text domain is never refreshed on its own. Drop both entries so the
+   // catalog registered above is read on the next lookup.
+   if (method_exists($TRANSLATE, 'clearCache')) {
+      $TRANSLATE->clearCache('kanban', $current);
+   }
+
+   $reflection = new ReflectionObject($TRANSLATE);
+   if ($reflection->hasProperty('messages')) {
+      $property = $reflection->getProperty('messages');
+      $property->setAccessible(true);
+      $messages = $property->getValue($TRANSLATE);
+      if (isset($messages['kanban'][$current])) {
+         unset($messages['kanban'][$current]);
+         $property->setValue($TRANSLATE, $messages);
+      }
+   }
+
+   // Resolve the domain once so the freshly registered catalog is merged and
+   // stored in the shared cache; later lookups reuse it instead of the
+   // English fallback loaded before this point.
+   $TRANSLATE->translate('Kanban', 'kanban', $current);
 }
 
 /**
