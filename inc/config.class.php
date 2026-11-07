@@ -531,7 +531,10 @@ class PluginKanbanConfig extends CommonGLPI {
                      <div class="row g-2">
                         <?php foreach (Ticket::getAllStatusArray() as $status_id => $status_name): ?>
                            <div class="col-12 col-sm-6">
-                              <label class="form-label small mb-1" for="wip_limit_<?php echo (int)$status_id; ?>">
+                              <?php // GLPI 10's theme sets `#page .small { width: 1% }`, which
+                              // collapses this label to one character per line. The inline
+                              // width restores the column width while keeping the small type. ?>
+                              <label class="form-label small mb-1" style="width: auto;" for="wip_limit_<?php echo (int)$status_id; ?>">
                                  <?php echo htmlspecialchars($status_name); ?>
                               </label>
                               <input type="number"
