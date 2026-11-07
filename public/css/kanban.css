@@ -866,14 +866,63 @@ a:focus-visible,
    background: linear-gradient(180deg, var(--status-color-faint, var(--kanban-surface-soft)) 0%, transparent 100%);
 }
 
-#kanbanTicketModalBody .row {
+/* ===== Ticket detail modal ===== */
+.kanban-detail-grid {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 1.25rem 2.25rem;
    font-size: 0.85rem;
 }
 
-#kanbanTicketModalBody h6 {
-   font-size: 0.95rem;
+.kanban-detail-section {
+   min-width: 0;
+}
+
+.kanban-detail-heading {
+   margin: 0 0 0.35rem;
+   padding-bottom: 0.4rem;
+   border-bottom: 2px solid var(--kanban-border);
+   font-size: 0.72rem;
+   font-weight: 700;
+   letter-spacing: 0.08em;
+   text-transform: uppercase;
+   color: var(--kanban-muted);
+}
+
+.kanban-detail-list {
+   margin: 0;
+}
+
+/* Each field is a label/value pair on the same baseline. Both columns use the
+   same left alignment, so the two halves read as one table instead of values
+   pointing in opposite directions. */
+.kanban-detail-item {
+   display: grid;
+   grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr);
+   align-items: baseline;
+   gap: 0.25rem 1rem;
+   padding: 0.45rem 0;
+   border-bottom: 1px solid var(--kanban-border-subtle);
+}
+
+.kanban-detail-item:last-child {
+   border-bottom: none;
+}
+
+.kanban-detail-label {
+   margin: 0;
+   font-size: 0.76rem;
    font-weight: 600;
-   word-break: break-word;
+   color: var(--kanban-muted);
+   white-space: nowrap;
+}
+
+.kanban-detail-value {
+   margin: 0;
+   font-weight: 500;
+   color: var(--kanban-text);
+   text-align: left;
+   overflow-wrap: anywhere;
 }
 
 .modal-description {
@@ -887,29 +936,48 @@ a:focus-visible,
    line-height: 1.55;
 }
 
-.modal-detail-row {
-   display: flex;
-   justify-content: space-between;
-   align-items: center;
-   padding: 0.4rem 0;
-   border-bottom: 1px solid var(--kanban-border-subtle);
-   gap: 1rem;
+.kanban-detail-sla {
+   margin-top: 1.25rem;
+   padding: 0.85rem 1rem;
+   border: 1px solid var(--kanban-border);
+   border-radius: 0.65rem;
+   background: var(--kanban-surface-soft);
 }
 
-.modal-detail-row:last-child {
-   border-bottom: none;
-}
-
-.modal-detail-label {
-   font-weight: 600;
+.kanban-detail-sla-title {
+   font-size: 0.72rem;
+   font-weight: 700;
+   letter-spacing: 0.08em;
+   text-transform: uppercase;
    color: var(--kanban-muted);
-   min-width: 100px;
 }
 
-.modal-detail-value {
-   text-align: right;
-   color: var(--kanban-text);
-   font-weight: 500;
+.kanban-detail-sla-value {
+   font-size: 0.78rem;
+   font-weight: 600;
+   color: var(--kanban-text-soft);
+}
+
+.kanban-detail-sla .progress {
+   height: 8px;
+   border-radius: 999px;
+   overflow: hidden;
+   background-color: var(--kanban-surface-hover);
+}
+
+.kanban-detail-description {
+   margin-top: 1.5rem;
+}
+
+@media (max-width: 575.98px) {
+   .kanban-detail-grid {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+   }
+
+   .kanban-detail-item {
+      grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
+   }
 }
 
 /* ===== Toast Notifications ===== */

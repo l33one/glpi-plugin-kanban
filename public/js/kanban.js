@@ -2439,14 +2439,15 @@ function updateCountdowns() {
        let slaHtml = '';
        if (ticket.sla_progress && ticket.sla_progress.status !== 'no_sla' && ticket.time_to_resolve) {
           slaHtml = `
-             <div class="mb-2">
-                <strong>SLA Progress:</strong>
-                <div class="progress" style="height: 8px;">
-                   <div class="progress-bar bg-${ticket.sla_progress.color}" role="progressbar"
-                        style="width: ${ticket.sla_progress.percent}%"
-                        aria-valuenow="${ticket.sla_progress.percent}" aria-valuemin="0" aria-valuemax="100"></div>
+             <div class="kanban-detail-sla">
+                <div class="d-flex justify-content-between align-items-baseline mb-1">
+                   <span class="kanban-detail-sla-title">SLA progress</span>
+                   <span class="kanban-detail-sla-value">${ticket.sla_progress.percent}% elapsed</span>
                 </div>
-                <small class="text-muted">${ticket.sla_progress.percent}% elapsed</small>
+                <div class="progress" role="progressbar" aria-label="SLA progress"
+                     aria-valuenow="${ticket.sla_progress.percent}" aria-valuemin="0" aria-valuemax="100">
+                   <div class="progress-bar bg-${ticket.sla_progress.color}" style="width: ${ticket.sla_progress.percent}%"></div>
+                </div>
              </div>
           `;
        }
@@ -2454,68 +2455,46 @@ function updateCountdowns() {
        // Content is already sanitized server-side via GLPI RichText::getSafeHtml().
        const content = ticket.content || 'No description available.';
 
+       // One label/value pair. Both columns use the same alignment, so the
+       // reader does not have to jump between right- and left-aligned values.
+       const row = (label, value) => `
+          <div class="kanban-detail-item">
+             <dt class="kanban-detail-label">${escapeHtml(label)}</dt>
+             <dd class="kanban-detail-value">${value}</dd>
+          </div>`;
+
        body.innerHTML = `
-           <div class="row g-0">
-              <div class="col-md-6">
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Ticket #:</span>
-                    <span class="modal-detail-value">${ticket.id}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Title:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(ticket.title)}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Status:</span>
-                    <span class="modal-detail-value"><span class="badge bg-secondary">${escapeHtml(ticket.status_name || '')}</span></span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Priority:</span>
-                    <span class="modal-detail-value">${priorityBadge}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Category:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(ticket.category || lang.noCategory)}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Requester:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(ticket.requester_name || 'N/A')}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Technician:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(techNames)}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Urgency:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(ticket.urgency_label || '')}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Impact:</span>
-                    <span class="modal-detail-value text-end">${escapeHtml(ticket.impact_label || '')}</span>
-                 </div>
-              </div>
-              <div class="col-md-6">
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Opened:</span>
-                    <span class="modal-detail-value text-end">${ticket.date_creation_formatted || ticket.date_creation}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Last Updated:</span>
-                    <span class="modal-detail-value text-end">${ticket.date_mod || 'N/A'}</span>
-                 </div>
-                 <div class="modal-detail-row">
-                    <span class="modal-detail-label">Action Time:</span>
-                    <span class="modal-detail-value text-end">${ticket.actiontime ? formatDuration(ticket.actiontime) : 'N/A'}</span>
-                 </div>
-                 ${slaHtml}
-              </div>
+           <div class="kanban-detail-grid">
+              <section class="kanban-detail-section">
+                 <h6 class="kanban-detail-heading">Ticket</h6>
+                 <dl class="kanban-detail-list">
+                    ${row('Ticket #:', ticket.id)}
+                    ${row('Title:', escapeHtml(ticket.title))}
+                    ${row('Status:', `<span class="badge bg-secondary">${escapeHtml(ticket.status_name || '')}</span>`)}
+                    ${row('Priority:', priorityBadge)}
+                    ${row('Category:', escapeHtml(ticket.category || lang.noCategory))}
+                    ${row('Urgency:', escapeHtml(ticket.urgency_label || ''))}
+                    ${row('Impact:', escapeHtml(ticket.impact_label || ''))}
+                 </dl>
+              </section>
+              <section class="kanban-detail-section">
+                 <h6 class="kanban-detail-heading">People &amp; dates</h6>
+                 <dl class="kanban-detail-list">
+                    ${row('Requester:', escapeHtml(ticket.requester_name || 'N/A'))}
+                    ${row('Technician:', escapeHtml(techNames))}
+                    ${row('Opened:', escapeHtml(ticket.date_creation_formatted || ticket.date_creation || 'N/A'))}
+                    ${row('Last Updated:', escapeHtml(ticket.date_mod || 'N/A'))}
+                    ${row('Action Time:', ticket.actiontime ? formatDuration(ticket.actiontime) : 'N/A')}
+                 </dl>
+              </section>
            </div>
-           <div class="mt-3">
-              <strong>Description:</strong>
-               <div class="modal-description">
-                  ${content}
-               </div>
-           </div>
+           ${slaHtml}
+           <section class="kanban-detail-section kanban-detail-description">
+              <h6 class="kanban-detail-heading">Description</h6>
+              <div class="modal-description">
+                 ${content}
+              </div>
+           </section>
         `;
     }
 
