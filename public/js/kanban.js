@@ -664,14 +664,20 @@ const checkbox = document.createElement('input');
        const menu = btn.parentElement.querySelector('.kanban-card-menu');
        if (!menu) return;
        const open = menu.classList.contains('show');
-       document.querySelectorAll('.kanban-card-menu.show').forEach(m => m.classList.remove('show'));
-       menu.classList.toggle('show', !open);
-       btn.setAttribute('aria-expanded', String(!open));
+       closeCardMenus();
+       if (open) return;
+       menu.classList.add('show');
+       btn.setAttribute('aria-expanded', 'true');
+       // Raise the owning card above its siblings: the card stacking context
+       // would otherwise let the next card cover the open menu.
+       const card = btn.closest('.kanban-card');
+       if (card) card.classList.add('kanban-card-menu-open');
     }
 
     function closeCardMenus() {
        document.querySelectorAll('.kanban-card-menu.show').forEach(m => m.classList.remove('show'));
        document.querySelectorAll('.kanban-card-menu-btn[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+       document.querySelectorAll('.kanban-card.kanban-card-menu-open').forEach(c => c.classList.remove('kanban-card-menu-open'));
     }
 
     /**

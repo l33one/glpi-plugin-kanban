@@ -1167,6 +1167,15 @@ a:focus-visible,
    display: block;
 }
 
+/* A card is a stacking context (it is transformed on hover and by the entry
+   animation), so the menu inside it cannot paint above a card that comes later
+   in the DOM, no matter its z-index. Lift the card that owns the open menu so
+   the menu is not covered by the card below. */
+.kanban-card.kanban-card-menu-open {
+   position: relative;
+   z-index: 1210;
+}
+
 .kanban-card-menu .dropdown-item {
    font-size: 0.8rem;
    display: flex;
