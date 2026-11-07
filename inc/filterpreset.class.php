@@ -205,6 +205,8 @@ class PluginKanbanFilterPreset extends CommonDBTM {
    }
 
    public function deleteForUser(int $id): array {
+      global $DB;
+
       if ($id <= 0 || !$this->getFromDB($id)) {
          return ['success' => false, 'error' => __('View not found', 'kanban')];
       }
@@ -213,11 +215,143 @@ class PluginKanbanFilterPreset extends CommonDBTM {
       }
 
       $ok = $this->delete(['id' => $id], true);
+      if ($ok && $DB->tableExists('glpi_kanban_filter_defaults')) {
+         // Drop the preference as well, so no board keeps pointing at a view
+         // that no longer exists. A stale row is harmless (getDefaultForUser()
+         // validates it), but there is no reason to keep it.
+         $DB->delete('glpi_kanban_filter_defaults', ['presets_id' => $id]);
+      }
 
       return [
          'success' => (bool)$ok,
          'error'   => $ok ? null : __('Could not delete the view', 'kanban'),
       ];
+   }
+
+   /**
+    * The view this user chose to open the board with.
+    *
+    * A preference is not a foreign key with cascade: the view may have been
+    * deleted outside the plugin (database cleanup, an administrator purge) or
+    * may no longer be visible to the user. Those cases return null so the board
+    * silently opens without filters instead of failing.
+    *
+    * @return int|null Preset id, or null when there is no valid default.
+    */
+   public static function getDefaultForUser(): ?int {
+      global $DB;
+
+      $user_id = (int)Session::getLoginUserID();
+      if ($user_id <= 0 || !$DB->tableExists('glpi_kanban_filter_defaults')) {
+         return null;
+      }
+
+      $preset_id = 0;
+      foreach ($DB->request([
+         'SELECT' => ['presets_id'],
+         'FROM'   => 'glpi_kanban_filter_defaults',
+         'WHERE'  => ['users_id' => $user_id],
+         'LIMIT'  => 1,
+      ]) as $row) {
+         $preset_id = (int)$row['presets_id'];
+      }
+
+      if ($preset_id <= 0 || !self::isVisibleToUser($preset_id, $user_id)) {
+         return null;
+      }
+
+      return $preset_id;
+   }
+
+   /**
+    * Make a visible view the default of the current user.
+    *
+    * There is one row per user (users_id is the primary key), so this replaces
+    * the previous choice instead of accumulating rows.
+    *
+    * @param int $preset_id
+    * @return array ['success' => bool, 'error' => string|null, 'id' => int|null]
+    */
+   public static function setDefaultForUser(int $preset_id): array {
+      global $DB;
+
+      $user_id = (int)Session::getLoginUserID();
+      if ($user_id <= 0 || !self::canManageViews()) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      if (!$DB->tableExists('glpi_kanban_filter_defaults')) {
+         // Newer code on a not-yet-migrated install: refuse cleanly instead of
+         // raising a SQL error, since getDefaultForUser() already reads null.
+         return ['success' => false, 'error' => __('Could not save the view', 'kanban')];
+      }
+      if ($preset_id <= 0 || !self::isVisibleToUser($preset_id, $user_id)) {
+         return ['success' => false, 'error' => __('View not found', 'kanban')];
+      }
+
+      $DB->updateOrInsert(
+         'glpi_kanban_filter_defaults',
+         [
+            'presets_id' => $preset_id,
+            'date_mod'   => date('Y-m-d H:i:s'),
+         ],
+         ['users_id' => $user_id]
+      );
+
+      return ['success' => true, 'error' => null, 'id' => $preset_id];
+   }
+
+   /**
+    * Forget the current user's default view. Filters already applied on a board
+    * stay applied; only the next opening stops using them automatically.
+    *
+    * @return array ['success' => bool, 'error' => string|null]
+    */
+   public static function clearDefaultForUser(): array {
+      global $DB;
+
+      $user_id = (int)Session::getLoginUserID();
+      if ($user_id <= 0) {
+         return ['success' => false, 'error' => __('Permission denied', 'kanban')];
+      }
+      if (!$DB->tableExists('glpi_kanban_filter_defaults')) {
+         return ['success' => true, 'error' => null];
+      }
+
+      $DB->delete('glpi_kanban_filter_defaults', ['users_id' => $user_id]);
+
+      return ['success' => true, 'error' => null];
+   }
+
+   /**
+    * Whether a preset still exists and may be read by this user.
+    *
+    * Mirrors the WHERE clause of listForUser(): the owner's own views plus the
+    * shared ones, never a row whose owner was deleted.
+    */
+   private static function isVisibleToUser(int $preset_id, int $user_id): bool {
+      global $DB;
+
+      if ($preset_id <= 0 || $user_id <= 0) {
+         return false;
+      }
+
+      $rows = $DB->request([
+         'SELECT' => ['id'],
+         'FROM'   => 'glpi_kanban_filter_presets',
+         'WHERE'  => [
+            'id'       => $preset_id,
+            ['NOT' => ['users_id' => 0]],
+            [
+               'OR' => [
+                  ['users_id' => $user_id],
+                  ['is_private' => 0],
+               ],
+            ],
+         ],
+         'LIMIT'  => 1,
+      ]);
+
+      return $rows->count() > 0;
    }
 
    /**

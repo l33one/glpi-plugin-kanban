@@ -66,6 +66,25 @@ function plugin_kanban_install() {
         $migration->addKey('glpi_kanban_filter_presets', 'name');
     }
 
+    // Per-user default view. It is a separate table, and not a column on the
+    // preset, because a shared view can be the default of many users without
+    // one user's choice changing anybody else's board. users_id is the primary
+    // key, so each user has at most one default; it replaces it on update.
+    if (!$DB->tableExists('glpi_kanban_filter_defaults')) {
+        $migration->addPreQuery(
+            "CREATE TABLE `glpi_kanban_filter_defaults` (
+                `users_id` int unsigned NOT NULL DEFAULT '0',
+                `presets_id` int unsigned NOT NULL DEFAULT '0',
+                `date_mod` timestamp NULL DEFAULT NULL,
+                PRIMARY KEY (`users_id`),
+                KEY `presets_id` (`presets_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC",
+            PLUGIN_KANBAN_VERSION . ' create glpi_kanban_filter_defaults'
+        );
+    } else {
+        $migration->addKey('glpi_kanban_filter_defaults', 'presets_id');
+    }
+
     $migration->executeMigration();
 
     return true;

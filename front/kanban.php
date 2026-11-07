@@ -230,6 +230,10 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
     "batchNeedPriority" => __("Choose a priority first", "kanban"),
     "batchNeedStatus" => __("Choose a status first", "kanban"),
     "batchSummary" => __('Batch result: %1$d applied, %2$d refused', 'kanban'),
+    "setDefaultView" => __("Set as default view", "kanban"),
+    "unsetDefaultView" => __("Unset the default view", "kanban"),
+    "defaultViewSet" => __("Default view set", "kanban"),
+    "defaultViewCleared" => __("Default view cleared", "kanban"),
    "priorityLabels" => [
       1 => __("Very Low", "kanban"),
       2 => __("Low", "kanban"),
@@ -367,6 +371,13 @@ echo "<script>var KANBAN_TRANSLATIONS = " . json_encode([
                        id="kanban-save-view-btn" title="<?php echo __('Save this view', 'kanban'); ?>">
                   <i class="ti ti-bookmark-plus"></i>
                   <span class="d-none d-xl-inline"><?php echo __('Save this view', 'kanban'); ?></span>
+               </button>
+               <!-- Discreet indicator that a saved view is applied. It clears the
+                    filters on the board; it must not delete the saved view nor
+                    unset the user's default. -->
+               <button type="button" class="btn btn-sm btn-outline-secondary d-none"
+                       id="kanban-clear-view-btn" title="<?php echo __('Clear the applied view', 'kanban'); ?>">
+                  <i class="ti ti-x"></i>
                </button>
             </div>
 

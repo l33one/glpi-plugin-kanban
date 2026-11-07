@@ -40,6 +40,8 @@ class PluginKanbanApi {
       'save_preset',
       'delete_preset',
       'rename_preset',
+      'set_default_preset',
+      'clear_default_preset',
    ];
 
    /**
@@ -297,7 +299,10 @@ class PluginKanbanApi {
    }
 
    private function actionGetPresets(): array {
-      return ['presets' => PluginKanbanFilterPreset::listForUser()];
+      return [
+         'presets'    => PluginKanbanFilterPreset::listForUser(),
+         'default_id' => PluginKanbanFilterPreset::getDefaultForUser(),
+      ];
    }
 
    private function actionSavePreset(): array {
@@ -348,6 +353,20 @@ class PluginKanbanApi {
 
       return [
          'result'     => $preset->deleteForUser($this->requireIntParam('id')),
+         'csrf_token' => Session::getNewCSRFToken(),
+      ];
+   }
+
+   private function actionSetDefaultPreset(): array {
+      return [
+         'result'     => PluginKanbanFilterPreset::setDefaultForUser($this->requireIntParam('id')),
+         'csrf_token' => Session::getNewCSRFToken(),
+      ];
+   }
+
+   private function actionClearDefaultPreset(): array {
+      return [
+         'result'     => PluginKanbanFilterPreset::clearDefaultForUser(),
          'csrf_token' => Session::getNewCSRFToken(),
       ];
    }

@@ -118,6 +118,9 @@ msgstr "Limpiar"
 msgid "Clear selection"
 msgstr "Borrar selección"
 
+msgid "Clear the applied view"
+msgstr "Quitar la vista aplicada"
+
 msgid "Close"
 msgstr "Cerrar"
 
@@ -171,6 +174,12 @@ msgstr "Fecha de apertura (más reciente primero)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Fecha de apertura (más antigua primero)"
+
+msgid "Default view cleared"
+msgstr "Vista predeterminada eliminada"
+
+msgid "Default view set"
+msgstr "Vista predeterminada definida"
 
 msgid "Delete the view"
 msgstr "Eliminar la vista"
@@ -414,6 +423,9 @@ msgstr "Seleccionar tarjeta"
 msgid "selected"
 msgstr "seleccionado"
 
+msgid "Set as default view"
+msgstr "Establecer como vista predeterminada"
+
 msgid "Set the status to pending"
 msgstr "Establecer el estado como En espera"
 
@@ -563,6 +575,9 @@ msgstr "Acción desconocida"
 
 msgid "Unknown status"
 msgstr "Estado desconocido"
+
+msgid "Unset the default view"
+msgstr "Quitar la vista predeterminada"
 
 msgid "Very High"
 msgstr "Muy alta"

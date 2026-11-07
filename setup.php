@@ -65,7 +65,10 @@ function plugin_init_kanban() {
 
       // Saved board views live in their own table (created by the install
       // migration and declared here so GLPI installs/updates it).
-      $PLUGIN_HOOKS['use_tables']['kanban'] = ['glpi_kanban_filter_presets'];
+      $PLUGIN_HOOKS['use_tables']['kanban'] = [
+         'glpi_kanban_filter_presets',
+         'glpi_kanban_filter_defaults',
+      ];
 
       // Register the config page so the "Configure" button appears on the plugins list
       $PLUGIN_HOOKS['config_page']['kanban'] = 'front/config.php';

@@ -118,6 +118,9 @@ msgstr "Effacer"
 msgid "Clear selection"
 msgstr "Effacer la sélection"
 
+msgid "Clear the applied view"
+msgstr "Effacer la vue appliquée"
+
 msgid "Close"
 msgstr "Fermer"
 
@@ -171,6 +174,12 @@ msgstr "Date d'ouverture (plus récent en premier)"
 
 msgid "Date Open (Oldest first)"
 msgstr "Date d'ouverture (plus ancien en premier)"
+
+msgid "Default view cleared"
+msgstr "Vue par défaut effacée"
+
+msgid "Default view set"
+msgstr "Vue par défaut définie"
 
 msgid "Delete the view"
 msgstr "Supprimer la vue"
@@ -414,6 +423,9 @@ msgstr "Sélectionner la carte"
 msgid "selected"
 msgstr "sélectionné"
 
+msgid "Set as default view"
+msgstr "Définir comme vue par défaut"
+
 msgid "Set the status to pending"
 msgstr "Définir le statut sur En attente"
 
@@ -563,6 +575,9 @@ msgstr "Action inconnue"
 
 msgid "Unknown status"
 msgstr "Statut inconnu"
+
+msgid "Unset the default view"
+msgstr "Retirer la vue par défaut"
 
 msgid "Very High"
 msgstr "Très haute"

@@ -23,7 +23,7 @@ Este plugin permite que técnicos e gestores acompanhem o fluxo de trabalho de f
   * Data de abertura, Técnico atribuído, Prioridade e Categoria
 * **Drag and Drop:** Mover cards entre colunas para alterar o status, com rollback otimista em caso de falha
 * **Desfazer movimento:** Notificação com ação para devolver o card à coluna anterior. O undo restaura **apenas o status**: o motivo de pendência e a solução registrados no movimento continuam no histórico do chamado. Pode ser desligado na configuração.
-* **Visões salvas:** Salve o conjunto de filtros atual com um nome e aplique-o depois. As visões ficam gravadas no servidor, vinculadas ao usuário, então acompanham o usuário entre navegadores e não se perdem ao limpar o armazenamento do navegador. O usuário que salvou gerencia as próprias visões; compartilhar uma visão com todos fica restrito a quem pode alterar a configuração do plugin.
+* **Visões salvas:** Salve o conjunto de filtros atual com um nome e aplique-o depois. As visões ficam gravadas no servidor, vinculadas ao usuário, então acompanham o usuário entre navegadores e não se perdem ao limpar o armazenamento do navegador. O usuário que salvou gerencia as próprias visões; compartilhar uma visão com todos fica restrito a quem pode alterar a configuração do plugin. Marque uma visão como **padrão** para que o quadro já abra com esses filtros na próxima vez: a preferência é por usuário, vale para qualquer navegador e, se a visão for apagada, o quadro abre sem filtros em vez de falhar. Limpar os filtros do quadro não apaga a visão nem remove o padrão.
 * **Limite de trabalho em progresso (WIP):** Defina um limite global e, se precisar, um limite próprio por coluna. A coluna em branco herda o global; zero nela significa sem limite. Com o bloqueio ativado, a coluna no limite recusa novos chamados e o movimento é revertido com o motivo; sem ele, o limite apenas destaca a coluna. A contagem considera os chamados visíveis para o usuário e ignora os filtros ativos, porque o limite vale para a fila e não para a visão atual. O mesmo número aparece no cabeçalho da coluna.
 * **Responsivo:** Layout adaptativo para desktop, tablet e mobile (scroll horizontal com snap)
 * **Paginação por coluna:** As colunas carregam uma página de cards por vez (configurável, 1 a 200) com botão **Carregar mais**. O rodapé da coluna mostra o total real de chamados que atendem aos filtros e quantos estão na tela, então um total grande não é confundido com uma coluna cheia. As métricas do topo (SLA, atribuídos a mim, sem responsável) são calculadas sobre os cards carregados e marcadas como parciais quando há mais chamados além da página.
@@ -177,7 +177,7 @@ $env:KANBAN_TEST_PASS='<senha-do-cenário>'
 ### E2E de recursos do quadro
 
 `tests/e2e/test-board-features.ps1` cobre o que não está no teste de visibilidade:
-paginação com total real por coluna, visões salvas (criar, reaplicar, apagar),
+paginação com total real por coluna, visões salvas (criar, reaplicar, apagar, definir como padrão),
 desfazer movimento e limite de WIP. Precisa do cenário acima:
 
 ```powershell
@@ -211,7 +211,7 @@ kanban/
 ├── inc/
 │   ├── kanban.class.php       # Model principal: queries, filtros, paginação, SLA, visibilidade, WIP, direitos
 │   ├── api.class.php          # Controller da API JSON: leitura/escrita, presets, undo
-│   ├── filterpreset.class.php # Visões salvas (CommonDBTM, glpi_kanban_filter_presets)
+│   ├── filterpreset.class.php # Visões salvas e visão padrão por usuário (glpi_kanban_filter_presets / glpi_kanban_filter_defaults)
 │   ├── config.class.php       # Configuração via Config API do GLPI
 │   ├── menu.class.php         # Registro do menu no GLPI
 │   └── profile.class.php      # Aba de permissões no formulário de Perfil
@@ -270,7 +270,7 @@ arquivo de desenvolvimento escapar para o pacote. O `download_url` publicado no
 ## 🔒 Segurança
 
 * **Autorização:** acesso à página, ao menu e à API controlados pela permissão **plugin_kanban** (perfil) + `Ticket::canView()`. A API é o mesmo entrypoint para todos os verbos: `front/api.php` só aceita POST nas ações que alteram dados
-* **Visões salvas:** o dono cria, renomeia e apaga as próprias visões com o mesmo direito que abre o quadro, e o conteúdo gravado é apenas o conjunto de filtros que a pessoa já pode digitar no formulário. Compartilhar uma visão com todos exige `config` UPDATE, e editar a visão de outra pessoa também
+* **Visões salvas:** o dono cria, renomeia e apaga as próprias visões com o mesmo direito que abre o quadro, e o conteúdo gravado é apenas o conjunto de filtros que a pessoa já pode digitar no formulário. Compartilhar uma visão com todos exige `config` UPDATE, e editar a visão de outra pessoa também. A visão padrão é uma preferência individual (`glpi_kanban_filter_defaults`): marcar uma visão compartilhada como padrão não muda o padrão de ninguém, e o servidor só aceita um id que o usuário consiga ver
 * **Autorização por item:** toda escrita (`assign_to_me`, `change_priority`, `update_ticket_status`, `undo_ticket_status`) valida a visibilidade do chamado no quadro (`isTicketVisible()`) **antes** de gravar, além de `Ticket::canUpdateItem()` — um perfil com leitura ampla (READALL) ou Super-Admin não contorna a regra de visibilidade do quadro
 * **WIP no servidor:** o limite é conferido em `updateTicketStatus()` e em `undoStatusChange()`, com a mesma contagem mostrada na coluna; a validação do JavaScript é só conforto de interface
 * **Auto-atribuição:** `assign_to_me` reproduz a regra do core (`Ticket::canAssignToMe()` ou `Ticket::canAssign()`, ou seja, `STEAL`, ou `OWN` em chamado ainda sem técnico) — `addTeamMember()` insere a linha em `glpi_tickets_users` sem nenhuma checagem

@@ -2176,6 +2176,121 @@ class PluginKanbanKanbanTest extends TestCase
     }
 
     /**
+     * The default view is a server-side, per-user preference: it survives the
+     * browser, choosing another view replaces it, and clearing it does not
+     * touch the saved view.
+     */
+    public function testDefaultViewPersistsForUserAndCanBeCleared(): void
+    {
+        $preset = new PluginKanbanFilterPreset();
+        $first = $preset->saveForUser('Kanban default view', ['priority' => 5]);
+        $this->assertTrue($first['success']);
+        $first_id = (int)$first['id'];
+
+        $second = $preset->saveForUser('Kanban default view 2', ['priority' => 3]);
+        $this->assertTrue($second['success']);
+        $second_id = (int)$second['id'];
+
+        try {
+            $this->assertNull(
+                PluginKanbanFilterPreset::getDefaultForUser(),
+                'No default must be reported before the user chooses one'
+            );
+
+            $set = PluginKanbanFilterPreset::setDefaultForUser($first_id);
+            $this->assertTrue($set['success']);
+            $this->assertSame($first_id, PluginKanbanFilterPreset::getDefaultForUser());
+
+            // The preference is a single row: a second choice replaces the first.
+            $this->assertTrue(PluginKanbanFilterPreset::setDefaultForUser($second_id)['success']);
+            $this->assertSame($second_id, PluginKanbanFilterPreset::getDefaultForUser());
+
+            // Clearing forgets the preference but keeps the saved view around.
+            $this->assertTrue(PluginKanbanFilterPreset::clearDefaultForUser()['success']);
+            $this->assertNull(PluginKanbanFilterPreset::getDefaultForUser());
+            $this->assertTrue(
+                $preset->getFromDB($second_id),
+                'Clearing the default must not delete the saved view'
+            );
+        } finally {
+            global $DB;
+            $DB->delete('glpi_kanban_filter_defaults', ['users_id' => (int)Session::getLoginUserID()]);
+            $DB->delete('glpi_kanban_filter_presets', ['id' => [$first_id, $second_id]]);
+        }
+    }
+
+    /**
+     * A default that no longer exists must read as "no default" instead of
+     * throwing: the board has to open with no filters.
+     */
+    public function testDeletedDefaultViewFallsBackToNull(): void
+    {
+        global $DB;
+
+        $preset = new PluginKanbanFilterPreset();
+        $created = $preset->saveForUser('Kanban default to delete', ['priority' => 4]);
+        $this->assertTrue($created['success']);
+        $preset_id = (int)$created['id'];
+
+        try {
+            $this->assertTrue(PluginKanbanFilterPreset::setDefaultForUser($preset_id)['success']);
+            $this->assertSame($preset_id, PluginKanbanFilterPreset::getDefaultForUser());
+
+            // Deleting the view must also drop the preference pointing at it.
+            $this->assertTrue($preset->deleteForUser($preset_id)['success']);
+            $this->assertNull(
+                PluginKanbanFilterPreset::getDefaultForUser(),
+                'A deleted view must not remain the default'
+            );
+
+            // Simulate a row left behind by a cleanup that bypassed the model.
+            $DB->insert('glpi_kanban_filter_defaults', [
+                'users_id'   => (int)Session::getLoginUserID(),
+                'presets_id' => $preset_id,
+                'date_mod'   => date('Y-m-d H:i:s'),
+            ]);
+            $this->assertNull(
+                PluginKanbanFilterPreset::getDefaultForUser(),
+                'A dangling default must be ignored instead of blocking the board'
+            );
+        } finally {
+            $DB->delete('glpi_kanban_filter_defaults', ['users_id' => (int)Session::getLoginUserID()]);
+            $DB->delete('glpi_kanban_filter_presets', ['id' => $preset_id]);
+        }
+    }
+
+    /**
+     * Nobody may point their default at a view they cannot read: a private view
+     * of another user is invisible on the board and must not be reachable
+     * through the preference either.
+     */
+    public function testDefaultViewRefusesAViewTheUserCannotSee(): void
+    {
+        global $DB;
+
+        $other_user_id = self::insertKanbanTestUser('kanban-default-other');
+        $DB->insert('glpi_kanban_filter_presets', [
+            'name'          => 'Kanban private of another user',
+            'filters'       => exportArrayToDB(['priority' => 5]),
+            'is_private'    => 1,
+            'users_id'      => $other_user_id,
+            'date_creation' => date('Y-m-d H:i:s'),
+            'date_mod'      => date('Y-m-d H:i:s'),
+        ]);
+        $preset_id = (int)$DB->insertId();
+
+        try {
+            $result = PluginKanbanFilterPreset::setDefaultForUser($preset_id);
+            $this->assertFalse($result['success']);
+            $this->assertNotNull($result['error']);
+            $this->assertNull(PluginKanbanFilterPreset::getDefaultForUser());
+        } finally {
+            $DB->delete('glpi_kanban_filter_defaults', ['users_id' => (int)Session::getLoginUserID()]);
+            $DB->delete('glpi_kanban_filter_presets', ['id' => $preset_id]);
+        }
+    }
+
+    /**
      * Call a private method of the model so tests can pin internal helpers
      * without widening the public API.
      *

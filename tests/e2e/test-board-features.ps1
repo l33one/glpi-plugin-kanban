@@ -15,7 +15,8 @@
       - o limite de WIP Ã© contado por status (get_wip_state), com limite global e
         limite proprio por coluna; o teste altera wip_limit/wip_limits e, ao final,
         restaura "sem limite" (wip_limit=0, wip_limits vazio).
-      - saved views: salvar, listar e apagar.
+      - saved views: salvar, listar, apagar e definir a visao padrao, com fallback
+        silencioso quando a view padrao e apagada.
       - a API sÃ³ aceita escrita por POST (GET em uma aÃ§Ã£o de escrita responde 405),
         e rejeita aÃ§Ã£o desconhecida com 404.
       - um usuÃ¡rio sem o direito plugin_kanban continua bloqueado (403).
@@ -414,6 +415,47 @@ if ($viewId -gt 0) {
         Check (-not (($afterNames | Where-Object { $_ -eq $viewName }).Count -gt 0)) 'a view apagada some da lista'
     }
 
+    Write-Host '-- Default view: set, clear and deleted fallback --'
+    $defName = 'KB-E2E default view'
+    $defSave = Invoke-Api -Session $sess -Action 'save_preset' -Post -Params @{ name = $defName; priority = 5; is_private = 1 }
+    Check ($defSave.json.result.success -eq $true) "salva a view padrao '$defName' (erro: $($defSave.json.result.error))"
+    $defId = [int]$defSave.json.result.id
+
+    if ($defId -gt 0) {
+        $defSet = Invoke-Api -Session $sess -Action 'set_default_preset' -Post -Params @{ id = $defId }
+        Check ($defSet.json.result.success -eq $true) "define a view como padrao (erro: $($defSet.json.result.error))"
+
+        $defList = Invoke-Api -Session $sess -Action 'get_presets'
+        Check ([int]$defList.json.default_id -eq $defId) "get_presets devolve o id da view padrao (obtido $($defList.json.default_id))"
+
+        # The preference is per user: another account must not inherit it.
+        $otherDef = New-Session -Version $v -Login 'kb_child'
+        if (-not $otherDef.blocked) {
+            Invoke-Api -Session $otherDef -Action 'clear_default_preset' -Post | Out-Null
+            $otherDefList = Invoke-Api -Session $otherDef -Action 'get_presets'
+            Check ($null -eq $otherDefList.json.default_id) 'a view padrao e por usuario: outro usuario nao herda'
+        }
+
+        # Clearing the preference must leave the saved view itself in place.
+        $defClear = Invoke-Api -Session $sess -Action 'clear_default_preset' -Post
+        Check ($defClear.json.result.success -eq $true) 'limpa a view padrao'
+        $defList2 = Invoke-Api -Session $sess -Action 'get_presets'
+        Check ($null -eq $defList2.json.default_id) 'get_presets deixa de devolver a view padrao'
+        $defStill = @($defList2.json.presets | Where-Object { [int]$_.id -eq $defId })
+        Check ($defStill.Count -eq 1) 'limpar o padrao nao apaga a view salva'
+
+        # Re-set then delete the view: the default must vanish and the board
+        # must keep opening without filters.
+        $defSetAgain = Invoke-Api -Session $sess -Action 'set_default_preset' -Post -Params @{ id = $defId }
+        Check ($defSetAgain.json.result.success -eq $true) 'define a view padrao novamente'
+        $defDel = Invoke-Api -Session $sess -Action 'delete_preset' -Post -Params @{ id = $defId }
+        Check ($defDel.json.result.success -eq $true) 'apaga a view que era padrao'
+        $defList3 = Invoke-Api -Session $sess -Action 'get_presets'
+        Check ($null -eq $defList3.json.default_id) 'apagar a view padrao nao deixa padrao pendente'
+        $defBoard = Invoke-Api -Session $sess -Action 'get_tickets' -Params @{ limit = 5 }
+        Check ($defBoard.code -eq '200' -and $defBoard.json -ne $null) "o quadro continua abrindo sem a view padrao (HTTP $($defBoard.code))"
+    }
+
     Write-Host '-- Contrato da API: escrita sÃ³ por POST, aÃ§Ãµes desconhecidas --'
     $viaGet = Invoke-Api -Session $sess -Action 'update_ticket_status' -Params @{ ticket_id = 1; status = 2 }
     Check ($viaGet.code -eq '405') "GET em aÃ§Ã£o de escrita responde 405 (obtido $($viaGet.code))"
@@ -436,6 +478,12 @@ if ($viewId -gt 0) {
 
     $noFollowup = Invoke-Api -Session $sess -Action 'get_followups'
     Check ($noFollowup.code -eq '400') "get_followups sem ticket_id responde 400 (obtido $($noFollowup.code))"
+
+    $defGet = Invoke-Api -Session $sess -Action 'set_default_preset' -Params @{ id = 1 }
+    Check ($defGet.code -eq '405') "GET em set_default_preset responde 405 (obtido $($defGet.code))"
+
+    $defEmpty = Invoke-Api -Session $sess -Action 'set_default_preset' -Post
+    Check ($defEmpty.code -eq '400') "set_default_preset sem id responde 400 (obtido $($defEmpty.code))"
 
     # Toda resposta de POST precisa devolver um token novo: o do GLPI Ã© de uso Ãºnico.
     Check ($null -ne $noTicket.json.csrf_token) 'a resposta de erro de POST traz csrf_token'

@@ -30,6 +30,10 @@ let columnSorts = {};
 let columnTotals = {};
 let columnHasMore = {};
 let savedViews = [];
+// The user's default view, as stored server-side, and the view currently
+// applied on the board (which may simply be the default applied on open).
+let defaultViewId = 0;
+let appliedViewId = 0;
 let wipState = {};
 let metricsPartial = false;
 const lang = window.KANBAN_TRANSLATIONS || { open: 'Open', unassigned: 'Unassigned', noCategory: 'No Category', loading: 'Loading...', sortHint: 'Sort via column dropdowns', sortBy: 'Sort by', noTickets: 'No tickets', columns: 'Columns', hideColumn: 'Hide column', showColumn: 'Show column', showAllColumns: 'Show all columns', cardFields: 'Card fields', allTechnicians: 'All Technicians', allCategories: 'All Categories', noTechnician: 'No Technician', noRequester: 'No Requester', noGroup: 'No Group', noType: 'No Type', noCategoryFilter: 'No Category', searchByNumber: 'Search by ticket number', searchPlaceholder: 'Search...', advancedFilters: 'Advanced Filters', assignedToMe: 'Assigned to me', clearFilters: 'Clear', quickActions: 'Quick actions', assignToMe: 'Assign to me', listFollowups: 'List follow-ups', changePriority: 'Change priority', followupsTitle: 'Follow-ups', noFollowups: 'No follow-ups', metricTotal: 'Visible tickets', metricSlaOnTime: 'Within SLA', metricSlaOverdue: 'SLA overdue', metricAssignedToMe: 'Assigned to me', metricUnassigned: 'Unassigned', saved: 'Saved', assigned: 'Assigned', justNow: 'just now', minutesAgo: 'X min ago', hoursAgo: 'X h ago', daysAgo: 'X d ago', today: 'Today', yesterday: 'Yesterday', tomorrow: 'Tomorrow', inDays: 'in X d', fieldPriority: 'Priority', fieldDateCreation: 'Opening date', fieldCategory: 'Category', fieldTechnician: 'Technician', fieldSla: 'SLA', fieldDuration: 'Open duration', ticketDuration: 'Open duration', slaFrozenHint: 'SLA paused', statusUpdated: 'Status updated', moveTo: 'Move to', cancel: 'Cancel', confirmMove: 'Move', pendingReason: 'Pending reason', pendingReasonPlaceholder: 'Describe why the ticket is pending...', solutionDescription: 'Solution', solutionModel: 'Solution model', solutionType: 'Solution type', noSolutionModel: 'Select a model...', noSolutionType: 'No type', moveToPending: 'Move to Pending', moveToSolved: 'Move to Solved', followupSkipped: 'The status changed, but the pending reason was not recorded (no follow-up right).', solutionSkipped: 'The status changed, but the solution was not recorded (the ticket can no longer be solved).' };
@@ -2158,12 +2162,33 @@ onclick="event.stopPropagation()" title="${escapeHtml(lang.open)} #${ticket.id}"
       });
    }
 
-   // "Clear" quick button: reset all filters and reload
+   // "Clear" quick button: reset all filters and reload. It only touches the
+   // board state: the saved view and the user's default stay untouched.
    const clearBtn = document.getElementById('kanban-clear-filters-btn');
    if (clearBtn) {
       clearBtn.addEventListener('click', function () {
-          if (getFilterForm()) getFilterForm().reset();
+         if (getFilterForm()) getFilterForm().reset();
          if (searchInput) searchInput.value = '';
+         appliedViewId = 0;
+         updateClearViewButton();
+         const label = document.getElementById('kanban-views-label');
+         if (label) label.textContent = lang.savedViews || 'Saved views';
+         clearBatchSelection();
+         updateAdvancedFilterCount();
+         loadTickets();
+      });
+   }
+
+   // Discreet "x": drop the view applied on this board without saving over it.
+   const clearViewBtn = document.getElementById('kanban-clear-view-btn');
+   if (clearViewBtn) {
+      clearViewBtn.addEventListener('click', function () {
+         if (getFilterForm()) getFilterForm().reset();
+         if (searchInput) searchInput.value = '';
+         appliedViewId = 0;
+         updateClearViewButton();
+         const label = document.getElementById('kanban-views-label');
+         if (label) label.textContent = lang.savedViews || 'Saved views';
          clearBatchSelection();
          updateAdvancedFilterCount();
          loadTickets();
@@ -2584,22 +2609,63 @@ function applyNativeTheme() {
       const label = document.getElementById('kanban-views-label');
       if (label) label.textContent = preset.name || (lang.savedViews || 'Saved views');
 
+      appliedViewId = preset && preset.id ? Number(preset.id) : 0;
+      updateClearViewButton();
+
       updateAdvancedFilterCount();
       bindGroupTechnicianFilter();
       loadTickets();
    }
 
-   function loadSavedViews() {
-      fetch(apiUrl + '?action=get_presets&_t=' + Date.now())
+   /**
+    * Show the "clear applied view" button only when the board is showing one.
+    * The button clears the filters, never the saved view or the user default.
+    */
+   function updateClearViewButton() {
+      const btn = document.getElementById('kanban-clear-view-btn');
+      if (!btn) return;
+      btn.classList.toggle('d-none', appliedViewId <= 0);
+   }
+
+   /**
+    * Load the saved views and remember which one is the user's default.
+    *
+    * With autoApply the default is put on the filters right away, on board
+    * open. Anything wrong with it (deleted, no longer visible, request failed)
+    * simply leaves the board unfiltered: a preference must never block the
+    * board.
+    *
+    * @param {{autoApply?: boolean}} options
+    */
+   function loadSavedViews(options) {
+      const autoApply = !!(options && options.autoApply);
+
+      return fetch(apiUrl + '?action=get_presets&_t=' + Date.now())
          .then(response => response.json())
          .then(data => {
             savedViews = data.presets || [];
+            defaultViewId = Number(data.default_id) || 0;
             renderSavedViewsMenu();
+
+            if (autoApply && defaultViewId > 0) {
+               const preset = savedViews.find(v => Number(v.id) === defaultViewId);
+               if (preset) {
+                  applySavedView(preset);
+                  return true;
+               }
+               // The server already validates the default; getting here means
+               // the list and the preference disagreed. Ignore the stale id.
+               defaultViewId = 0;
+               renderSavedViewsMenu();
+            }
+            return false;
          })
          .catch(() => {
             // A failing preset list must not take the board down.
             savedViews = [];
+            defaultViewId = 0;
             renderSavedViewsMenu();
+            return false;
          });
    }
 
@@ -2631,6 +2697,29 @@ function applyNativeTheme() {
             : (preset.name + ' — ' + (preset.user_name || ''));
          apply.addEventListener('click', () => applySavedView(preset));
          row.appendChild(apply);
+
+         // Star: mark/unmark this view as the one the board opens with. It is
+         // shown for every view the user can read, since a shared view can be
+         // someone's default without them owning it.
+         const isDefault = Number(preset.id) === defaultViewId;
+         const star = document.createElement('button');
+         star.type = 'button';
+         star.className = 'btn btn-sm btn-link px-1 kanban-views-default'
+            + (isDefault ? ' text-warning' : ' text-muted');
+         star.title = isDefault
+            ? (lang.unsetDefaultView || 'Unset the default view')
+            : (lang.setDefaultView || 'Set as default view');
+         star.setAttribute('aria-pressed', isDefault ? 'true' : 'false');
+         star.setAttribute('aria-label', star.title);
+         star.innerHTML = '<i class="ti ' + (isDefault ? 'ti-star-filled' : 'ti-star') + '"></i>';
+         star.addEventListener('click', () => {
+            if (isDefault) {
+               clearDefaultView();
+            } else {
+               setDefaultView(preset);
+            }
+         });
+         row.appendChild(star);
 
          if (preset.can_write) {
             const del = document.createElement('button');
@@ -2772,12 +2861,51 @@ function applyNativeTheme() {
          .then(result => {
             if (result && result.success) {
                showToast(lang.viewDeleted || 'View deleted', 'success');
+               if (Number(preset.id) === defaultViewId) defaultViewId = 0;
+               if (Number(preset.id) === appliedViewId) {
+                  appliedViewId = 0;
+                  updateClearViewButton();
+               }
                loadSavedViews();
             } else {
                showToast((result && result.error) || 'Error', 'danger');
             }
          })
          .catch(() => showToast('Error deleting the view', 'danger'));
+   }
+
+   /**
+    * Make a view the one this board opens with, for this user only.
+    *
+    * The preference lives on the server, so it follows the user to another
+    * browser; applying the view now is a convenience, not a requirement.
+    */
+   function setDefaultView(preset) {
+      postPresetAction('set_default_preset', { id: preset.id })
+         .then(result => {
+            if (result && result.success) {
+               defaultViewId = Number(preset.id);
+               renderSavedViewsMenu();
+               showToast(lang.defaultViewSet || 'Default view set', 'success');
+            } else {
+               showToast((result && result.error) || 'Error', 'danger');
+            }
+         })
+         .catch(() => showToast('Error setting the default view', 'danger'));
+   }
+
+   function clearDefaultView() {
+      postPresetAction('clear_default_preset', {})
+         .then(result => {
+            if (result && result.success) {
+               defaultViewId = 0;
+               renderSavedViewsMenu();
+               showToast(lang.defaultViewCleared || 'Default view cleared', 'success');
+            } else {
+               showToast((result && result.error) || 'Error', 'danger');
+            }
+         })
+         .catch(() => showToast('Error clearing the default view', 'danger'));
    }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -2788,8 +2916,12 @@ document.addEventListener('DOMContentLoaded', function () {
    applyColumnVisibility();
    bindGroupTechnicianFilter();
    updateAdvancedFilterCount();
-   loadSavedViews();
-   loadTickets();
+   // The board waits for the saved views only to know whether a default has to
+   // be applied on open. If that request fails the promise still resolves, so
+   // the board loads without filters instead of waiting forever.
+   loadSavedViews({ autoApply: true }).then(applied => {
+      if (!applied) loadTickets();
+   });
 
    // "Save this view" opens the name dialog; the dropdown lists the views.
    const saveViewBtn = document.getElementById('kanban-save-view-btn');
